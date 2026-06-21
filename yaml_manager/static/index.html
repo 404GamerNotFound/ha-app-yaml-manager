@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <base href="__BASE_PATH__">
+    <title>YAML Script Manager</title>
+    <link rel="stylesheet" href="static/app.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <button class="icon-button mobile-only" id="sidebar-toggle" aria-label="Dateiliste öffnen">☰</button>
+      <div class="brand">
+        <span class="brand-mark">Y</span>
+        <div>
+          <strong>Script Manager</strong>
+          <span>Home Assistant YAML</span>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <button class="button secondary" id="reload-button" title="script.reload ausführen">Skripte neu laden</button>
+        <button class="button secondary" id="new-button">Neue Datei</button>
+        <button class="button primary" id="save-button" disabled>Speichern</button>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+          <label class="search-field">
+            <span aria-hidden="true">⌕</span>
+            <input id="file-search" type="search" placeholder="Skripte suchen" autocomplete="off">
+          </label>
+          <button class="icon-button mobile-only" id="sidebar-close" aria-label="Dateiliste schließen">×</button>
+        </div>
+        <button class="configuration-status checking" id="configuration-status" type="button">
+          <span class="configuration-status-icon" aria-hidden="true">…</span>
+          <span>
+            <strong>Packages-Einbindung</strong>
+            <small>configuration.yaml wird geprüft</small>
+          </span>
+        </button>
+        <nav class="categories" id="categories" aria-label="Kategorien"></nav>
+        <div class="file-list-header">
+          <span>Dateien</span>
+          <span id="file-count">0</span>
+        </div>
+        <div class="file-list" id="file-list"></div>
+        <div class="root-path" id="root-path" title="Verzeichnis"></div>
+      </aside>
+
+      <section class="editor-panel">
+        <div class="empty-state" id="empty-state">
+          <div class="empty-icon">YAML</div>
+          <h1>Skript auswählen</h1>
+          <p>Öffne links eine YAML-Datei oder lege ein neues Skript an.</p>
+          <button class="button primary" id="empty-new-button">Neue Datei</button>
+        </div>
+
+        <div class="editor-content hidden" id="editor-content">
+          <div class="document-bar">
+            <div class="document-title">
+              <span class="dirty-dot" id="dirty-dot" aria-label="Ungespeicherte Änderungen"></span>
+              <div>
+                <strong id="document-name"></strong>
+                <span id="document-path"></span>
+              </div>
+            </div>
+            <div class="document-actions">
+              <label class="category-control">
+                <span>Kategorie</span>
+                <select id="category-select"></select>
+              </label>
+              <button class="icon-button" id="duplicate-button" title="Datei duplizieren" aria-label="Datei duplizieren">⧉</button>
+              <button class="icon-button danger" id="delete-button" title="Datei löschen" aria-label="Datei löschen">⌫</button>
+              <button class="icon-button mobile-only" id="helpers-toggle" title="Hilfen öffnen" aria-label="Hilfen öffnen">?</button>
+            </div>
+          </div>
+
+          <div class="editor-shell">
+            <div class="line-numbers" id="line-numbers" aria-hidden="true">1</div>
+            <div class="code-layer">
+              <pre id="highlighting" aria-hidden="true"><code></code></pre>
+              <textarea id="editor" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="YAML-Editor"></textarea>
+            </div>
+          </div>
+
+          <footer class="statusbar">
+            <button class="validation-status neutral" id="validation-status" type="button">Bereit</button>
+            <span id="cursor-status">Zeile 1, Spalte 1</span>
+            <span>UTF-8</span>
+            <span>YAML</span>
+          </footer>
+        </div>
+      </section>
+
+      <aside class="helpers" id="helpers">
+        <div class="helpers-header">
+          <div>
+            <strong>Hilfsfunktionen</strong>
+            <span>Bausteine direkt einfügen</span>
+          </div>
+          <button class="icon-button mobile-only" id="helpers-close" aria-label="Hilfen schließen">×</button>
+        </div>
+
+        <div class="helper-tabs" role="tablist">
+          <button class="helper-tab active" data-tab="blocks" role="tab">Bausteine</button>
+          <button class="helper-tab" data-tab="entities" role="tab">Entitäten</button>
+          <button class="helper-tab" data-tab="services" role="tab">Dienste</button>
+        </div>
+
+        <div class="helper-view" id="tab-blocks">
+          <p class="helper-intro">Der Baustein wird an der Cursorposition mit der aktuellen Einrückung eingefügt.</p>
+          <div class="snippet-list" id="snippet-list"></div>
+        </div>
+
+        <div class="helper-view hidden" id="tab-entities">
+          <label class="search-field helper-search">
+            <span aria-hidden="true">⌕</span>
+            <input id="entity-search" type="search" placeholder="Entität suchen" autocomplete="off">
+          </label>
+          <div class="helper-results" id="entity-list"></div>
+        </div>
+
+        <div class="helper-view hidden" id="tab-services">
+          <label class="search-field helper-search">
+            <span aria-hidden="true">⌕</span>
+            <input id="service-search" type="search" placeholder="Dienst suchen" autocomplete="off">
+          </label>
+          <div class="helper-results" id="service-list"></div>
+        </div>
+
+        <div class="api-notice hidden" id="api-notice">
+          Entitäten und Dienste sind erst innerhalb von Home Assistant verfügbar.
+        </div>
+      </aside>
+    </main>
+
+    <dialog id="new-dialog">
+      <form method="dialog" id="new-form">
+        <div class="dialog-header">
+          <div>
+            <h2>Neue Skriptdatei</h2>
+            <p>Die Datei wird unter <code>packages</code> angelegt.</p>
+          </div>
+          <button class="icon-button" value="cancel" aria-label="Dialog schließen">×</button>
+        </div>
+        <label class="form-field">
+          <span>Dateipfad</span>
+          <input id="new-path" name="path" required placeholder="beleuchtung/abendlicht.yaml" pattern=".*\.ya?ml$">
+          <small>Unterordner werden automatisch erstellt.</small>
+        </label>
+        <label class="form-field">
+          <span>Skript-ID</span>
+          <input id="new-script-id" name="script-id" required placeholder="abendlicht">
+        </label>
+        <label class="form-field">
+          <span>Kategorie</span>
+          <input id="new-category" name="category" list="category-options" placeholder="Beleuchtung">
+          <datalist id="category-options"></datalist>
+        </label>
+        <div class="dialog-actions">
+          <button class="button secondary" value="cancel">Abbrechen</button>
+          <button class="button primary" id="create-button" value="default">Anlegen</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div class="toast-region" id="toast-region" aria-live="polite"></div>
+    <script src="static/app.js"></script>
+  </body>
+</html>
