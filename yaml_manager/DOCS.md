@@ -33,6 +33,37 @@ Die Kategorie einer geöffneten Datei wird oberhalb des Editors ausgewählt. Üb
 **+ Neue Kategorie** kann ein neuer Name angelegt werden. Kategorien sind reine
 Metadaten der App und werden nicht in die YAML-Dateien geschrieben.
 
+## Tags
+
+Tags werden oberhalb des Editors als kommagetrennte Liste gepflegt. In der linken
+Spalte können Dateien anschließend nach einem Tag gefiltert werden. Die Suche
+berücksichtigt Dateipfad, Kategorie und Tags. Pro Datei werden bis zu zwölf Tags
+gespeichert.
+
+## Script-Prüfung
+
+Der Tab **Prüfung** wird während der Eingabe aktualisiert und zeigt einen
+Qualitätswert sowie priorisierte Hinweise. Geprüft werden unter anderem:
+
+- doppelte YAML-Schlüssel wie zwei `template:`-Blöcke im selben Bereich,
+- gleiche Script-IDs in anderen Package-Dateien,
+- mehrfach verwendete `entity_id`-Werte,
+- unausgeglichene Jinja-Klammern,
+- fehlende oder leere `sequence:`-Blöcke,
+- fehlende Aliase und Script-Modi,
+- Script-IDs mit ungeeigneten Zeichen.
+
+Mehrfach verwendete Entitäten können beabsichtigt sein und werden deshalb als
+Warnung statt als Fehler angezeigt. Hinweise mit einer Zeilennummer springen
+beim Anklicken direkt an die betroffene Stelle.
+
+## Dateien organisieren
+
+Über das Stiftsymbol kann die geöffnete Datei umbenannt oder in einen Unterordner
+von `packages` verschoben werden. Ungespeicherte Änderungen müssen vorher
+gespeichert werden. Versionsprüfung, Pfadschutz und Sicherungskopie gelten auch
+für diese Aktion.
+
 ## Hilfsfunktionen
 
 - **Bausteine** fügt häufige Script-Strukturen an der Cursorposition ein.

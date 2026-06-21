@@ -24,17 +24,17 @@ const snippets = [
 ];
 
 const state = {
-  files: [], categories: [], selectedCategory: "Alle", selected: null,
-  originalContent: "", originalCategory: "", dirty: false, helpers: null,
+  files: [], categories: [], tags: [], selectedCategory: "Alle", selectedTag: "", selected: null,
+  originalContent: "", originalCategory: "", originalTags: [], dirty: false, helpers: null,
 };
 
 const elements = Object.fromEntries([
-  "sidebar", "sidebar-toggle", "sidebar-close", "file-search", "configuration-status", "categories", "file-list", "file-count", "root-path",
-  "empty-state", "empty-new-button", "editor-content", "document-name", "document-path", "dirty-dot", "category-select",
-  "duplicate-button", "delete-button", "editor", "highlighting", "line-numbers", "validation-status", "cursor-status",
-  "save-button", "new-button", "reload-button", "helpers", "helpers-toggle", "helpers-close", "snippet-list", "api-notice",
+  "sidebar", "sidebar-toggle", "sidebar-close", "file-search", "configuration-status", "categories", "tags", "file-list", "file-count", "root-path",
+  "empty-state", "empty-new-button", "editor-content", "document-name", "document-path", "dirty-dot", "category-select", "tag-input",
+  "rename-button", "duplicate-button", "delete-button", "editor", "highlighting", "line-numbers", "validation-status", "cursor-status",
+  "save-button", "new-button", "reload-button", "helpers", "helpers-toggle", "helpers-close", "snippet-list", "analysis-summary", "analysis-list", "api-notice",
   "entity-search", "entity-list", "service-search", "service-list", "new-dialog", "new-form", "new-path", "new-script-id",
-  "new-category", "category-options", "create-button", "toast-region",
+  "new-category", "new-tags", "category-options", "create-button", "toast-region",
 ].map((id) => [id, document.getElementById(id)]));
 
 let validationTimer;
@@ -118,7 +118,9 @@ function updateCursor() {
 
 function setDirty() {
   if (!state.selected) return;
-  state.dirty = elements.editor.value !== state.originalContent || elements["category-select"].value !== state.originalCategory;
+  state.dirty = elements.editor.value !== state.originalContent
+    || elements["category-select"].value !== state.originalCategory
+    || JSON.stringify(parseTags(elements["tag-input"].value)) !== JSON.stringify(state.originalTags);
   elements["dirty-dot"].classList.toggle("visible", state.dirty);
   elements["save-button"].disabled = !state.dirty;
 }
@@ -134,7 +136,9 @@ function toast(message, type = "") {
 function fileMatches(file) {
   const term = elements["file-search"].value.trim().toLocaleLowerCase("de");
   const inCategory = state.selectedCategory === "Alle" || file.category === state.selectedCategory;
-  return inCategory && (!term || `${file.path} ${file.category}`.toLocaleLowerCase("de").includes(term));
+  const hasTag = !state.selectedTag || file.tags.includes(state.selectedTag);
+  const haystack = `${file.path} ${file.category} ${file.tags.join(" ")}`.toLocaleLowerCase("de");
+  return inCategory && hasTag && (!term || haystack.includes(term));
 }
 
 function renderCategories() {
@@ -145,6 +149,22 @@ function renderCategories() {
     const count = category === "Alle" ? state.files.length : state.files.filter((file) => file.category === category).length;
     button.innerHTML = `<span class="category-dot"></span><span>${escapeHtml(category)}</span><span class="category-count">${count}</span>`;
     button.addEventListener("click", () => { state.selectedCategory = category; renderCategories(); renderFiles(); });
+    return button;
+  }));
+}
+
+function renderTags() {
+  const tags = [{ name: "Alle Tags", value: "" }, ...state.tags.map((tag) => ({ name: `#${tag}`, value: tag }))];
+  elements.tags.replaceChildren(...tags.map((tag) => {
+    const button = document.createElement("button");
+    const count = tag.value ? state.files.filter((file) => file.tags.includes(tag.value)).length : state.files.length;
+    button.className = `tag-filter${state.selectedTag === tag.value ? " active" : ""}`;
+    button.innerHTML = `<span>${escapeHtml(tag.name)}</span><span class="tag-filter-count">${count}</span>`;
+    button.addEventListener("click", () => {
+      state.selectedTag = tag.value;
+      renderTags();
+      renderFiles();
+    });
     return button;
   }));
 }
@@ -162,11 +182,27 @@ function renderFiles() {
   elements["file-list"].replaceChildren(...files.map((file) => {
     const button = document.createElement("button");
     button.className = `file-item${state.selected?.path === file.path ? " active" : ""}`;
-    button.innerHTML = `<span class="file-icon">YML</span><span class="file-label"><strong>${escapeHtml(file.name)}</strong><span>${escapeHtml(file.path)}</span></span>`;
+    const tags = file.tags.length ? `<span class="file-tag-line">${escapeHtml(file.tags.map((tag) => `#${tag}`).join(" "))}</span>` : "";
+    button.innerHTML = `<span class="file-icon">YML</span><span class="file-label"><strong>${escapeHtml(file.name)}</strong><span>${escapeHtml(file.path)}</span>${tags}</span>`;
     button.title = file.path;
     button.addEventListener("click", () => openFile(file.path));
     return button;
   }));
+}
+
+function parseTags(value) {
+  const source = Array.isArray(value) ? value : String(value || "").split(",");
+  const result = [];
+  const seen = new Set();
+  source.forEach((item) => {
+    const tag = String(item).trim().replace(/\s+/g, " ").slice(0, 40);
+    const folded = tag.toLocaleLowerCase("de");
+    if (tag && !seen.has(folded) && result.length < 12) {
+      result.push(tag);
+      seen.add(folded);
+    }
+  });
+  return result;
 }
 
 function fillCategories(selected = DEFAULT_CATEGORY) {
@@ -198,10 +234,12 @@ async function refreshFiles() {
   const data = await api("api/files");
   state.files = data.files;
   state.categories = data.categories;
+  state.tags = data.tags || [];
   elements["root-path"].textContent = data.root;
   renderConfigurationStatus(data.configuration);
   fillCategories(state.selected?.category);
   renderCategories();
+  renderTags();
   renderFiles();
 }
 
@@ -212,10 +250,12 @@ async function openFile(path, force = false) {
     state.selected = file;
     state.originalContent = file.content;
     state.originalCategory = file.category;
+    state.originalTags = parseTags(file.tags);
     elements.editor.value = file.content;
     elements["document-name"].textContent = path.split("/").at(-1);
     elements["document-path"].textContent = path;
     fillCategories(file.category);
+    elements["tag-input"].value = state.originalTags.join(", ");
     elements["empty-state"].classList.add("hidden");
     elements["editor-content"].classList.remove("hidden");
     setDirty();
@@ -235,11 +275,13 @@ async function saveCurrent() {
       body: JSON.stringify({
         path: state.selected.path, content: elements.editor.value,
         version: state.selected.version, category: elements["category-select"].value,
+        tags: parseTags(elements["tag-input"].value),
       }),
     });
     state.selected = file;
     state.originalContent = file.content;
     state.originalCategory = file.category;
+    state.originalTags = parseTags(file.tags);
     setDirty();
     await refreshFiles();
     toast("Datei gespeichert", "success");
@@ -258,19 +300,49 @@ function showValidation(result) {
   button.title = button.textContent;
 }
 
+function renderAnalysis(result) {
+  const counts = result.counts || { error: 0, warning: 0, tip: 0 };
+  const summaryClass = counts.error ? "error" : counts.warning ? "warning" : "clean";
+  const details = `${counts.error} Fehler · ${counts.warning} Warnungen · ${counts.tip} Tipps`;
+  elements["analysis-summary"].className = `analysis-summary ${summaryClass}`;
+  elements["analysis-summary"].innerHTML = `<strong>Script-Prüfung: ${result.score}/100</strong><span>${details}</span>`;
+
+  if (!result.findings?.length) {
+    const clean = document.createElement("div");
+    clean.className = "analysis-finding tip";
+    clean.innerHTML = '<span class="finding-dot"></span><div><strong>Keine Auffälligkeiten</strong><small>Syntax und geprüfte Script-Struktur sehen gut aus.</small></div>';
+    elements["analysis-list"].replaceChildren(clean);
+    return;
+  }
+  elements["analysis-list"].replaceChildren(...result.findings.map((finding) => {
+    const item = document.createElement(finding.line ? "button" : "div");
+    item.className = `analysis-finding ${finding.severity}`;
+    item.innerHTML = `<span class="finding-dot"></span><div><strong>${escapeHtml(finding.title)}</strong><small>${escapeHtml(finding.message)}${finding.line ? ` · Zeile ${finding.line}` : ""}</small></div>`;
+    if (finding.line) item.addEventListener("click", () => jumpToLine(finding.line));
+    return item;
+  }));
+}
+
 function scheduleValidation() {
   clearTimeout(validationTimer);
   elements["validation-status"].className = "validation-status neutral";
   elements["validation-status"].textContent = "Prüfe …";
+  elements["analysis-summary"].className = "analysis-summary checking";
+  elements["analysis-summary"].innerHTML = "<strong>Script-Prüfung</strong><span>Analyse läuft …</span>";
   validationTimer = setTimeout(async () => {
     try {
-      showValidation(await api("api/validate", { method: "POST", body: JSON.stringify({ content: elements.editor.value }) }));
+      const result = await api("api/analyze", {
+        method: "POST",
+        body: JSON.stringify({ content: elements.editor.value, path: state.selected?.path || "" }),
+      });
+      showValidation(result.validation);
+      renderAnalysis(result);
     } catch (error) { toast(error.message, "error"); }
   }, 450);
 }
 
-function jumpToValidationError() {
-  const target = Number(elements["validation-status"].dataset.line);
+function jumpToLine(line) {
+  const target = Number(line);
   if (!target) return;
   const lines = elements.editor.value.split("\n");
   const offset = lines.slice(0, target - 1).reduce((sum, line) => sum + line.length + 1, 0);
@@ -278,6 +350,10 @@ function jumpToValidationError() {
   elements.editor.setSelectionRange(offset, offset + (lines[target - 1]?.length || 0));
   elements.editor.scrollTop = Math.max(0, (target - 4) * 21.45);
   syncScroll();
+}
+
+function jumpToValidationError() {
+  jumpToLine(elements["validation-status"].dataset.line);
 }
 
 function currentIndent() {
@@ -354,7 +430,12 @@ async function createFile(event) {
   try {
     const file = await api("api/files", {
       method: "POST",
-      body: JSON.stringify({ path, content: NEW_TEMPLATE(scriptId), category: elements["new-category"].value || DEFAULT_CATEGORY }),
+      body: JSON.stringify({
+        path,
+        content: NEW_TEMPLATE(scriptId),
+        category: elements["new-category"].value || DEFAULT_CATEGORY,
+        tags: parseTags(elements["new-tags"].value),
+      }),
     });
     elements["new-dialog"].close();
     await refreshFiles();
@@ -372,11 +453,35 @@ async function duplicateCurrent() {
   try {
     const file = await api("api/files", {
       method: "POST",
-      body: JSON.stringify({ path, content: elements.editor.value, category: elements["category-select"].value }),
+      body: JSON.stringify({
+        path,
+        content: elements.editor.value,
+        category: elements["category-select"].value,
+        tags: parseTags(elements["tag-input"].value),
+      }),
     });
     await refreshFiles();
     await openFile(file.path, true);
     toast("Datei dupliziert", "success");
+  } catch (error) { toast(error.message, "error"); }
+}
+
+async function renameCurrent() {
+  if (!state.selected) return;
+  if (state.dirty) {
+    toast("Bitte speichere die Änderungen vor dem Umbenennen.", "error");
+    return;
+  }
+  const path = prompt("Neuer Dateipfad innerhalb von packages", state.selected.path);
+  if (!path || path === state.selected.path) return;
+  try {
+    const file = await api("api/rename", {
+      method: "POST",
+      body: JSON.stringify({ path: state.selected.path, newPath: path, version: state.selected.version }),
+    });
+    await refreshFiles();
+    await openFile(file.path, true);
+    toast("Datei umbenannt", "success");
   } catch (error) { toast(error.message, "error"); }
 }
 
@@ -387,6 +492,9 @@ async function deleteCurrent() {
     state.selected = null; state.dirty = false;
     elements["editor-content"].classList.add("hidden");
     elements["empty-state"].classList.remove("hidden");
+    elements["analysis-summary"].className = "analysis-summary checking";
+    elements["analysis-summary"].innerHTML = "<strong>Script-Prüfung</strong><span>Öffne eine Datei, um Hinweise zu sehen.</span>";
+    elements["analysis-list"].replaceChildren();
     await refreshFiles();
     toast("Datei in den Papierkorb verschoben", "success");
   } catch (error) { toast(error.message, "error"); }
@@ -421,6 +529,7 @@ elements["category-select"].addEventListener("change", () => {
   }
   setDirty();
 });
+elements["tag-input"].addEventListener("input", setDirty);
 elements["file-search"].addEventListener("input", renderFiles);
 elements["configuration-status"].addEventListener("click", () => {
   const status = elements["configuration-status"];
@@ -438,6 +547,7 @@ elements["new-path"].addEventListener("input", () => {
   elements["new-script-id"].value = name.toLowerCase();
 });
 elements["duplicate-button"].addEventListener("click", duplicateCurrent);
+elements["rename-button"].addEventListener("click", renameCurrent);
 elements["delete-button"].addEventListener("click", deleteCurrent);
 elements["reload-button"].addEventListener("click", reloadScripts);
 elements["validation-status"].addEventListener("click", jumpToValidationError);
@@ -446,7 +556,10 @@ elements["sidebar-close"].addEventListener("click", () => elements.sidebar.class
 elements["helpers-toggle"].addEventListener("click", () => elements.helpers.classList.add("open"));
 elements["helpers-close"].addEventListener("click", () => elements.helpers.classList.remove("open"));
 document.querySelectorAll(".helper-tab").forEach((tab) => tab.addEventListener("click", () => {
-  document.querySelectorAll(".helper-tab").forEach((item) => item.classList.toggle("active", item === tab));
+  document.querySelectorAll(".helper-tab").forEach((item) => {
+    item.classList.toggle("active", item === tab);
+    item.setAttribute("aria-selected", String(item === tab));
+  });
   document.querySelectorAll(".helper-view").forEach((view) => view.classList.add("hidden"));
   document.getElementById(`tab-${tab.dataset.tab}`).classList.remove("hidden");
 }));

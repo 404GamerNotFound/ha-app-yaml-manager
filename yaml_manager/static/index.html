@@ -40,7 +40,12 @@
             <small>configuration.yaml wird geprüft</small>
           </span>
         </button>
-        <nav class="categories" id="categories" aria-label="Kategorien"></nav>
+        <div class="sidebar-filters">
+          <div class="filter-heading">Kategorien</div>
+          <nav class="categories" id="categories" aria-label="Kategorien"></nav>
+          <div class="filter-heading">Tags</div>
+          <nav class="tags" id="tags" aria-label="Tags"></nav>
+        </div>
         <div class="file-list-header">
           <span>Dateien</span>
           <span id="file-count">0</span>
@@ -71,6 +76,11 @@
                 <span>Kategorie</span>
                 <select id="category-select"></select>
               </label>
+              <label class="tag-control">
+                <span>Tags</span>
+                <input id="tag-input" type="text" placeholder="licht, abend" autocomplete="off">
+              </label>
+              <button class="icon-button" id="rename-button" title="Datei umbenennen oder verschieben" aria-label="Datei umbenennen">✎</button>
               <button class="icon-button" id="duplicate-button" title="Datei duplizieren" aria-label="Datei duplizieren">⧉</button>
               <button class="icon-button danger" id="delete-button" title="Datei löschen" aria-label="Datei löschen">⌫</button>
               <button class="icon-button mobile-only" id="helpers-toggle" title="Hilfen öffnen" aria-label="Hilfen öffnen">?</button>
@@ -98,18 +108,27 @@
         <div class="helpers-header">
           <div>
             <strong>Hilfsfunktionen</strong>
-            <span>Bausteine direkt einfügen</span>
+            <span>Prüfung, Tipps und Bausteine</span>
           </div>
           <button class="icon-button mobile-only" id="helpers-close" aria-label="Hilfen schließen">×</button>
         </div>
 
         <div class="helper-tabs" role="tablist">
-          <button class="helper-tab active" data-tab="blocks" role="tab">Bausteine</button>
-          <button class="helper-tab" data-tab="entities" role="tab">Entitäten</button>
-          <button class="helper-tab" data-tab="services" role="tab">Dienste</button>
+          <button class="helper-tab active" data-tab="analysis" role="tab" aria-selected="true">Prüfung</button>
+          <button class="helper-tab" data-tab="blocks" role="tab" aria-selected="false">Bausteine</button>
+          <button class="helper-tab" data-tab="entities" role="tab" aria-selected="false">Entitäten</button>
+          <button class="helper-tab" data-tab="services" role="tab" aria-selected="false">Dienste</button>
         </div>
 
-        <div class="helper-view" id="tab-blocks">
+        <div class="helper-view" id="tab-analysis">
+          <div class="analysis-summary checking" id="analysis-summary">
+            <strong>Script-Prüfung</strong>
+            <span>Öffne eine Datei, um Hinweise zu sehen.</span>
+          </div>
+          <div class="analysis-list" id="analysis-list"></div>
+        </div>
+
+        <div class="helper-view hidden" id="tab-blocks">
           <p class="helper-intro">Der Baustein wird an der Cursorposition mit der aktuellen Einrückung eingefügt.</p>
           <div class="snippet-list" id="snippet-list"></div>
         </div>
@@ -158,6 +177,11 @@
           <span>Kategorie</span>
           <input id="new-category" name="category" list="category-options" placeholder="Beleuchtung">
           <datalist id="category-options"></datalist>
+        </label>
+        <label class="form-field">
+          <span>Tags</span>
+          <input id="new-tags" name="tags" placeholder="licht, abend, automatisch">
+          <small>Mehrere Tags mit Kommas trennen.</small>
         </label>
         <div class="dialog-actions">
           <button class="button secondary" value="cancel">Abbrechen</button>

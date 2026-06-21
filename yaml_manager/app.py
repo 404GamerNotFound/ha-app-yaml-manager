@@ -14,6 +14,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections import Counter
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -113,6 +114,38 @@ def load_metadata() -> dict[str, Any]:
             "categories": list(data.get("categories", [])),
             "files": dict(data.get("files", {})),
         }
+
+
+def file_metadata(metadata: dict[str, Any], relative: str) -> dict[str, Any]:
+    value = metadata.get("files", {}).get(relative, DEFAULT_CATEGORY)
+    if isinstance(value, str):
+        return {"category": value or DEFAULT_CATEGORY, "tags": []}
+    if not isinstance(value, dict):
+        return {"category": DEFAULT_CATEGORY, "tags": []}
+    category = value.get("category", DEFAULT_CATEGORY)
+    tags = value.get("tags", [])
+    return {
+        "category": category if isinstance(category, str) and category else DEFAULT_CATEGORY,
+        "tags": sanitize_tags(tags),
+    }
+
+
+def sanitize_tags(tags: Any) -> list[str]:
+    if not isinstance(tags, list):
+        return []
+    cleaned: list[str] = []
+    seen: set[str] = set()
+    for value in tags:
+        if not isinstance(value, str):
+            continue
+        tag = re.sub(r"\s+", " ", value).strip()[:40]
+        folded = tag.casefold()
+        if tag and folded not in seen:
+            cleaned.append(tag)
+            seen.add(folded)
+        if len(cleaned) == 12:
+            break
+    return cleaned
 
 
 def save_metadata(metadata: dict[str, Any]) -> None:
@@ -275,11 +308,13 @@ def read_file(raw_path: str) -> dict[str, Any]:
     except UnicodeDecodeError as exc:
         raise ApiError(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, "Die Datei ist nicht UTF-8-kodiert.") from exc
     metadata = load_metadata()
+    attributes = file_metadata(metadata, relative)
     return {
         "path": relative,
         "content": text,
         "version": file_version(content),
-        "category": metadata["files"].get(relative, DEFAULT_CATEGORY),
+        "category": attributes["category"],
+        "tags": attributes["tags"],
         "modified": absolute.stat().st_mtime,
     }
 
@@ -301,12 +336,248 @@ def validate_yaml(content: str) -> dict[str, Any]:
         return result
 
 
-def update_category(relative: str, category: str) -> None:
+def duplicate_key_findings(node: yaml.Node | None) -> list[dict[str, Any]]:
+    findings: list[dict[str, Any]] = []
+
+    def visit(current: yaml.Node | None) -> None:
+        if isinstance(current, yaml.MappingNode):
+            seen: dict[tuple[str, str], yaml.Node] = {}
+            for key_node, value_node in current.value:
+                if isinstance(key_node, yaml.ScalarNode):
+                    identity = (key_node.tag, key_node.value)
+                    if identity in seen:
+                        findings.append(
+                            {
+                                "severity": "error",
+                                "code": "duplicate-key",
+                                "title": f'Doppelter Schlüssel „{key_node.value}“',
+                                "message": "Der Schlüssel ist im selben YAML-Block mehrfach vorhanden und überschreibt eine Definition.",
+                                "line": key_node.start_mark.line + 1,
+                            }
+                        )
+                    else:
+                        seen[identity] = key_node
+                visit(value_node)
+        elif isinstance(current, yaml.SequenceNode):
+            for child in current.value:
+                visit(child)
+
+    visit(node)
+    return findings
+
+
+def script_definitions(document: Any) -> dict[str, Any]:
+    if not isinstance(document, dict):
+        return {}
+    scripts = document.get("script")
+    return scripts if isinstance(scripts, dict) else {}
+
+
+def collect_entity_references(value: Any, references: list[str]) -> None:
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if key == "entity_id":
+                candidates = child if isinstance(child, list) else [child]
+                for candidate in candidates:
+                    if isinstance(candidate, str) and "{{" not in candidate:
+                        references.extend(
+                            item.strip() for item in candidate.split(",") if item.strip()
+                        )
+            collect_entity_references(child, references)
+    elif isinstance(value, list):
+        for child in value:
+            collect_entity_references(child, references)
+
+
+def other_script_locations(current_path: str) -> dict[str, list[str]]:
+    locations: dict[str, list[str]] = {}
+    packages_root = PACKAGES_ROOT.resolve()
+    if not packages_root.exists():
+        return locations
+    for path in sorted(packages_root.rglob("*")):
+        if not path.is_file() or path.suffix.lower() not in VALID_SUFFIXES:
+            continue
+        try:
+            relative = path.relative_to(packages_root).as_posix()
+            if relative == current_path or path.stat().st_size > MAX_FILE_SIZE:
+                continue
+            text = path.read_text(encoding="utf-8")
+            documents = yaml.load_all(text, Loader=HomeAssistantLoader)
+            for document in documents:
+                for script_id in script_definitions(document):
+                    locations.setdefault(str(script_id), []).append(relative)
+        except (OSError, UnicodeDecodeError, yaml.YAMLError):
+            continue
+    return locations
+
+
+def analyze_yaml(content: str, current_path: str = "") -> dict[str, Any]:
+    validation = validate_yaml(content)
+    findings: list[dict[str, Any]] = []
+
+    try:
+        nodes = list(yaml.compose_all(content, Loader=HomeAssistantLoader))
+        for node in nodes:
+            findings.extend(duplicate_key_findings(node))
+    except yaml.YAMLError:
+        nodes = []
+
+    if not validation["valid"]:
+        if not findings:
+            findings.append(
+                {
+                    "severity": "error",
+                    "code": "yaml-syntax",
+                    "title": "YAML-Syntaxfehler",
+                    "message": validation["message"],
+                    "line": validation.get("line"),
+                }
+            )
+        return analysis_result(validation, findings)
+
+    if content.count("{{") != content.count("}}") or content.count("{%") != content.count("%}"):
+        findings.append(
+            {
+                "severity": "warning",
+                "code": "template-balance",
+                "title": "Template-Klammern prüfen",
+                "message": "Die Anzahl der öffnenden und schließenden Jinja-Klammern ist unterschiedlich.",
+            }
+        )
+
+    documents = list(yaml.load_all(content, Loader=HomeAssistantLoader))
+    if len(documents) > 1:
+        findings.append(
+            {
+                "severity": "tip",
+                "code": "multiple-documents",
+                "title": "Mehrere YAML-Dokumente",
+                "message": "Die Datei enthält mehrere mit --- getrennte Dokumente. Home Assistant erwartet in Packages üblicherweise ein Dokument.",
+            }
+        )
+
+    scripts: dict[str, Any] = {}
+    for document in documents:
+        scripts.update(script_definitions(document))
+
+    if not scripts:
+        findings.append(
+            {
+                "severity": "tip",
+                "code": "no-script-section",
+                "title": "Keine script-Sektion gefunden",
+                "message": "Für ein Package mit Skripten wird normalerweise ein oberster Schlüssel script: verwendet.",
+            }
+        )
+
+    external = other_script_locations(current_path) if scripts else {}
+    for script_id, definition in scripts.items():
+        script_name = str(script_id)
+        if not re.fullmatch(r"[a-z0-9_]+", script_name):
+            findings.append(
+                {
+                    "severity": "warning",
+                    "code": "script-id",
+                    "title": f'Ungünstige Script-ID „{script_name}“',
+                    "message": "Script-IDs sollten nur Kleinbuchstaben, Ziffern und Unterstriche enthalten.",
+                }
+            )
+        if script_name in external:
+            findings.append(
+                {
+                    "severity": "error",
+                    "code": "duplicate-script-id",
+                    "title": f'Script-ID „{script_name}“ mehrfach definiert',
+                    "message": f'Weitere Definition in: {", ".join(external[script_name][:3])}',
+                }
+            )
+        if not isinstance(definition, dict):
+            findings.append(
+                {
+                    "severity": "error",
+                    "code": "script-structure",
+                    "title": f'Unvollständiges Skript „{script_name}“',
+                    "message": "Die Script-Definition muss ein YAML-Objekt sein.",
+                }
+            )
+            continue
+        if "sequence" not in definition:
+            findings.append(
+                {
+                    "severity": "error",
+                    "code": "missing-sequence",
+                    "title": f'Sequenz fehlt in „{script_name}“',
+                    "message": "Jedes Skript benötigt eine sequence: mit den auszuführenden Aktionen.",
+                }
+            )
+        elif definition.get("sequence") == []:
+            findings.append(
+                {
+                    "severity": "warning",
+                    "code": "empty-sequence",
+                    "title": f'Leere Sequenz in „{script_name}“',
+                    "message": "Das Skript enthält aktuell keine ausführbare Aktion.",
+                }
+            )
+        if not definition.get("alias"):
+            findings.append(
+                {
+                    "severity": "tip",
+                    "code": "missing-alias",
+                    "title": f'Alias für „{script_name}“ ergänzen',
+                    "message": "Ein sprechender Alias verbessert die Anzeige in Home Assistant.",
+                }
+            )
+        if "mode" not in definition:
+            findings.append(
+                {
+                    "severity": "tip",
+                    "code": "missing-mode",
+                    "title": f'Modus für „{script_name}“ festlegen',
+                    "message": "Mit mode: single, restart, queued oder parallel wird das Verhalten bei erneutem Start eindeutig.",
+                }
+            )
+
+    references: list[str] = []
+    for document in documents:
+        collect_entity_references(document, references)
+    reference_counts = Counter(references)
+    duplicates = sorted(
+        (entity for entity, count in reference_counts.items() if count > 1), key=str.casefold
+    )
+    for entity in duplicates[:10]:
+        count = reference_counts[entity]
+        findings.append(
+            {
+                "severity": "warning",
+                "code": "duplicate-entity",
+                "title": f'Entität „{entity}“ {count}-mal verwendet',
+                "message": "Prüfe, ob die mehrfache Belegung beabsichtigt ist.",
+            }
+        )
+
+    return analysis_result(validation, findings)
+
+
+def analysis_result(validation: dict[str, Any], findings: list[dict[str, Any]]) -> dict[str, Any]:
+    order = {"error": 0, "warning": 1, "tip": 2}
+    findings.sort(key=lambda item: (order.get(item["severity"], 3), item.get("line", 0)))
+    counts = {
+        severity: sum(item["severity"] == severity for item in findings)
+        for severity in ("error", "warning", "tip")
+    }
+    score = max(0, 100 - counts["error"] * 30 - counts["warning"] * 10 - counts["tip"] * 3)
+    return {"validation": validation, "findings": findings, "counts": counts, "score": score}
+
+
+def update_file_metadata(relative: str, category: str, tags: Any = None) -> None:
     clean = category.strip() if isinstance(category, str) else DEFAULT_CATEGORY
     clean = clean[:80] or DEFAULT_CATEGORY
     with metadata_lock:
         metadata = load_metadata()
-        metadata["files"][relative] = clean
+        existing = file_metadata(metadata, relative)
+        clean_tags = existing["tags"] if tags is None else sanitize_tags(tags)
+        metadata["files"][relative] = {"category": clean, "tags": clean_tags}
         if clean != DEFAULT_CATEGORY and clean not in metadata["categories"]:
             metadata["categories"].append(clean)
             metadata["categories"].sort(key=str.casefold)
@@ -323,7 +594,14 @@ def create_backup(relative: str, source: Path) -> None:
         shutil.rmtree(old, ignore_errors=True)
 
 
-def write_file(raw_path: str, content: str, expected_version: str | None, category: str, create: bool) -> dict[str, Any]:
+def write_file(
+    raw_path: str,
+    content: str,
+    expected_version: str | None,
+    category: str,
+    create: bool,
+    tags: Any = None,
+) -> dict[str, Any]:
     relative, absolute = normalize_relative_path(raw_path)
     if not create and not isinstance(expected_version, str):
         raise ApiError(HTTPStatus.BAD_REQUEST, "Die Dateiversion fehlt. Bitte die Datei neu laden.")
@@ -364,8 +642,36 @@ def write_file(raw_path: str, content: str, expected_version: str | None, catego
             if os.path.exists(temporary):
                 os.unlink(temporary)
 
-    update_category(relative, category)
+    update_file_metadata(relative, category, tags)
     return read_file(relative)
+
+
+def rename_file(raw_path: str, new_raw_path: str, expected_version: str | None) -> dict[str, Any]:
+    relative, source = normalize_relative_path(raw_path)
+    new_relative, destination = normalize_relative_path(new_raw_path)
+    if not isinstance(expected_version, str):
+        raise ApiError(HTTPStatus.BAD_REQUEST, "Die Dateiversion fehlt. Bitte die Datei neu laden.")
+    if relative == new_relative:
+        return read_file(relative)
+    with file_lock:
+        if not source.exists():
+            raise ApiError(HTTPStatus.NOT_FOUND, "Die Datei wurde nicht gefunden.")
+        if destination.exists():
+            raise ApiError(HTTPStatus.CONFLICT, "Am neuen Pfad existiert bereits eine Datei.")
+        current = source.read_bytes()
+        if file_version(current) != expected_version:
+            raise ApiError(HTTPStatus.CONFLICT, "Die Datei wurde zwischenzeitlich geaendert. Bitte neu laden.")
+        create_backup(relative, source)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        os.replace(source, destination)
+
+    with metadata_lock:
+        metadata = load_metadata()
+        attributes = file_metadata(metadata, relative)
+        metadata["files"].pop(relative, None)
+        metadata["files"][new_relative] = attributes
+        save_metadata(metadata)
+    return read_file(new_relative)
 
 
 def delete_file(raw_path: str, expected_version: str | None) -> None:
@@ -404,16 +710,19 @@ def list_files() -> dict[str, Any]:
             if any(part.startswith(".") for part in Path(relative).parts):
                 continue
             stat = path.stat()
+            attributes = file_metadata(metadata, relative)
             files.append(
                 {
                     "path": relative,
                     "name": path.stem,
-                    "category": metadata["files"].get(relative, DEFAULT_CATEGORY),
+                    "category": attributes["category"],
+                    "tags": attributes["tags"],
                     "size": stat.st_size,
                     "modified": stat.st_mtime,
                 }
             )
     used = {item["category"] for item in files}
+    tags = sorted({tag for item in files for tag in item["tags"]}, key=str.casefold)
     categories = sorted(
         {DEFAULT_CATEGORY, *metadata["categories"], *used},
         key=lambda value: (value == DEFAULT_CATEGORY, value.casefold()),
@@ -421,6 +730,7 @@ def list_files() -> dict[str, Any]:
     return {
         "files": files,
         "categories": categories,
+        "tags": tags,
         "root": str(PACKAGES_ROOT),
         "configuration": package_configuration_status(),
     }
@@ -467,7 +777,7 @@ def helper_data() -> dict[str, Any]:
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "YamlScriptManager/0.1"
+    server_version = "YamlScriptManager/0.3"
 
     def log_message(self, format_string: str, *args: Any) -> None:
         print(f"{self.address_string()} - {format_string % args}", flush=True)
@@ -538,10 +848,23 @@ class Handler(BaseHTTPRequestHandler):
                     None,
                     body.get("category", DEFAULT_CATEGORY),
                     create=True,
+                    tags=body.get("tags"),
                 )
                 self.send_json(HTTPStatus.CREATED, result)
+            elif path == "/api/rename":
+                result = rename_file(
+                    body.get("path", ""),
+                    body.get("newPath", ""),
+                    body.get("version"),
+                )
+                self.send_json(HTTPStatus.OK, result)
             elif path == "/api/validate":
                 self.send_json(HTTPStatus.OK, validate_yaml(body.get("content", "")))
+            elif path == "/api/analyze":
+                self.send_json(
+                    HTTPStatus.OK,
+                    analyze_yaml(body.get("content", ""), body.get("path", "")),
+                )
             elif path == "/api/reload":
                 home_assistant_request("services/script/reload", method="POST")
                 self.send_json(HTTPStatus.OK, {"message": "Skripte wurden neu geladen."})
@@ -562,6 +885,7 @@ class Handler(BaseHTTPRequestHandler):
                 body.get("version"),
                 body.get("category", DEFAULT_CATEGORY),
                 create=False,
+                tags=body.get("tags"),
             )
             self.send_json(HTTPStatus.OK, result)
         except ApiError as exc:

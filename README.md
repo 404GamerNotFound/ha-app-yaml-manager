@@ -5,12 +5,14 @@ Verzeichnis `/config/packages`.
 
 ## Funktionen
 
-- Dateiliste mit Suche und frei wählbaren Kategorien
+- Scrollbare Dateiliste mit Suche, Kategorien und Tags
 - YAML-Editor mit Syntaxhervorhebung, Zeilennummern und Live-Validierung
+- Kontextbezogene Script-Prüfung für doppelte Schlüssel, Script-IDs und Entitäten
 - Schutz vor dem Überschreiben parallel geänderter Dateien
 - Vorlagen für Aktionen, Bedingungen, Verzögerungen, Auswahl und Wiederholungen
 - Suche nach Home-Assistant-Entitäten und -Diensten
 - Sicheres Speichern mit Sicherungskopien und Papierkorb
+- Umbenennen und Verschieben von Dateien innerhalb des Package-Ordners
 - Direkter Aufruf von `script.reload`
 - Prüfung, ob `/config/packages` über `homeassistant.packages` eingebunden ist
 - Responsive Ingress-Oberfläche mit Hell- und Dunkelmodus
@@ -52,9 +54,16 @@ Schreibzugriffe erfolgen atomar über eine temporäre Datei im Zielverzeichnis.
 Ein SHA-256-Hash dient als Versionskennung und verhindert, dass eine zwischenzeitlich
 extern geänderte Datei überschrieben wird. Vor jeder Änderung wird die bisherige
 Fassung nach `/data/backups` kopiert. Beim Löschen wird die Datei nach `/data/trash`
-verschoben. Kategorien stehen getrennt von den eigentlichen YAML-Dateien in
-`/data/metadata.json`; dadurch verändert die Kategorisierung keine Home-Assistant-
-Konfiguration.
+verschoben. Kategorien und Tags stehen getrennt von den eigentlichen YAML-Dateien
+in `/data/metadata.json`; dadurch verändern sie keine Home-Assistant-Konfiguration.
+Das frühere Metadatenformat mit einer reinen Kategorie pro Datei wird beim Lesen
+weiterhin unterstützt.
+
+Die kontextbezogene Analyse verarbeitet das aktuell im Editor stehende YAML und
+gleicht Script-IDs zusätzlich mit den übrigen Package-Dateien ab. Doppelte
+YAML-Schlüssel, wiederholte Entitätsreferenzen, unausgeglichene Jinja-Klammern
+und fehlende Script-Felder werden als priorisierte Hinweise ausgegeben. Hinweise
+mit Zeilennummer können direkt angeklickt werden.
 
 Das Frontend ist ohne externe Laufzeitabhängigkeiten umgesetzt. HTML, CSS und
 JavaScript werden direkt von der App ausgeliefert und funktionieren unter dem von

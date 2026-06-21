@@ -107,6 +107,104 @@ class FileApiTests(unittest.TestCase):
         self.assertFalse(status["configured"])
         self.assertEqual(status["status"], "invalid")
 
+    def test_tags_are_saved_normalized_and_listed(self):
+        created = app.write_file(
+            "licht.yaml",
+            "script:\n  licht:\n    alias: Licht\n    mode: single\n    sequence: []\n",
+            None,
+            "Licht",
+            create=True,
+            tags=["Abend", " abend ", "Wohnzimmer"],
+        )
+
+        self.assertEqual(created["tags"], ["Abend", "Wohnzimmer"])
+        updated = app.write_file(
+            created["path"],
+            created["content"].replace("alias: Licht", "alias: Licht neu"),
+            created["version"],
+            "Licht",
+            create=False,
+        )
+        self.assertEqual(updated["tags"], ["Abend", "Wohnzimmer"])
+        listing = app.list_files()
+        self.assertEqual(listing["tags"], ["Abend", "Wohnzimmer"])
+        self.assertEqual(listing["files"][0]["tags"], ["Abend", "Wohnzimmer"])
+
+    def test_legacy_category_metadata_remains_compatible(self):
+        created = app.write_file("legacy.yaml", "script: {}\n", None, "Alt", create=True)
+        metadata = app.load_metadata()
+        metadata["files"][created["path"]] = "Legacy-Kategorie"
+        app.save_metadata(metadata)
+
+        result = app.read_file(created["path"])
+
+        self.assertEqual(result["category"], "Legacy-Kategorie")
+        self.assertEqual(result["tags"], [])
+
+    def test_rename_preserves_content_and_metadata(self):
+        created = app.write_file(
+            "alt.yaml",
+            "script:\n  test:\n    sequence: []\n",
+            None,
+            "Tests",
+            create=True,
+            tags=["Wichtig"],
+        )
+
+        renamed = app.rename_file("alt.yaml", "archiv/neu.yaml", created["version"])
+
+        self.assertFalse((app.PACKAGES_ROOT / "alt.yaml").exists())
+        self.assertTrue((app.PACKAGES_ROOT / "archiv/neu.yaml").exists())
+        self.assertEqual(renamed["category"], "Tests")
+        self.assertEqual(renamed["tags"], ["Wichtig"])
+
+    def test_analysis_detects_duplicate_keys_and_template_blocks(self):
+        result = app.analyze_yaml(
+            "template:\n  - sensor: []\ntemplate:\n  - binary_sensor: []\n",
+            "templates.yaml",
+        )
+
+        self.assertFalse(result["validation"]["valid"])
+        self.assertEqual(result["findings"][0]["code"], "duplicate-key")
+        self.assertEqual(result["findings"][0]["line"], 3)
+
+    def test_analysis_provides_script_and_entity_tips(self):
+        result = app.analyze_yaml(
+            "script:\n"
+            "  Abend-Licht:\n"
+            "    sequence:\n"
+            "      - action: light.turn_on\n"
+            "        target:\n"
+            "          entity_id: light.wohnzimmer\n"
+            "      - action: light.turn_off\n"
+            "        target:\n"
+            "          entity_id: light.wohnzimmer\n",
+            "abend.yaml",
+        )
+        codes = {finding["code"] for finding in result["findings"]}
+
+        self.assertTrue(result["validation"]["valid"])
+        self.assertIn("script-id", codes)
+        self.assertIn("missing-alias", codes)
+        self.assertIn("missing-mode", codes)
+        self.assertIn("duplicate-entity", codes)
+
+    def test_analysis_detects_script_id_in_another_file(self):
+        app.write_file(
+            "eins.yaml",
+            "script:\n  doppelt:\n    sequence: []\n",
+            None,
+            "Tests",
+            create=True,
+        )
+
+        result = app.analyze_yaml(
+            "script:\n  doppelt:\n    alias: Zwei\n    mode: single\n    sequence: []\n",
+            "zwei.yaml",
+        )
+
+        self.assertIn("duplicate-script-id", {item["code"] for item in result["findings"]})
+
 
 if __name__ == "__main__":
     unittest.main()

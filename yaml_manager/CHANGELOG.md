@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.0 - 2026-06-21
+
+- Zuverlässig scrollbar gehaltene Scriptliste mit sichtbarer Scrollbar
+- Tags für Dateien einschließlich Filterung und Suche
+- Kontextbezogene Script-Prüfung mit Qualitätswert und Zeilensprung
+- Erkennung doppelter YAML-Schlüssel, Script-IDs und Entitätsreferenzen
+- Hinweise für Script-Struktur, IDs, Modus, Alias und Jinja-Klammern
+- Sicheres Umbenennen und Verschieben von Dateien innerhalb von `packages`
+
 ## 0.2.0
 
 - Statusprüfung für die Einbindung von `/config/packages` in `configuration.yaml`
