@@ -20,7 +20,10 @@ Verzeichnis `/config/packages`.
 - Automatische Home-Assistant-Konfigurationsprüfung nach Konfigurationsänderungen
 - Versionsverlauf mit Diff und Wiederherstellung für Konfiguration und Packages
 - Automatische lokale Git-Commits mit Historie, Diff und Wiederherstellung
+- Optionaler manueller GitHub-/GitLab-Remote-Sync mit geschützter Token-Ablage
 - Globale Package-Konfliktprüfung nach den Home-Assistant-Merge-Regeln
+- Qualitätsdashboard für Konflikte, Warnungen, Script-Nutzung, Backups und Git
+- Konfliktgeprüfter ZIP-Import und Export nach Datei, Kategorie oder Gesamtbestand
 - Responsive Ingress-Oberfläche mit Hell- und Dunkelmodus
 
 ## Installation
@@ -120,6 +123,19 @@ versioniert. Bereits vom Nutzer vorgemerkte Änderungen an anderen Dateien
 bleiben unangetastet. Die Git-Historie in beiden Editoren bietet Commit-Metadaten,
 Unified Diffs und eine konfliktgeschützte Wiederherstellung. Das bestehende
 Datei-Backup wird dabei weiterhin zusätzlich angelegt.
+
+Das Qualitätsdashboard fasst Package-Konflikte, mögliche ungenutzte Scripts,
+Backup-Anzahl und Git-Remote-Status zusammen. Ein optionaler HTTPS-Remote für
+GitHub.com oder GitLab.com kann manuell per Fetch, Pull, Push oder sicherer
+Synchronisation bedient werden. Das Token wird mit Dateimodus `0600` unter
+`/data` gespeichert, nie an das Frontend zurückgesendet und nicht in
+`.git/config` geschrieben.
+
+Package-Dateien lassen sich einzeln, kategorieweise oder vollständig als ZIP
+exportieren. Der Import prüft Archivpfade, Größenlimits, UTF-8, YAML und die
+globalen Package-Merge-Regeln. Erst nach einer Vorschau werden Dateien
+transaktional geschrieben; parallele Änderungen führen über einen globalen
+Zustands-Hash zum Abbruch.
 
 Weitere Betriebsinformationen stehen in [yaml_manager/DOCS.md](yaml_manager/DOCS.md).
 Die ausführlichen Hinweise zur aktuellen Version stehen in

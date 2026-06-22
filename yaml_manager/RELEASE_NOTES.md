@@ -1,42 +1,46 @@
-# Release Notes 0.6.0
+# Release Notes 0.7.0
 
 Veröffentlicht am 22. Juni 2026.
 
-## Automatische Git-Commits
+## GitHub- und GitLab-Synchronisation
 
-Die App initialisiert bei Bedarf ein lokales Git-Repository im Home-Assistant-
-Konfigurationsverzeichnis. Erstellen, Speichern, Umbenennen, Löschen, Migrationen
-und Wiederherstellungen erzeugen automatisch beschriftete Commits. Vorhandene,
-noch nicht eingecheckte Stände einer betroffenen Datei werden zuvor als eigener
-Zwischenstand bewahrt.
+Im neuen Qualitätsdashboard kann ein HTTPS-Remote auf GitHub.com oder GitLab.com
+hinterlegt werden. Fetch, Fast-forward-Pull, Push und sichere Synchronisation
+werden ausschließlich manuell gestartet. Divergierte Historien, Force-Pushes und
+Remote-Änderungen außerhalb von `configuration.yaml` und `packages/` werden
+nicht automatisch übernommen.
 
-App-Commits enthalten ausschließlich die tatsächlich bearbeiteten Pfade. Bereits
-vom Nutzer vorgemerkte Änderungen an anderen Dateien bleiben unangetastet.
+Personal Access Tokens werden mit Dateimodus `0600` im persistenten App-Datenordner
+gespeichert. Sie erscheinen weder in der Git-Remote-URL noch in API-Antworten oder
+Prozessargumenten.
 
-## Git-Historie und Diff
+## Qualitätsdashboard
 
-Im `configuration.yaml`-Editor steht die neue Aktion **Git-Historie** bereit.
-Package-Dateien erhalten dafür eine **G**-Schaltfläche. Die Ansicht zeigt bis zu
-100 Commits mit Zeitpunkt, Kurz-ID, Autor und Commit-Nachricht. Nach Auswahl eines
-Commits erscheint ein Unified Diff zur aktuellen Fassung.
+Das Dashboard bündelt Package-Konflikte, Warnungen, Script-Anzahl, mögliche
+ungenutzte Scripts, Backups und Git-Status in einer Übersicht. Der Qualitätswert
+macht sichtbar, wo zuerst nachgebessert werden sollte. Die Script-Nutzungsanalyse
+bleibt bewusst eine Warnung, da externe Aufrufe nicht vollständig erkennbar sind.
 
-## Frühere Stände wiederherstellen
+## ZIP-Import und -Export
 
-Ein ausgewählter Commit kann direkt wiederhergestellt werden. Die App prüft
-vorher den aktuellen SHA-256-Dateistand und die YAML-Gültigkeit der Git-Version.
-Zusätzlich wird die aktuelle Datei im bisherigen Backup-System gesichert. Der
-wiederhergestellte Stand wird als neuer Commit angelegt; bestehende Git-Historie
-wird nicht verändert. Danach läuft weiterhin die Home-Assistant-
-Konfigurationsprüfung.
+Einzelne Package-Dateien, Kategorien oder alle Packages lassen sich samt Tags und
+Kategorien exportieren. Vor einem Import prüft die App ZIP-Pfade, Größenlimits,
+UTF-8, YAML, vorhandene Dateien und globale Package-Konflikte.
+
+Der bestätigte Import läuft transaktional und unterstützt Überspringen oder
+Überschreiben. Backups, Git-Commit, Rollback bei Schreibfehlern und die
+Home-Assistant-Prüfung bleiben Bestandteil des Ablaufs.
 
 ## Technische API-Erweiterungen
 
-- `GET /api/git/history` liefert die dateibezogenen Commits.
-- `GET /api/git/diff` vergleicht einen Commit mit der aktuellen Fassung.
-- `POST /api/git/restore` stellt einen Stand konfliktgeschützt wieder her.
+- `GET /api/dashboard` liefert Qualitäts- und Git-Status.
+- `GET|PUT|DELETE /api/git/remote` verwaltet den geschützten Remote.
+- `POST /api/git/remote/sync` führt die gewählte Synchronisationsaktion aus.
+- `GET /api/export` erzeugt Package-ZIP-Archive.
+- `POST /api/import/preview` und `/api/import/apply` prüfen und importieren Archive.
 
 ## Nach dem Update
 
-1. Öffne eine Package-Datei und speichere eine kleine Änderung.
-2. Öffne über **G** die neue Git-Historie und prüfe den Commit-Diff.
-3. Die bisherige Backup-Historie bleibt parallel über **Versionen** verfügbar.
+1. Öffne **Dashboard** und prüfe Qualitätswert und Hinweise.
+2. Hinterlege bei Bedarf einen privaten GitHub-/GitLab-Remote mit minimal berechtigtem Token.
+3. Teste unter **Import/Export** zunächst einen ZIP-Export und anschließend die Importvorschau.

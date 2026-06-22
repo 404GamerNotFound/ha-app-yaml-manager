@@ -131,6 +131,81 @@ Die zugehörigen HTTP-Endpunkte sind:
 - `GET /api/git/diff`
 - `POST /api/git/restore`
 
+## GitHub- und GitLab-Remote
+
+Das Qualitätsdashboard enthält eine optionale Git-Remote-Konfiguration. Erlaubt
+sind ausschließlich HTTPS-Repository-URLs auf `github.com` und `gitlab.com`;
+eingebettete Benutzernamen, Tokens, Query-Parameter und URL-Fragmente werden
+abgewiesen. Die App verwendet den eigenen Remote-Namen `yaml-manager` und
+verändert einen eventuell vorhandenen `origin`-Remote nicht.
+
+Benutzername und Personal Access Token werden in `/data/git_remote.json`
+gespeichert. Die Datei erhält Modus `0600`. API-Antworten enthalten nur die
+Information, ob ein Token vorhanden ist. Während eines Netzwerkbefehls liefert
+ein kurzlebiger Askpass-Prozess die Zugangsdaten aus Umgebungsvariablen; damit
+stehen sie weder in `.git/config`, der Remote-URL noch in Prozessargumenten.
+GitHub und GitLab unterstützen Personal Access Tokens als Passwort für Git über
+HTTPS. Verwende nur minimal berechtigte Tokens und ein privates Repository.
+Siehe dazu die offiziellen Hinweise von
+[GitHub](https://docs.github.com/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens)
+und [GitLab](https://docs.gitlab.com/user/profile/personal_access_tokens/).
+
+Die Synchronisation erfolgt ausschließlich nach einer manuellen Aktion:
+
+- **Fetch** aktualisiert die lokale Remote-Referenz ohne Arbeitsdateien zu ändern.
+- **Pull** übernimmt nur Fast-forward-Änderungen.
+- **Push** überträgt den lokalen `HEAD` auf den konfigurierten Remote-Branch.
+- **Sicher synchronisieren** führt Fetch, einen möglichen Fast-forward und Push aus.
+
+Sind lokale und entfernte Historie divergiert, bricht die App ab. Pull und Sync
+werden ebenfalls abgebrochen, wenn der Remote-Stand Dateien außerhalb von
+`configuration.yaml` und `packages/` verändern würde. Die App führt keine
+automatischen Rebases, Force-Pushes oder Merge-Commits aus.
+
+## Qualitätsdashboard
+
+Das Dashboard kombiniert die globale Package-Konfliktprüfung mit Betriebs- und
+Git-Daten. Angezeigt werden Package-Dateien, Script-Anzahl, Fehler, Warnungen,
+Backups, Git-Ahead/Behind und ein daraus berechneter Qualitätswert.
+
+Für die Nutzungsanalyse werden Script-Definitionen mit `script.<id>`-Referenzen
+in allen lesbaren YAML-Dateien unterhalb des Konfigurationsverzeichnisses
+verglichen. Nicht gefundene Referenzen werden bewusst nur als **möglicherweise
+ungenutzt** gemeldet: Aufrufe aus Dashboards, der Benutzeroberfläche, Apps oder
+externen Integrationen sind aus YAML allein nicht vollständig ableitbar.
+
+## Package-Import und -Export
+
+Der ZIP-Export unterstützt den aktuellen Editor, eine Kategorie oder den
+vollständigen Package-Bestand. Neben den YAML-Dateien enthält `manifest.json`
+die Kategorien und Tags. Ein Export ist auf 500 Dateien und 50 MiB ungepackte
+Daten begrenzt.
+
+Beim ZIP-Import gelten folgende Prüfungen:
+
+- höchstens 10 MiB Archivgröße, 500 Dateien und 50 MiB entpackte Daten,
+- keine verschlüsselten Einträge oder Pfade außerhalb von `packages`,
+- ausschließlich `.yaml` und `.yml` in UTF-8,
+- gültige YAML-Syntax und eindeutige Archivpfade,
+- globale Package-Konfliktprüfung mit dem geplanten Zielbestand,
+- Anzeige vorhandener Zieldateien vor dem Schreiben.
+
+Die Strategien **Überspringen** und **Überschreiben** bestimmen den Umgang mit
+vorhandenen Dateien. Der Vorschau-Hash umfasst das Archiv und den vollständigen
+Package-Bestand. Ändert sich bis zur Bestätigung eine Package-Datei, wird der
+Import abgebrochen. Beim Anwenden werden vorhandene Dateien gesichert, alle
+Schreibvorgänge gemeinsam ausgeführt und bei einem Dateifehler zurückgerollt.
+Danach entstehen ein Git-Commit und eine Home-Assistant-Konfigurationsprüfung.
+
+Die zugehörigen Endpunkte sind:
+
+- `GET /api/export`
+- `POST /api/import/preview`
+- `POST /api/import/apply`
+- `GET /api/dashboard`
+- `GET|PUT|DELETE /api/git/remote`
+- `POST /api/git/remote/sync`
+
 ## Globale Package-Konfliktprüfung
 
 Der Eintrag **Package-Konflikte** in der Seitenleiste analysiert alle Dateien

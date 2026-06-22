@@ -1,5 +1,8 @@
+import base64
+import io
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -13,6 +16,7 @@ class FileApiTests(unittest.TestCase):
         app.PACKAGES_ROOT = root / "packages"
         app.DATA_ROOT = root / "data"
         app.METADATA_FILE = app.DATA_ROOT / "metadata.json"
+        app.GIT_REMOTE_FILE = app.DATA_ROOT / "git_remote.json"
         app.ensure_directories()
 
     def tearDown(self):
@@ -460,6 +464,137 @@ class FileApiTests(unittest.TestCase):
         self.assertIn("packages/isoliert.yaml", committed)
         self.assertNotIn("unrelated.txt", committed)
         self.assertIn("unrelated.txt", staged)
+
+    def test_git_remote_configuration_redacts_token_and_uses_private_file(self):
+        status = app.update_git_remote(
+            {
+                "url": "https://github.com/example/home-assistant-config.git",
+                "branch": "main",
+                "username": "example",
+                "token": "secret-token",
+            }
+        )
+
+        self.assertTrue(status["configured"])
+        self.assertTrue(status["tokenConfigured"])
+        self.assertNotIn("token", status)
+        self.assertEqual(app.GIT_REMOTE_FILE.stat().st_mode & 0o777, 0o600)
+        self.assertNotIn("secret-token", app.run_git(["remote", "get-url", app.GIT_REMOTE_NAME]).stdout.decode())
+
+    def test_git_remote_rejects_embedded_credentials_and_unknown_hosts(self):
+        for url in (
+            "https://token@github.com/example/config.git",
+            "https://example.com/example/config.git",
+        ):
+            with self.subTest(url=url), self.assertRaises(app.ApiError):
+                app.update_git_remote({"url": url, "branch": "main", "token": "secret"})
+
+    def test_git_remote_pushes_to_configured_branch(self):
+        remote = app.PACKAGES_ROOT.parent / "remote.git"
+        app.run_git(["init", "--bare", str(remote)])
+        app.write_file("remote.yaml", "script: {}\n", None, "Tests", create=True)
+        app.save_git_remote_file(
+            {
+                "url": str(remote),
+                "provider": "test",
+                "branch": "main",
+                "username": "test",
+                "token": "",
+            }
+        )
+
+        result = app.synchronize_git_remote("push")
+        remote_head = app.run_git(
+            ["--git-dir", str(remote), "rev-parse", "refs/heads/main"]
+        ).stdout.decode().strip()
+
+        self.assertEqual(result["action"], "push")
+        self.assertEqual(remote_head, app.run_git(["rev-parse", "HEAD"]).stdout.decode().strip())
+
+    def test_quality_dashboard_reports_possibly_unused_scripts(self):
+        app.write_file(
+            "scripts.yaml",
+            "script:\n  used:\n    sequence: []\n  unused:\n    sequence: []\n",
+            None,
+            "Tests",
+            create=True,
+        )
+        (app.PACKAGES_ROOT.parent / "automations.yaml").write_text(
+            "- action: script.used\n",
+            encoding="utf-8",
+        )
+
+        dashboard = app.configuration_quality_dashboard()
+        unused_titles = [
+            finding["title"]
+            for finding in dashboard["findings"]
+            if finding["code"] == "possibly-unused-script"
+        ]
+
+        self.assertEqual(dashboard["summary"]["scripts"], 2)
+        self.assertTrue(any("unused" in title for title in unused_titles))
+        self.assertFalse(any(title.startswith("Script „used“") for title in unused_titles))
+
+    def test_package_export_import_roundtrip_preserves_metadata(self):
+        created = app.write_file(
+            "export/test.yaml",
+            "script:\n  export_test:\n    sequence: []\n",
+            None,
+            "Export",
+            create=True,
+            tags=["demo", "zip"],
+        )
+        _filename, archive = app.export_packages("file", raw_path=created["path"])
+        app.delete_file(created["path"], created["version"])
+        encoded = base64.b64encode(archive).decode("ascii")
+
+        preview = app.preview_package_import(encoded)
+        self.assertTrue(preview["valid"])
+        self.assertFalse(preview["files"][0]["exists"])
+        result = app.apply_package_import(
+            encoded,
+            "overwrite",
+            preview["archiveVersion"],
+            preview["destinationVersion"],
+        )
+
+        restored = app.read_file(created["path"])
+        self.assertIn(created["path"], result["imported"])
+        self.assertEqual(restored["category"], "Export")
+        self.assertEqual(restored["tags"], ["demo", "zip"])
+
+    def test_import_preview_detects_unsafe_paths_and_package_name_conflicts(self):
+        app.write_file("room/a.yaml", "script:\n  one: {}\n", None, "Tests", create=True)
+        output = io.BytesIO()
+        with zipfile.ZipFile(output, "w") as archive:
+            archive.writestr("packages/other/a.yaml", "script:\n  two: {}\n")
+            archive.writestr("packages/../escape.yaml", "script: {}\n")
+        preview = app.preview_package_import(base64.b64encode(output.getvalue()).decode("ascii"))
+
+        self.assertFalse(preview["valid"])
+        self.assertTrue(any("escape.yaml" in error for error in preview["errors"]))
+        self.assertIn(
+            "duplicate-package-name",
+            {finding["code"] for finding in preview["conflicts"]["findings"]},
+        )
+
+    def test_import_rejects_any_package_change_after_preview(self):
+        output = io.BytesIO()
+        with zipfile.ZipFile(output, "w") as archive:
+            archive.writestr("packages/import.yaml", "script:\n  imported: {}\n")
+        encoded = base64.b64encode(output.getvalue()).decode("ascii")
+        preview = app.preview_package_import(encoded)
+        app.write_file("other.yaml", "script: {}\n", None, "Tests", create=True)
+
+        with self.assertRaises(app.ApiError) as raised:
+            app.apply_package_import(
+                encoded,
+                "overwrite",
+                preview["archiveVersion"],
+                preview["destinationVersion"],
+            )
+
+        self.assertEqual(raised.exception.status, 409)
 
     def test_backup_restore_rejects_stale_current_version(self):
         created = app.write_file("stale.yaml", "script: {}\n", None, "Tests", create=True)

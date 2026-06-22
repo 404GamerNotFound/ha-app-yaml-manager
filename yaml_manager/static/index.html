@@ -18,6 +18,8 @@
         </div>
       </div>
       <div class="topbar-actions">
+        <button class="button secondary" id="dashboard-button" aria-label="Qualitätsdashboard">Dashboard</button>
+        <button class="button secondary" id="transfer-button" aria-label="Import und Export">Import/Export</button>
         <button class="button secondary" id="configuration-button"><span class="desktop-label">configuration.yaml</span><span class="mobile-label">Config</span></button>
         <button class="button secondary" id="reload-button" title="script.reload ausführen">Skripte neu laden</button>
         <button class="button secondary" id="new-button">Neue Datei</button>
@@ -292,6 +294,86 @@
         <div class="dialog-actions history-actions">
           <span id="git-history-summary">Kein Commit ausgewählt</span>
           <button class="button warning" id="git-history-restore" type="button" disabled>Auf diesen Stand zurückgehen</button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog class="admin-dialog" id="dashboard-dialog">
+      <div class="admin-dialog-content">
+        <div class="dialog-header admin-dialog-header">
+          <div>
+            <h2>Konfigurationsqualität</h2>
+            <p>Konflikte, Script-Nutzung, Sicherungen und Git-Status auf einen Blick.</p>
+          </div>
+          <button class="icon-button" id="dashboard-close" type="button" aria-label="Dashboard schließen">×</button>
+        </div>
+        <div class="dashboard-body">
+          <section class="quality-overview">
+            <div class="quality-score" id="quality-score"><strong>–</strong><span>Qualität</span></div>
+            <div class="quality-stats" id="quality-stats"></div>
+          </section>
+          <section class="admin-section">
+            <div class="admin-section-heading">
+              <div><h3>Hinweise</h3><p>Globale Package-Prüfung und möglicherweise ungenutzte Scripts.</p></div>
+              <button class="button secondary" id="dashboard-refresh" type="button">Aktualisieren</button>
+            </div>
+            <div class="dashboard-findings" id="dashboard-findings"></div>
+          </section>
+          <section class="admin-section git-remote-section">
+            <div class="admin-section-heading">
+              <div><h3>Git Remote</h3><p id="remote-status">Noch nicht konfiguriert</p></div>
+              <span class="remote-badge" id="remote-badge">Lokal</span>
+            </div>
+            <div class="remote-form">
+              <label><span>HTTPS-Repository</span><input id="remote-url" type="url" placeholder="https://github.com/name/repository.git"></label>
+              <label><span>Branch</span><input id="remote-branch" value="main"></label>
+              <label><span>Benutzername</span><input id="remote-username" autocomplete="username"></label>
+              <label><span>Token</span><input id="remote-token" type="password" autocomplete="new-password" placeholder="Leer lassen zum Beibehalten"></label>
+            </div>
+            <label class="remote-clear"><input id="remote-clear-token" type="checkbox"> Gespeichertes Token entfernen</label>
+            <p class="security-notice">Tokens werden mit Dateirechten 0600 unter /data gespeichert und weder angezeigt noch in die Remote-URL geschrieben. Ein Push kann sensible Konfigurationsdaten übertragen; verwende ein privates Repository.</p>
+            <div class="remote-actions">
+              <button class="button primary" id="remote-save" type="button">Remote speichern</button>
+              <button class="button secondary" id="remote-fetch" type="button">Fetch</button>
+              <button class="button secondary" id="remote-pull" type="button">Pull</button>
+              <button class="button secondary" id="remote-push" type="button">Push</button>
+              <button class="button secondary" id="remote-sync" type="button">Sicher synchronisieren</button>
+              <button class="button warning" id="remote-remove" type="button">Remote entfernen</button>
+            </div>
+          </section>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog class="transfer-dialog" id="transfer-dialog">
+      <div class="transfer-dialog-content">
+        <div class="dialog-header admin-dialog-header">
+          <div>
+            <h2>Package Import und Export</h2>
+            <p>ZIP-Archive mit Metadaten, Vorschau und Konfliktprüfung.</p>
+          </div>
+          <button class="icon-button" id="transfer-close" type="button" aria-label="Import und Export schließen">×</button>
+        </div>
+        <div class="transfer-body">
+          <section class="admin-section transfer-section">
+            <h3>Export</h3>
+            <div class="transfer-controls">
+              <label><span>Umfang</span><select id="export-scope"><option value="all">Alle Packages</option><option value="category">Kategorie</option><option value="file">Aktuelle Datei</option></select></label>
+              <label><span>Kategorie</span><select id="export-category"></select></label>
+              <button class="button primary" id="export-start" type="button">ZIP exportieren</button>
+            </div>
+          </section>
+          <section class="admin-section transfer-section">
+            <h3>Import</h3>
+            <div class="transfer-controls">
+              <label class="archive-field"><span>ZIP-Archiv</span><input id="import-file" type="file" accept=".zip,application/zip"></label>
+              <label><span>Vorhandene Dateien</span><select id="import-strategy"><option value="skip">Überspringen</option><option value="overwrite">Überschreiben</option></select></label>
+              <button class="button secondary" id="import-preview" type="button">Import prüfen</button>
+              <button class="button warning" id="import-apply" type="button" disabled>Geprüften Import anwenden</button>
+            </div>
+            <div class="import-summary" id="import-summary">Noch kein Archiv geprüft.</div>
+            <div class="import-preview-list" id="import-preview-list"></div>
+          </section>
         </div>
       </div>
     </dialog>

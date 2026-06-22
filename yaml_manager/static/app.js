@@ -30,6 +30,9 @@ const state = {
   packageConflicts: null,
   history: { scope: "", path: "", currentVersion: "", selectedId: "" },
   gitHistory: { scope: "", path: "", currentVersion: "", selectedCommit: "" },
+  dashboard: null,
+  importArchive: "",
+  importPreview: null,
 };
 
 const elements = Object.fromEntries([
@@ -46,6 +49,9 @@ const elements = Object.fromEntries([
   "history-dialog", "history-close", "history-path", "history-list", "diff-placeholder", "diff-view", "history-summary", "history-restore",
   "git-dialog", "git-history-close", "git-history-path", "git-history-list", "git-diff-placeholder", "git-diff-view", "git-history-summary", "git-history-restore",
   "package-conflicts-button", "conflict-dialog", "conflict-close", "conflict-summary", "conflict-list",
+  "dashboard-button", "dashboard-dialog", "dashboard-close", "dashboard-refresh", "quality-score", "quality-stats", "dashboard-findings",
+  "remote-status", "remote-badge", "remote-url", "remote-branch", "remote-username", "remote-token", "remote-clear-token", "remote-save", "remote-fetch", "remote-pull", "remote-push", "remote-sync", "remote-remove",
+  "transfer-button", "transfer-dialog", "transfer-close", "export-scope", "export-category", "export-start", "import-file", "import-strategy", "import-preview", "import-apply", "import-summary", "import-preview-list",
 ].map((id) => [id, document.getElementById(id)]));
 
 let validationTimer;
@@ -729,6 +735,254 @@ async function openPackageConflicts() {
   } catch (error) { toast(error.message, "error"); }
 }
 
+function renderRemoteStatus(remote) {
+  const configured = remote.configured;
+  elements["remote-url"].value = remote.url || "";
+  elements["remote-branch"].value = remote.branch || "main";
+  elements["remote-username"].value = remote.username || "";
+  elements["remote-token"].value = "";
+  elements["remote-token"].placeholder = remote.tokenConfigured ? "Token ist gespeichert" : "Personal Access Token";
+  elements["remote-clear-token"].checked = false;
+  const syncDetails = configured
+    ? `${remote.ahead || 0} voraus · ${remote.behind || 0} zurück${remote.dirty ? " · lokale Änderungen" : ""}`
+    : "Noch nicht konfiguriert";
+  elements["remote-status"].textContent = remote.message || syncDetails;
+  elements["remote-badge"].textContent = configured ? `${(remote.provider || "git").toUpperCase()} · ${remote.branch}` : "Lokal";
+  ["remote-fetch", "remote-pull", "remote-push", "remote-sync", "remote-remove"].forEach((id) => {
+    elements[id].disabled = !configured;
+  });
+}
+
+function renderDashboard(result) {
+  state.dashboard = result;
+  const scoreClass = result.score < 60 ? "error" : result.score < 85 ? "warning" : "";
+  elements["quality-score"].className = `quality-score ${scoreClass}`;
+  elements["quality-score"].innerHTML = `<strong>${result.score}</strong><span>Qualität</span>`;
+  const stats = [
+    [result.summary.files, "Package-Dateien"],
+    [result.summary.scripts, "Scripts"],
+    [result.summary.unusedScripts, "Möglicherweise ungenutzt"],
+    [result.summary.errors, "Fehler"],
+    [result.summary.warnings, "Warnungen"],
+    [result.summary.backups, "Backups"],
+  ];
+  elements["quality-stats"].innerHTML = stats.map(([value, label]) => `<div class="quality-stat"><strong>${value}</strong><span>${escapeHtml(label)}</span></div>`).join("");
+  if (!result.findings.length) {
+    const empty = document.createElement("div");
+    empty.className = "history-empty";
+    empty.textContent = "Keine Qualitätsprobleme gefunden.";
+    elements["dashboard-findings"].replaceChildren(empty);
+  } else {
+    elements["dashboard-findings"].replaceChildren(...result.findings.map((finding) => {
+      const item = document.createElement("div");
+      item.className = `dashboard-finding ${finding.severity}`;
+      item.innerHTML = `<span class="finding-dot"></span><div><strong>${escapeHtml(finding.title)}</strong><small>${escapeHtml(finding.message)}</small><small>${escapeHtml((finding.files || []).join(" · "))}</small></div>`;
+      return item;
+    }));
+  }
+  renderRemoteStatus(result.git.remote);
+}
+
+async function loadDashboard() {
+  elements["dashboard-refresh"].disabled = true;
+  try {
+    const result = await api("api/dashboard");
+    renderDashboard(result);
+    return result;
+  } catch (error) {
+    toast(error.message, "error");
+    return null;
+  } finally {
+    elements["dashboard-refresh"].disabled = false;
+  }
+}
+
+async function openDashboard() {
+  const result = await loadDashboard();
+  if (result) elements["dashboard-dialog"].showModal();
+}
+
+async function saveRemoteConfiguration() {
+  elements["remote-save"].disabled = true;
+  try {
+    const remote = await api("api/git/remote", {
+      method: "PUT",
+      body: JSON.stringify({
+        url: elements["remote-url"].value,
+        branch: elements["remote-branch"].value,
+        username: elements["remote-username"].value,
+        token: elements["remote-token"].value,
+        clearToken: elements["remote-clear-token"].checked,
+      }),
+    });
+    renderRemoteStatus(remote);
+    toast("Git Remote gespeichert", "success");
+  } catch (error) { toast(error.message, "error"); }
+  finally { elements["remote-save"].disabled = false; }
+}
+
+async function synchronizeRemote(action) {
+  if (state.dirty || state.configurationDirty) {
+    toast("Speichere oder verwirf zuerst die offenen Änderungen.", "error");
+    return;
+  }
+  const descriptions = {
+    fetch: "Remote-Status abrufen?",
+    pull: "Remote-Änderungen übernehmen? Verwaltete Dateien können aktualisiert werden.",
+    push: "Lokale Git-Historie an das Remote übertragen? Das Repository sollte privat sein.",
+    sync: "Sicher synchronisieren? Dabei können verwaltete Dateien empfangen und sensible Konfigurationsdaten übertragen werden.",
+  };
+  if (!confirm(descriptions[action])) return;
+  const button = elements[`remote-${action}`];
+  button.disabled = true;
+  try {
+    const result = await api("api/git/remote/sync", {
+      method: "POST",
+      body: JSON.stringify({ action }),
+    });
+    renderRemoteStatus(result);
+    await refreshFiles();
+    if (result.configurationCheck?.valid === false) {
+      toast(`Synchronisiert, aber Home Assistant meldet: ${result.configurationCheck.message}`, "error");
+    } else {
+      toast(result.message, "success");
+    }
+  } catch (error) { toast(error.message, "error"); }
+  finally { button.disabled = false; }
+}
+
+async function removeRemoteConfiguration() {
+  if (!confirm("Git Remote und das gespeicherte Token aus der App entfernen? Das lokale Repository bleibt erhalten.")) return;
+  try {
+    const result = await api("api/git/remote", { method: "DELETE", body: "{}" });
+    renderRemoteStatus(result);
+    toast("Git Remote entfernt", "success");
+  } catch (error) { toast(error.message, "error"); }
+}
+
+function fillExportCategories() {
+  elements["export-category"].replaceChildren(...state.categories.map((category) => {
+    const option = document.createElement("option");
+    option.value = category;
+    option.textContent = category;
+    return option;
+  }));
+  elements["export-category"].disabled = elements["export-scope"].value !== "category";
+}
+
+function resetImportPreview() {
+  state.importArchive = "";
+  state.importPreview = null;
+  elements["import-apply"].disabled = true;
+  elements["import-summary"].className = "import-summary";
+  elements["import-summary"].textContent = "Noch kein Archiv geprüft.";
+  elements["import-preview-list"].replaceChildren();
+}
+
+function openTransferDialog() {
+  fillExportCategories();
+  elements["import-file"].value = "";
+  resetImportPreview();
+  elements["transfer-dialog"].showModal();
+}
+
+function startPackageExport() {
+  const scope = elements["export-scope"].value;
+  if (scope === "file" && !state.selected) {
+    toast("Öffne zuerst eine Package-Datei.", "error");
+    return;
+  }
+  const params = new URLSearchParams({
+    scope,
+    path: scope === "file" ? state.selected.path : "",
+    category: scope === "category" ? elements["export-category"].value : "",
+  });
+  const link = document.createElement("a");
+  link.href = `api/export?${params}`;
+  link.click();
+}
+
+function readArchive(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => resolve(String(reader.result).split(",", 2)[1] || ""));
+    reader.addEventListener("error", () => reject(new Error("Das ZIP-Archiv konnte nicht gelesen werden.")));
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderImportPreview(result) {
+  state.importPreview = result;
+  const conflictErrors = result.conflicts.counts?.error || 0;
+  const conflictWarnings = result.conflicts.counts?.warning || 0;
+  elements["import-summary"].className = `import-summary ${result.valid ? "valid" : "invalid"}`;
+  elements["import-summary"].textContent = result.valid
+    ? `${result.files.length} Dateien geprüft · ${result.existingCount} vorhanden · ${conflictErrors} Konflikte · ${conflictWarnings} Warnungen`
+    : result.errors.join(" · ");
+  const fileItems = result.files.map((file) => {
+    const item = document.createElement("div");
+    item.className = "import-preview-item";
+    item.innerHTML = `<span>${escapeHtml(file.path)}</span><span>${file.exists ? "vorhanden" : "neu"} · ${file.size} Bytes</span>`;
+    return item;
+  });
+  const conflictItems = result.conflicts.findings.slice(0, 30).map((finding) => {
+    const item = document.createElement("div");
+    item.className = "import-preview-item";
+    item.innerHTML = `<span>${escapeHtml(finding.title)}</span><span>${escapeHtml(finding.severity)}</span>`;
+    return item;
+  });
+  elements["import-preview-list"].replaceChildren(...fileItems, ...conflictItems);
+  elements["import-apply"].disabled = !result.valid;
+}
+
+async function previewPackageImport() {
+  const file = elements["import-file"].files[0];
+  if (!file) {
+    toast("Wähle zuerst ein ZIP-Archiv.", "error");
+    return;
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    toast("Das ZIP-Archiv ist größer als 10 MiB.", "error");
+    return;
+  }
+  elements["import-preview"].disabled = true;
+  try {
+    state.importArchive = await readArchive(file);
+    const result = await api("api/import/preview", {
+      method: "POST",
+      body: JSON.stringify({ archive: state.importArchive }),
+    });
+    renderImportPreview(result);
+  } catch (error) { toast(error.message, "error"); }
+  finally { elements["import-preview"].disabled = false; }
+}
+
+async function applyPackageImport() {
+  if (!state.importPreview?.valid || !state.importArchive) return;
+  const errors = state.importPreview.conflicts.counts?.error || 0;
+  const warning = errors ? ` Die Vorschau enthält ${errors} Package-Konflikte.` : "";
+  if (!confirm(`Geprüften ZIP-Import anwenden?${warning} Bestehende Dateien werden gemäß Strategie behandelt.`)) return;
+  elements["import-apply"].disabled = true;
+  try {
+    const result = await api("api/import/apply", {
+      method: "POST",
+      body: JSON.stringify({
+        archive: state.importArchive,
+        strategy: elements["import-strategy"].value,
+        archiveVersion: state.importPreview.archiveVersion,
+        destinationVersion: state.importPreview.destinationVersion,
+      }),
+    });
+    await refreshFiles();
+    elements["import-summary"].className = "import-summary valid";
+    elements["import-summary"].textContent = `${result.message} ${result.skipped.length} Dateien wurden übersprungen.`;
+    toast(result.message, "success");
+  } catch (error) {
+    elements["import-apply"].disabled = false;
+    toast(error.message, "error");
+  }
+}
+
 async function refreshFiles() {
   const data = await api("api/files");
   state.files = data.files;
@@ -1039,6 +1293,24 @@ elements["category-select"].addEventListener("change", () => {
 });
 elements["tag-input"].addEventListener("input", setDirty);
 elements["file-search"].addEventListener("input", renderFiles);
+elements["dashboard-button"].addEventListener("click", openDashboard);
+elements["dashboard-close"].addEventListener("click", () => elements["dashboard-dialog"].close());
+elements["dashboard-refresh"].addEventListener("click", loadDashboard);
+elements["dashboard-dialog"].addEventListener("cancel", () => elements["dashboard-dialog"].close());
+elements["remote-save"].addEventListener("click", saveRemoteConfiguration);
+elements["remote-fetch"].addEventListener("click", () => synchronizeRemote("fetch"));
+elements["remote-pull"].addEventListener("click", () => synchronizeRemote("pull"));
+elements["remote-push"].addEventListener("click", () => synchronizeRemote("push"));
+elements["remote-sync"].addEventListener("click", () => synchronizeRemote("sync"));
+elements["remote-remove"].addEventListener("click", removeRemoteConfiguration);
+elements["transfer-button"].addEventListener("click", openTransferDialog);
+elements["transfer-close"].addEventListener("click", () => elements["transfer-dialog"].close());
+elements["transfer-dialog"].addEventListener("cancel", () => elements["transfer-dialog"].close());
+elements["export-scope"].addEventListener("change", fillExportCategories);
+elements["export-start"].addEventListener("click", startPackageExport);
+elements["import-file"].addEventListener("change", resetImportPreview);
+elements["import-preview"].addEventListener("click", previewPackageImport);
+elements["import-apply"].addEventListener("click", applyPackageImport);
 elements["configuration-status"].addEventListener("click", openConfigurationEditor);
 elements["configuration-button"].addEventListener("click", openConfigurationEditor);
 elements["configuration-close"].addEventListener("click", closeConfigurationEditor);

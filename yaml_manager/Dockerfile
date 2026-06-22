@@ -15,7 +15,10 @@ RUN apk add --no-cache git \
     && pip install --no-cache-dir -r requirements.txt
 
 COPY app.py ./
+COPY git_askpass.py ./
 COPY static ./static
+
+RUN chmod 0755 /app/git_askpass.py
 
 ENV PYTHONUNBUFFERED=1 \
     PORT=8099 \

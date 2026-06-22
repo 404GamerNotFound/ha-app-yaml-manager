@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.0 - 2026-06-22
+
+- Optionales Git-Remote für GitHub.com und GitLab.com über HTTPS mit manuellen Fetch-, Pull-, Push- und Sync-Aktionen
+- Geschützte Token-Ablage unter `/data` mit Dateimodus `0600`, ohne Token in Remote-URL, API-Antwort oder Prozessargumenten
+- Sicheres Fast-forward-Pull mit Abbruch bei divergierter Historie oder Remote-Änderungen außerhalb verwalteter Pfade
+- Qualitätsdashboard mit Gesamtwert, Package-Konflikten, Warnungen, Backup-Zahl, Git-Status und möglicherweise ungenutzten Scripts
+- ZIP-Export für einzelne Dateien, Kategorien oder alle Packages einschließlich Kategorien und Tags
+- ZIP-Import mit Pfad-, Größen-, UTF-8-, YAML- und Package-Konfliktprüfung sowie Vorschau
+- Transaktionaler Import mit Skip-/Overwrite-Strategie, globalem Zustands-Hash, Rollback, Backups, Git-Commit und Home-Assistant-Prüfung
+
 ## 0.6.0 - 2026-06-22
 
 - Lokales Git-Repository im Home-Assistant-Konfigurationsverzeichnis mit automatischer Initialisierung

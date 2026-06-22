@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 import difflib
 import hashlib
+import io
 import json
 import mimetypes
 import os
@@ -17,6 +20,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import zipfile
 from collections import Counter
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -31,7 +35,13 @@ PACKAGES_ROOT = Path(os.environ.get("PACKAGES_PATH", "/homeassistant/packages"))
 DATA_ROOT = Path(os.environ.get("DATA_PATH", "/data")).resolve()
 STATIC_ROOT = Path(__file__).parent / "static"
 METADATA_FILE = DATA_ROOT / "metadata.json"
+GIT_REMOTE_FILE = DATA_ROOT / "git_remote.json"
+GIT_REMOTE_NAME = "yaml-manager"
+GIT_ASKPASS = Path(__file__).parent / "git_askpass.py"
 MAX_FILE_SIZE = 2 * 1024 * 1024
+MAX_IMPORT_SIZE = 10 * 1024 * 1024
+MAX_IMPORT_EXPANDED_SIZE = 50 * 1024 * 1024
+MAX_IMPORT_FILES = 500
 VALID_SUFFIXES = {".yaml", ".yml"}
 DEFAULT_CATEGORY = "Ohne Kategorie"
 PACKAGE_DIRECTORY_TAGS = {"!include_dir_named", "!include_dir_merge_named"}
@@ -350,11 +360,21 @@ def git_relative_path(path: Path) -> str:
     return relative.as_posix()
 
 
-def run_git(arguments: list[str], allowed_codes: tuple[int, ...] = (0,)) -> subprocess.CompletedProcess[bytes]:
+def run_git(
+    arguments: list[str],
+    allowed_codes: tuple[int, ...] = (0,),
+    environment: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[bytes]:
     root = git_root()
     command = ["git", "-c", f"safe.directory={root}", "-C", str(root), *arguments]
     try:
-        result = subprocess.run(command, capture_output=True, timeout=15, check=False)
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            timeout=45 if environment else 15,
+            check=False,
+            env=environment,
+        )
     except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
         raise GitOperationError("Git ist in der App nicht verfügbar.") from exc
     if result.returncode not in allowed_codes:
@@ -424,6 +444,264 @@ def git_commit_paths(paths: list[Path], message: str) -> dict[str, Any]:
 
 def git_checkpoint(paths: list[Path]) -> dict[str, Any]:
     return git_commit_paths(paths, "Zwischenstand vor Änderung durch den YAML Script Manager")
+
+
+def public_git_remote_config(config: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "configured": bool(config.get("url")),
+        "url": config.get("url", ""),
+        "provider": config.get("provider", ""),
+        "branch": config.get("branch", "main"),
+        "username": config.get("username", ""),
+        "tokenConfigured": bool(config.get("token")),
+        "lastSync": config.get("lastSync"),
+    }
+
+
+def load_git_remote_config() -> dict[str, Any]:
+    try:
+        value = json.loads(GIT_REMOTE_FILE.read_text(encoding="utf-8"))
+    except (FileNotFoundError, OSError, json.JSONDecodeError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def validate_git_remote_url(raw_url: Any) -> tuple[str, str]:
+    if not isinstance(raw_url, str):
+        raise ApiError(HTTPStatus.BAD_REQUEST, "Eine Git-Remote-URL ist erforderlich.")
+    url = raw_url.strip()
+    parsed = urllib.parse.urlsplit(url)
+    if parsed.scheme != "https" or parsed.username or parsed.password or parsed.query or parsed.fragment:
+        raise ApiError(HTTPStatus.BAD_REQUEST, "Nur HTTPS-URLs ohne eingebettete Zugangsdaten sind erlaubt.")
+    host = (parsed.hostname or "").lower()
+    if host == "github.com":
+        provider = "github"
+    elif host == "gitlab.com":
+        provider = "gitlab"
+    else:
+        raise ApiError(HTTPStatus.BAD_REQUEST, "Es sind ausschließlich github.com und gitlab.com erlaubt.")
+    if not re.fullmatch(r"/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)+/?", parsed.path):
+        raise ApiError(HTTPStatus.BAD_REQUEST, "Die Repository-URL ist ungültig.")
+    return urllib.parse.urlunsplit(("https", host, parsed.path.rstrip("/"), "", "")), provider
+
+
+def validate_git_branch(raw_branch: Any) -> str:
+    if not isinstance(raw_branch, str) or not raw_branch.strip():
+        raise ApiError(HTTPStatus.BAD_REQUEST, "Ein Git-Branch ist erforderlich.")
+    branch = raw_branch.strip()
+    if len(branch) > 128 or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]*", branch):
+        raise ApiError(HTTPStatus.BAD_REQUEST, "Der Git-Branch ist ungültig.")
+    if any(value in branch for value in ("..", "//", "@{")) or branch.endswith(("/", ".", ".lock")):
+        raise ApiError(HTTPStatus.BAD_REQUEST, "Der Git-Branch ist ungültig.")
+    return branch
+
+
+def save_git_remote_file(config: dict[str, Any]) -> None:
+    DATA_ROOT.mkdir(parents=True, exist_ok=True)
+    encoded = json.dumps(config, ensure_ascii=False, indent=2).encode("utf-8") + b"\n"
+    atomic_write_path(GIT_REMOTE_FILE, encoded, 0o600)
+
+
+def configure_git_remote(url: str) -> None:
+    current = run_git(["remote", "get-url", GIT_REMOTE_NAME], allowed_codes=(0, 2))
+    if current.returncode == 0:
+        run_git(["remote", "set-url", GIT_REMOTE_NAME, url])
+    else:
+        run_git(["remote", "add", GIT_REMOTE_NAME, url])
+
+
+def git_remote_environment(config: dict[str, Any]) -> dict[str, str]:
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "GIT_ASKPASS": str(GIT_ASKPASS),
+            "GIT_TERMINAL_PROMPT": "0",
+            "YAML_MANAGER_GIT_USERNAME": str(config.get("username", "")),
+            "YAML_MANAGER_GIT_TOKEN": str(config.get("token", "")),
+        }
+    )
+    return environment
+
+
+def run_git_remote(
+    arguments: list[str],
+    config: dict[str, Any],
+    allowed_codes: tuple[int, ...] = (0,),
+) -> subprocess.CompletedProcess[bytes]:
+    return run_git(arguments, allowed_codes=allowed_codes, environment=git_remote_environment(config))
+
+
+def git_ahead_behind(branch: str) -> tuple[int, int]:
+    reference = f"refs/remotes/{GIT_REMOTE_NAME}/{branch}"
+    exists = run_git(["show-ref", "--verify", "--quiet", reference], allowed_codes=(0, 1)).returncode == 0
+    if not exists:
+        return 0, 0
+    output = run_git(["rev-list", "--left-right", "--count", f"HEAD...{reference}"]).stdout.decode().strip()
+    ahead, behind = (int(value) for value in output.split())
+    return ahead, behind
+
+
+def git_remote_status() -> dict[str, Any]:
+    config = load_git_remote_config()
+    result = public_git_remote_config(config)
+    if not result["configured"]:
+        return {**result, "available": True, "ahead": 0, "behind": 0, "dirty": False}
+    with git_lock:
+        try:
+            ensure_git_repository()
+            configure_git_remote(config["url"])
+            ahead, behind = git_ahead_behind(config["branch"])
+            dirty = bool(
+                run_git(["status", "--porcelain", "--", "configuration.yaml", "packages"]).stdout.strip()
+            )
+            branch_result = run_git(["symbolic-ref", "--short", "HEAD"], allowed_codes=(0, 1))
+            current_branch = branch_result.stdout.decode().strip() if branch_result.returncode == 0 else "detached"
+            return {
+                **result,
+                "available": True,
+                "ahead": ahead,
+                "behind": behind,
+                "dirty": dirty,
+                "currentBranch": current_branch,
+            }
+        except GitOperationError as exc:
+            return {**result, "available": False, "message": str(exc), "ahead": 0, "behind": 0, "dirty": False}
+
+
+def update_git_remote(body: dict[str, Any]) -> dict[str, Any]:
+    url, provider = validate_git_remote_url(body.get("url"))
+    branch = validate_git_branch(body.get("branch", "main"))
+    existing = load_git_remote_config()
+    raw_token = body.get("token")
+    token = existing.get("token", "") if raw_token in (None, "") else raw_token
+    if body.get("clearToken"):
+        token = ""
+    if not isinstance(token, str) or len(token) > 512 or any(char in token for char in "\r\n\0"):
+        raise ApiError(HTTPStatus.BAD_REQUEST, "Das Git-Token ist ungültig.")
+    username = body.get("username") or existing.get("username") or ("x-access-token" if provider == "github" else "oauth2")
+    if not isinstance(username, str) or not re.fullmatch(r"[^\s:@/]{1,128}", username):
+        raise ApiError(HTTPStatus.BAD_REQUEST, "Der Git-Benutzername ist ungültig.")
+    config = {
+        "url": url,
+        "provider": provider,
+        "branch": branch,
+        "username": username,
+        "token": token,
+        "lastSync": existing.get("lastSync"),
+    }
+    with git_lock:
+        try:
+            ensure_git_repository()
+            configure_git_remote(url)
+        except GitOperationError as exc:
+            raise ApiError(HTTPStatus.SERVICE_UNAVAILABLE, str(exc)) from exc
+        save_git_remote_file(config)
+    return git_remote_status()
+
+
+def remove_git_remote() -> dict[str, Any]:
+    with git_lock:
+        try:
+            if (git_root() / ".git").exists():
+                run_git(["remote", "remove", GIT_REMOTE_NAME], allowed_codes=(0, 2))
+        except GitOperationError as exc:
+            raise ApiError(HTTPStatus.SERVICE_UNAVAILABLE, str(exc)) from exc
+        try:
+            GIT_REMOTE_FILE.unlink()
+        except FileNotFoundError:
+            pass
+    return git_remote_status()
+
+
+def prepare_remote_fast_forward(branch: str) -> list[str]:
+    reference = f"refs/remotes/{GIT_REMOTE_NAME}/{branch}"
+    changed = run_git(["diff", "--name-only", "HEAD", reference]).stdout.decode("utf-8", errors="replace").splitlines()
+    for relative in changed:
+        if relative == "configuration.yaml":
+            absolute = configuration_file()
+            backup_relative = "configuration/configuration.yaml"
+        elif relative.startswith("packages/"):
+            package_relative = relative.removeprefix("packages/")
+            _normalized, absolute = normalize_relative_path(package_relative)
+            backup_relative = package_relative
+        else:
+            raise ApiError(HTTPStatus.CONFLICT, "Der Remote-Stand verändert Dateien außerhalb von configuration.yaml und packages.")
+        tree = run_git(["ls-tree", reference, "--", relative]).stdout.decode().strip()
+        if relative == "configuration.yaml" and not tree:
+            raise ApiError(HTTPStatus.CONFLICT, "Der Remote-Stand würde configuration.yaml löschen.")
+        if tree:
+            mode = tree.split(None, 1)[0]
+            if mode not in {"100644", "100755"}:
+                raise ApiError(HTTPStatus.CONFLICT, f"{relative} ist im Remote kein regulärer Dateieintrag.")
+            content = run_git(["show", f"{reference}:{relative}"]).stdout
+            try:
+                text = content.decode("utf-8")
+            except UnicodeDecodeError as exc:
+                raise ApiError(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, f"{relative} ist im Remote nicht UTF-8-kodiert.") from exc
+            validation = validate_yaml(text)
+            if not validation["valid"]:
+                raise ApiError(HTTPStatus.UNPROCESSABLE_ENTITY, f"{relative} ist im Remote kein gültiges YAML.", validation)
+        if absolute.is_file():
+            create_backup(backup_relative, absolute)
+    return changed
+
+
+def synchronize_git_remote(action: str) -> dict[str, Any]:
+    if action not in {"fetch", "pull", "push", "sync"}:
+        raise ApiError(HTTPStatus.BAD_REQUEST, "Unbekannte Git-Synchronisationsaktion.")
+    config = load_git_remote_config()
+    if not config.get("url"):
+        raise ApiError(HTTPStatus.CONFLICT, "Es ist noch kein Git-Remote konfiguriert.")
+    branch = config["branch"]
+    configuration_check: dict[str, Any] | None = None
+    with file_lock, git_lock:
+        try:
+            ensure_git_repository()
+            configure_git_remote(config["url"])
+            git_commit_paths(
+                [configuration_file(), PACKAGES_ROOT],
+                "Lokaler Stand vor Git-Remote-Synchronisation",
+            )
+            reference = f"refs/remotes/{GIT_REMOTE_NAME}/{branch}"
+            remote_check = run_git_remote(
+                ["ls-remote", "--exit-code", GIT_REMOTE_NAME, f"refs/heads/{branch}"],
+                config,
+                allowed_codes=(0, 2),
+            )
+            remote_exists = remote_check.returncode == 0
+            if action == "pull" and not remote_exists:
+                raise ApiError(HTTPStatus.CONFLICT, "Der konfigurierte Remote-Branch existiert noch nicht.")
+            if remote_exists:
+                run_git_remote(
+                    ["fetch", "--prune", GIT_REMOTE_NAME, f"refs/heads/{branch}:{reference}"],
+                    config,
+                )
+            ahead, behind = git_ahead_behind(branch)
+            if action in {"pull", "sync"} and remote_exists:
+                if ahead and behind:
+                    raise ApiError(HTTPStatus.CONFLICT, "Lokaler und Remote-Stand sind auseinander gelaufen. Bitte extern zusammenführen.")
+                if behind:
+                    prepare_remote_fast_forward(branch)
+                    run_git(["merge", "--ff-only", reference])
+                    configuration_check = check_home_assistant_configuration()
+                    ahead, behind = git_ahead_behind(branch)
+            if action in {"push", "sync"}:
+                if remote_exists and behind:
+                    raise ApiError(HTTPStatus.CONFLICT, "Der Remote-Stand ist neuer. Bitte zuerst sicher synchronisieren.")
+                run_git_remote(
+                    ["push", "--set-upstream", GIT_REMOTE_NAME, f"HEAD:refs/heads/{branch}"],
+                    config,
+                )
+            config["lastSync"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+            save_git_remote_file(config)
+        except GitOperationError as exc:
+            raise ApiError(HTTPStatus.BAD_GATEWAY, str(exc)) from exc
+    return {
+        **git_remote_status(),
+        "message": "Git-Remote-Synchronisation wurde abgeschlossen.",
+        "action": action,
+        "configurationCheck": configuration_check,
+    }
 
 
 def write_configuration(content: str, expected_version: str | None) -> dict[str, Any]:
@@ -1665,7 +1943,7 @@ def add_integration_records(
     return True
 
 
-def package_conflict_analysis() -> dict[str, Any]:
+def package_conflict_analysis(overlay: dict[str, str] | None = None) -> dict[str, Any]:
     packages_root = PACKAGES_ROOT.resolve()
     findings: list[dict[str, Any]] = []
     records: dict[str, list[dict[str, Any]]] = {}
@@ -1680,16 +1958,32 @@ def package_conflict_analysis() -> dict[str, Any]:
     except (ApiError, OSError, yaml.YAMLError):
         pass
 
-    paths = [
-        path
-        for path in sorted(packages_root.rglob("*"))
-        if path.is_file() and path.suffix.lower() in VALID_SUFFIXES
-    ] if packages_root.exists() else []
+    sources: dict[str, str] = {}
+    if packages_root.exists():
+        for path in sorted(packages_root.rglob("*")):
+            if not path.is_file() or path.suffix.lower() not in VALID_SUFFIXES:
+                continue
+            relative = path.relative_to(packages_root).as_posix()
+            try:
+                sources[relative] = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError) as exc:
+                sources[relative] = ""
+                findings.append(
+                    {
+                        "severity": "error",
+                        "code": "invalid-package-yaml",
+                        "title": f"{relative} kann nicht analysiert werden",
+                        "message": str(exc).split("\n", 1)[0],
+                        "files": [relative],
+                    }
+                )
+    if overlay:
+        sources.update(overlay)
 
-    for path in paths:
-        relative = path.relative_to(packages_root).as_posix()
-        package_names.setdefault(path.stem.casefold(), []).append(relative)
-        if path.suffix.lower() == ".yml":
+    for relative, source_content in sorted(sources.items()):
+        source_path = Path(relative)
+        package_names.setdefault(source_path.stem.casefold(), []).append(relative)
+        if source_path.suffix.lower() == ".yml":
             findings.append(
                 {
                     "severity": "warning",
@@ -1700,8 +1994,8 @@ def package_conflict_analysis() -> dict[str, Any]:
                 }
             )
         try:
-            documents = list(yaml.compose_all(path.read_text(encoding="utf-8"), Loader=HomeAssistantLoader))
-        except (OSError, UnicodeDecodeError, yaml.YAMLError) as exc:
+            documents = list(yaml.compose_all(source_content, Loader=HomeAssistantLoader))
+        except yaml.YAMLError as exc:
             findings.append(
                 {
                     "severity": "error",
@@ -1820,7 +2114,311 @@ def package_conflict_analysis() -> dict[str, Any]:
         "error": sum(item["severity"] == "error" for item in findings),
         "warning": sum(item["severity"] == "warning" for item in findings),
     }
-    return {"mode": mode, "findings": findings, "counts": counts, "fileCount": len(paths)}
+    return {"mode": mode, "findings": findings, "counts": counts, "fileCount": len(sources)}
+
+
+def collect_script_references(value: Any, references: set[str]) -> None:
+    if isinstance(value, dict):
+        for child in value.values():
+            collect_script_references(child, references)
+    elif isinstance(value, list):
+        for child in value:
+            collect_script_references(child, references)
+    elif isinstance(value, str):
+        references.update(re.findall(r"\bscript\.([A-Za-z0-9_]+)\b", value))
+
+
+def recent_git_commits(limit: int = 5) -> list[dict[str, str]]:
+    with git_lock:
+        try:
+            ensure_git_repository()
+            output = run_git(
+                ["log", "-n", str(limit), "--format=%H%x1f%aI%x1f%s%x1e"]
+            ).stdout.decode("utf-8", errors="replace")
+        except GitOperationError:
+            return []
+    commits: list[dict[str, str]] = []
+    for record in output.split("\x1e"):
+        fields = record.strip().split("\x1f", 2)
+        if len(fields) == 3:
+            commit, created, subject = fields
+            commits.append({"id": commit, "shortId": commit[:8], "created": created, "subject": subject})
+    return commits
+
+
+def configuration_quality_dashboard() -> dict[str, Any]:
+    conflicts = package_conflict_analysis()
+    definitions: dict[str, list[str]] = {}
+    references: set[str] = set()
+    config_root = git_root()
+    yaml_paths: list[Path] = []
+    if config_root.exists():
+        for path in config_root.rglob("*"):
+            if not path.is_file() or path.suffix.lower() not in VALID_SUFFIXES:
+                continue
+            try:
+                relative = path.relative_to(config_root)
+            except ValueError:
+                continue
+            if any(part.startswith(".") for part in relative.parts) or path.stat().st_size > MAX_FILE_SIZE:
+                continue
+            yaml_paths.append(path)
+
+    for path in sorted(yaml_paths):
+        try:
+            documents = list(yaml.load_all(path.read_text(encoding="utf-8"), Loader=HomeAssistantLoader))
+        except (OSError, UnicodeDecodeError, yaml.YAMLError):
+            continue
+        relative = path.relative_to(config_root).as_posix()
+        for document in documents:
+            if isinstance(document, dict) and isinstance(document.get("script"), dict):
+                for script_id in document["script"]:
+                    definitions.setdefault(str(script_id), []).append(relative)
+            collect_script_references(document, references)
+
+    unused = sorted(set(definitions) - references, key=str.casefold)
+    unused_findings = [
+        {
+            "severity": "warning",
+            "code": "possibly-unused-script",
+            "title": f'Script „{script_id}“ möglicherweise ungenutzt',
+            "message": "Keine YAML-Referenz gefunden; Aufrufe aus Dashboards oder externen Integrationen sind weiterhin möglich.",
+            "files": definitions[script_id],
+        }
+        for script_id in unused
+    ]
+    findings = [*conflicts["findings"], *unused_findings]
+    errors = conflicts["counts"]["error"]
+    warnings = conflicts["counts"]["warning"] + len(unused_findings)
+    score = max(0, 100 - errors * 10 - warnings * 2)
+    backups_root = DATA_ROOT / "backups"
+    backup_count = sum(path.is_dir() for path in backups_root.iterdir()) if backups_root.exists() else 0
+    remote = git_remote_status()
+    return {
+        "score": score,
+        "summary": {
+            "files": conflicts["fileCount"],
+            "scripts": len(definitions),
+            "unusedScripts": len(unused),
+            "errors": errors,
+            "warnings": warnings,
+            "backups": backup_count,
+        },
+        "findings": findings[:200],
+        "findingsTruncated": len(findings) > 200,
+        "git": {
+            "remote": remote,
+            "recentCommits": recent_git_commits(),
+        },
+    }
+
+
+def export_packages(scope: str, raw_path: str = "", category: str = "") -> tuple[str, bytes]:
+    metadata = load_metadata()
+    selected: list[tuple[str, Path]] = []
+    for item in list_files()["files"]:
+        include = scope == "all"
+        if scope == "file":
+            include = item["path"] == raw_path
+        elif scope == "category":
+            include = item["category"] == category
+        elif scope not in {"all", "file", "category"}:
+            raise ApiError(HTTPStatus.BAD_REQUEST, "Unbekannter Exportbereich.")
+        if include:
+            relative, absolute = normalize_relative_path(item["path"])
+            selected.append((relative, absolute))
+    if not selected:
+        raise ApiError(HTTPStatus.NOT_FOUND, "Für diesen Export wurden keine Package-Dateien gefunden.")
+    if len(selected) > MAX_IMPORT_FILES:
+        raise ApiError(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "Der Export enthält mehr als 500 Dateien.")
+    if sum(path.stat().st_size for _relative, path in selected) > MAX_IMPORT_EXPANDED_SIZE:
+        raise ApiError(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "Der Export ist größer als 50 MiB.")
+
+    manifest = {
+        "format": 1,
+        "exportedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "files": {
+            relative: file_metadata(metadata, relative)
+            for relative, _absolute in selected
+        },
+    }
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
+        archive.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
+        for relative, absolute in selected:
+            archive.writestr(f"packages/{relative}", absolute.read_bytes())
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    return f"yaml-packages-{stamp}.zip", output.getvalue()
+
+
+def decode_import_archive(encoded: Any) -> tuple[dict[str, str], dict[str, Any], list[str], str]:
+    if not isinstance(encoded, str):
+        raise ApiError(HTTPStatus.BAD_REQUEST, "Ein ZIP-Archiv ist erforderlich.")
+    try:
+        raw = base64.b64decode(encoded, validate=True)
+    except (ValueError, binascii.Error) as exc:
+        raise ApiError(HTTPStatus.BAD_REQUEST, "Das ZIP-Archiv ist nicht gültig kodiert.") from exc
+    if len(raw) > MAX_IMPORT_SIZE:
+        raise ApiError(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "Das ZIP-Archiv ist größer als 10 MiB.")
+    if not zipfile.is_zipfile(io.BytesIO(raw)):
+        raise ApiError(HTTPStatus.UNPROCESSABLE_ENTITY, "Die Datei ist kein gültiges ZIP-Archiv.")
+
+    files: dict[str, str] = {}
+    manifest: dict[str, Any] = {}
+    errors: list[str] = []
+    expanded_size = 0
+    with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+        members = [item for item in archive.infolist() if not item.is_dir()]
+        if len(members) > MAX_IMPORT_FILES + 1:
+            raise ApiError(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "Das ZIP-Archiv enthält zu viele Dateien.")
+        for member in members:
+            expanded_size += member.file_size
+            if expanded_size > MAX_IMPORT_EXPANDED_SIZE:
+                raise ApiError(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "Der entpackte ZIP-Inhalt ist größer als 50 MiB.")
+            if member.flag_bits & 0x1:
+                errors.append(f"{member.filename}: verschlüsselte ZIP-Einträge werden nicht unterstützt.")
+                continue
+            archive_path = member.filename.replace("\\", "/")
+            if archive_path == "manifest.json":
+                try:
+                    candidate = json.loads(archive.read(member).decode("utf-8"))
+                    manifest = candidate if isinstance(candidate, dict) else {}
+                except (UnicodeDecodeError, json.JSONDecodeError):
+                    errors.append("manifest.json ist ungültig.")
+                continue
+            relative_name = archive_path.removeprefix("packages/")
+            try:
+                relative, _absolute = normalize_relative_path(relative_name)
+            except ApiError as exc:
+                errors.append(f"{archive_path}: {exc.message}")
+                continue
+            if relative in files:
+                errors.append(f"{relative}: im Archiv mehrfach vorhanden.")
+                continue
+            try:
+                content = archive.read(member).decode("utf-8")
+            except UnicodeDecodeError:
+                errors.append(f"{relative}: Datei ist nicht UTF-8-kodiert.")
+                continue
+            validation = validate_yaml(content)
+            if not validation["valid"]:
+                errors.append(f"{relative}: {validation['message']}")
+                continue
+            files[relative] = content
+    if not files and not errors:
+        errors.append("Das Archiv enthält keine YAML-Package-Dateien.")
+    return files, manifest, errors, hashlib.sha256(raw).hexdigest()
+
+
+def import_destination_version(files: dict[str, str]) -> str:
+    versions: list[str] = []
+    package_paths = {item["path"] for item in list_files()["files"]}
+    for relative in sorted(package_paths | set(files)):
+        _normalized, absolute = normalize_relative_path(relative)
+        current = file_version(absolute.read_bytes()) if absolute.is_file() else "missing"
+        versions.append(f"{relative}\0{current}")
+    return hashlib.sha256("\n".join(versions).encode("utf-8")).hexdigest()
+
+
+def preview_package_import(encoded: Any) -> dict[str, Any]:
+    files, _manifest, errors, archive_version = decode_import_archive(encoded)
+    entries = []
+    for relative, content in sorted(files.items()):
+        _normalized, absolute = normalize_relative_path(relative)
+        entries.append(
+            {
+                "path": relative,
+                "size": len(content.encode("utf-8")),
+                "exists": absolute.exists(),
+                "action": "overwrite" if absolute.exists() else "create",
+            }
+        )
+    conflicts = package_conflict_analysis(files) if files else {
+        "mode": "unknown", "findings": [], "counts": {"error": 0, "warning": 0}, "fileCount": 0,
+    }
+    return {
+        "valid": not errors,
+        "archiveVersion": archive_version,
+        "destinationVersion": import_destination_version(files),
+        "files": entries,
+        "errors": errors,
+        "existingCount": sum(item["exists"] for item in entries),
+        "conflicts": conflicts,
+    }
+
+
+def apply_package_import(
+    encoded: Any,
+    strategy: str,
+    expected_archive_version: Any,
+    expected_destination_version: Any,
+) -> dict[str, Any]:
+    if strategy not in {"skip", "overwrite"}:
+        raise ApiError(HTTPStatus.BAD_REQUEST, "Unbekannte Importstrategie.")
+    files, manifest, errors, archive_version = decode_import_archive(encoded)
+    if errors:
+        raise ApiError(HTTPStatus.UNPROCESSABLE_ENTITY, "Das Archiv enthält ungültige Dateien.", {"details": errors})
+    if archive_version != expected_archive_version:
+        raise ApiError(HTTPStatus.CONFLICT, "Das ZIP-Archiv hat sich seit der Vorschau geändert.")
+    if import_destination_version(files) != expected_destination_version:
+        raise ApiError(HTTPStatus.CONFLICT, "Package-Dateien wurden seit der Importvorschau geändert.")
+
+    selected: dict[str, str] = {}
+    skipped: list[str] = []
+    for relative, content in files.items():
+        _normalized, absolute = normalize_relative_path(relative)
+        if absolute.exists() and strategy == "skip":
+            skipped.append(relative)
+        else:
+            selected[relative] = content
+    if not selected:
+        raise ApiError(HTTPStatus.CONFLICT, "Nach Anwendung der Importstrategie bleiben keine Dateien übrig.")
+
+    paths = [normalize_relative_path(relative)[1] for relative in selected]
+    originals: dict[Path, bytes | None] = {}
+    with file_lock:
+        git_checkpoint(paths)
+        try:
+            for relative, content in selected.items():
+                _normalized, absolute = normalize_relative_path(relative)
+                originals[absolute] = absolute.read_bytes() if absolute.exists() else None
+                if absolute.exists():
+                    create_backup(relative, absolute)
+                atomic_write_path(
+                    absolute,
+                    content.encode("utf-8"),
+                    absolute.stat().st_mode if absolute.exists() else 0o644,
+                )
+        except OSError as exc:
+            for path, original in originals.items():
+                if original is None:
+                    try:
+                        path.unlink()
+                    except FileNotFoundError:
+                        pass
+                else:
+                    atomic_write_path(path, original, path.stat().st_mode if path.exists() else 0o644)
+            raise ApiError(HTTPStatus.INTERNAL_SERVER_ERROR, "Der Package-Import wurde zurückgerollt.") from exc
+        git_result = git_commit_paths(paths, f"{len(selected)} Package-Dateien aus ZIP importiert")
+
+    manifest_files = manifest.get("files", {}) if isinstance(manifest.get("files"), dict) else {}
+    for relative in selected:
+        attributes = manifest_files.get(relative, {})
+        if isinstance(attributes, dict):
+            update_file_metadata(
+                relative,
+                attributes.get("category", DEFAULT_CATEGORY),
+                attributes.get("tags", []),
+            )
+    result = {
+        "message": f"{len(selected)} Package-Dateien wurden importiert.",
+        "imported": sorted(selected),
+        "skipped": sorted(skipped),
+        "git": git_result,
+        "configurationCheck": check_home_assistant_configuration(),
+        "conflicts": package_conflict_analysis(),
+    }
+    return result
 
 
 def home_assistant_request(path: str, method: str = "GET") -> Any:
@@ -1904,30 +2502,38 @@ def helper_data() -> dict[str, Any]:
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "YamlScriptManager/0.6"
+    server_version = "YamlScriptManager/0.7"
 
     def log_message(self, format_string: str, *args: Any) -> None:
         print(f"{self.address_string()} - {format_string % args}", flush=True)
 
-    def send_bytes(self, status: int, body: bytes, content_type: str) -> None:
+    def send_bytes(
+        self,
+        status: int,
+        body: bytes,
+        content_type: str,
+        extra_headers: dict[str, str] | None = None,
+    ) -> None:
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Content-Security-Policy", "default-src 'self'; style-src 'self'; script-src 'self'")
+        for name, value in (extra_headers or {}).items():
+            self.send_header(name, value)
         self.end_headers()
         self.wfile.write(body)
 
     def send_json(self, status: int, value: Any) -> None:
         self.send_bytes(status, json_bytes(value), "application/json; charset=utf-8")
 
-    def read_json(self) -> dict[str, Any]:
+    def read_json(self, max_size: int | None = None) -> dict[str, Any]:
         try:
             length = int(self.headers.get("Content-Length", "0"))
         except ValueError as exc:
             raise ApiError(HTTPStatus.BAD_REQUEST, "Ungueltige Anfragegroesse.") from exc
-        if length > MAX_FILE_SIZE + 16_384:
+        if length > (max_size or MAX_FILE_SIZE + 16_384):
             raise ApiError(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "Die Anfrage ist zu gross.")
         try:
             value = json.loads(self.rfile.read(length) or b"{}")
@@ -1988,6 +2594,22 @@ class Handler(BaseHTTPRequestHandler):
                 )
             elif path == "/api/package-conflicts":
                 self.send_json(HTTPStatus.OK, package_conflict_analysis())
+            elif path == "/api/dashboard":
+                self.send_json(HTTPStatus.OK, configuration_quality_dashboard())
+            elif path == "/api/git/remote":
+                self.send_json(HTTPStatus.OK, git_remote_status())
+            elif path == "/api/export":
+                filename, archive = export_packages(
+                    query.get("scope", ["all"])[0],
+                    query.get("path", [""])[0],
+                    query.get("category", [""])[0],
+                )
+                self.send_bytes(
+                    HTTPStatus.OK,
+                    archive,
+                    "application/zip",
+                    {"Content-Disposition": f'attachment; filename="{filename}"'},
+                )
             elif path == "/api/helpers":
                 self.send_json(HTTPStatus.OK, helper_data())
             elif path.startswith("/static/"):
@@ -2005,7 +2627,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         try:
             path, _ = self.route()
-            body = self.read_json()
+            body = self.read_json(MAX_IMPORT_SIZE * 2 if path.startswith("/api/import/") else None)
             if path == "/api/files":
                 result = write_file(
                     body.get("path", ""),
@@ -2074,6 +2696,23 @@ class Handler(BaseHTTPRequestHandler):
                         body.get("version"),
                     ),
                 )
+            elif path == "/api/git/remote/sync":
+                self.send_json(
+                    HTTPStatus.OK,
+                    synchronize_git_remote(body.get("action", "sync")),
+                )
+            elif path == "/api/import/preview":
+                self.send_json(HTTPStatus.OK, preview_package_import(body.get("archive")))
+            elif path == "/api/import/apply":
+                self.send_json(
+                    HTTPStatus.OK,
+                    apply_package_import(
+                        body.get("archive"),
+                        body.get("strategy", "skip"),
+                        body.get("archiveVersion"),
+                        body.get("destinationVersion"),
+                    ),
+                )
             elif path == "/api/reload":
                 home_assistant_request("services/script/reload", method="POST")
                 self.send_json(HTTPStatus.OK, {"message": "Skripte wurden neu geladen."})
@@ -2097,6 +2736,8 @@ class Handler(BaseHTTPRequestHandler):
                 )
             elif path == "/api/configuration":
                 result = write_configuration(body.get("content", ""), body.get("version"))
+            elif path == "/api/git/remote":
+                result = update_git_remote(body)
             else:
                 raise ApiError(HTTPStatus.NOT_FOUND, "Unbekannter Endpunkt.")
             self.send_json(HTTPStatus.OK, result)
@@ -2106,6 +2747,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_DELETE(self) -> None:  # noqa: N802
         try:
             path, _ = self.route()
+            if path == "/api/git/remote":
+                self.send_json(HTTPStatus.OK, remove_git_remote())
+                return
             if path != "/api/file":
                 raise ApiError(HTTPStatus.NOT_FOUND, "Unbekannter Endpunkt.")
             body = self.read_json()
@@ -2138,7 +2782,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
-    global DATA_ROOT, METADATA_FILE, PACKAGES_ROOT, PORT
+    global DATA_ROOT, GIT_REMOTE_FILE, METADATA_FILE, PACKAGES_ROOT, PORT
     parser = argparse.ArgumentParser(description="Home Assistant YAML Script Manager")
     parser.add_argument("--port", type=int)
     parser.add_argument("--packages-path", type=Path)
@@ -2151,6 +2795,7 @@ def main() -> None:
     if args.data_path is not None:
         DATA_ROOT = args.data_path.resolve()
         METADATA_FILE = DATA_ROOT / "metadata.json"
+        GIT_REMOTE_FILE = DATA_ROOT / "git_remote.json"
     ensure_directories()
     server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
     print(f"YAML Script Manager listening on port {PORT}; packages={PACKAGES_ROOT}", flush=True)
