@@ -31,6 +31,7 @@ const state = {
   history: { scope: "", path: "", currentVersion: "", selectedId: "" },
   gitHistory: { scope: "", path: "", currentVersion: "", selectedCommit: "" },
   dashboard: null,
+  dependencies: null,
   importArchive: "",
   importPreview: null,
 };
@@ -40,6 +41,7 @@ const elements = Object.fromEntries([
   "empty-state", "empty-new-button", "editor-content", "document-name", "document-path", "dirty-dot", "category-select", "tag-input",
   "rename-button", "duplicate-button", "delete-button", "editor", "highlighting", "line-numbers", "validation-status", "file-ha-check", "cursor-status",
   "save-button", "new-button", "reload-button", "helpers", "helpers-toggle", "helpers-close", "snippet-list", "analysis-summary", "analysis-list", "api-notice",
+  "dependency-summary", "dependency-list",
   "entity-search", "entity-list", "service-search", "service-list", "new-dialog", "new-form", "new-path", "new-script-id",
   "new-category", "new-tags", "category-options", "create-button", "toast-region",
   "configuration-button", "configuration-dialog", "configuration-close", "configuration-editor", "configuration-highlighting",
@@ -799,14 +801,14 @@ async function loadDashboard() {
 }
 
 async function openDashboard() {
-  elements["workspace"].classList.add("hidden");
   elements["dashboard-dialog"].classList.remove("hidden");
+  elements["dashboard-button"].classList.add("active");
   await loadDashboard();
 }
 
 function openScriptManager() {
   elements["dashboard-dialog"].classList.add("hidden");
-  elements["workspace"].classList.remove("hidden");
+  elements["dashboard-button"].classList.remove("active");
 }
 
 async function saveRemoteConfiguration() {
@@ -1016,6 +1018,7 @@ async function openFile(path, force = false) {
   if (!force && state.dirty && !confirm("Ungespeicherte Änderungen verwerfen?")) return;
   try {
     const file = await api(`api/file?path=${encodeURIComponent(path)}`);
+    openScriptManager();
     state.selected = file;
     state.originalContent = file.content;
     state.originalCategory = file.category;
@@ -1031,6 +1034,7 @@ async function openFile(path, force = false) {
     setDirty();
     updateEditorRendering();
     scheduleValidation();
+    loadDependencies().catch((error) => toast(error.message, "error"));
     renderFiles();
     elements.sidebar.classList.remove("open");
   } catch (error) { toast(error.message, "error"); }
@@ -1055,6 +1059,7 @@ async function saveCurrent() {
     setDirty();
     renderFileHomeAssistantCheck(file.configurationCheck);
     await refreshFiles();
+    await loadDependencies();
     toast("Datei gespeichert", "success");
   } catch (error) {
     elements["save-button"].disabled = false;
@@ -1092,6 +1097,154 @@ function renderAnalysis(result) {
     if (finding.line) item.addEventListener("click", () => jumpToLine(finding.line));
     return item;
   }));
+}
+
+function dependencyLocation(path, line) {
+  return `${path}${line ? ` · Zeile ${line}` : ""}`;
+}
+
+async function navigateDependency(path, line) {
+  if (state.selected?.path !== path) {
+    await openFile(path);
+    if (state.selected?.path !== path) return;
+  }
+  jumpToLine(line);
+}
+
+function dependencySection(title, children, emptyMessage) {
+  const section = document.createElement("section");
+  section.className = "dependency-section";
+  const heading = document.createElement("h3");
+  heading.textContent = title;
+  section.append(heading);
+  if (children.length) section.append(...children);
+  else {
+    const empty = document.createElement("div");
+    empty.className = "dependency-empty";
+    empty.textContent = emptyMessage;
+    section.append(empty);
+  }
+  return section;
+}
+
+function dependencyReferenceItem(reference, graph, incoming = false) {
+  const item = document.createElement("div");
+  item.className = "dependency-item";
+  item.tabIndex = 0;
+  item.setAttribute("role", "button");
+  const label = document.createElement("span");
+  const name = document.createElement("strong");
+  name.textContent = incoming ? reference.source : reference.target;
+  const location = document.createElement("small");
+  location.textContent = dependencyLocation(reference.path, reference.line);
+  label.append(name, location);
+  item.append(label);
+  item.addEventListener("click", () => navigateDependency(reference.path, reference.line));
+  item.addEventListener("keydown", (event) => {
+    if (event.target === item && (event.key === "Enter" || event.key === " ")) {
+      event.preventDefault();
+      navigateDependency(reference.path, reference.line);
+    }
+  });
+
+  if (!incoming && reference.type === "script" && reference.resolved) {
+    const definition = graph.scripts.find((script) => script.entityId === reference.target);
+    if (definition) {
+      const actions = document.createElement("span");
+      actions.className = "dependency-actions";
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "dependency-action";
+      button.textContent = "Definition";
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        navigateDependency(definition.path, definition.line);
+      });
+      actions.append(button);
+      item.append(actions);
+    }
+  }
+  return item;
+}
+
+async function renameScriptDefinition(script) {
+  if (state.dirty) {
+    toast("Speichere zuerst die aktuellen Änderungen.", "error");
+    return;
+  }
+  const newId = prompt(`Neue ID für ${script.entityId}`, script.id);
+  if (!newId || newId === script.id) return;
+  try {
+    const preview = await api("api/script/rename-preview", {
+      method: "POST",
+      body: JSON.stringify({ path: script.path, oldId: script.id, newId }),
+    });
+    const files = preview.files.map((file) => `${file.path} (${file.changes})`).join("\n");
+    if (!confirm(`${preview.changeCount} Änderungen in ${preview.files.length} Datei(en):\n\n${files}\n\nUmbenennung anwenden?`)) return;
+    const result = await api("api/script/rename", {
+      method: "POST",
+      body: JSON.stringify({
+        path: script.path,
+        oldId: script.id,
+        newId,
+        stateVersion: preview.stateVersion,
+      }),
+    });
+    state.dirty = false;
+    await refreshFiles();
+    await openFile(script.path, true);
+    renderFileHomeAssistantCheck(result.configurationCheck);
+    toast(result.message, "success");
+  } catch (error) { toast(error.message, "error"); }
+}
+
+function renderDependencies(result) {
+  state.dependencies = result;
+  const focus = result.focus || { scripts: [], outgoing: [], incoming: [] };
+  const summary = result.summary || { scripts: 0, references: 0, unresolvedScripts: 0 };
+  elements["dependency-summary"].className = `analysis-summary ${summary.unresolvedScripts ? "warning" : "clean"}`;
+  elements["dependency-summary"].innerHTML = `<strong>${focus.scripts.length} Scripts in dieser Datei</strong><span>${focus.outgoing.length} ausgehende · ${focus.incoming.length} eingehende Bezüge</span>`;
+
+  const definitions = focus.scripts.map((script) => {
+    const item = document.createElement("div");
+    item.className = "dependency-item";
+    const label = document.createElement("span");
+    const name = document.createElement("strong");
+    name.textContent = script.entityId;
+    const details = document.createElement("small");
+    details.textContent = `${script.alias} · Zeile ${script.line}`;
+    label.append(name, details);
+    const actions = document.createElement("span");
+    actions.className = "dependency-actions";
+    const goTo = document.createElement("button");
+    goTo.type = "button";
+    goTo.className = "dependency-action";
+    goTo.textContent = "Öffnen";
+    goTo.addEventListener("click", () => jumpToLine(script.line));
+    const rename = document.createElement("button");
+    rename.type = "button";
+    rename.className = "dependency-action";
+    rename.textContent = "Umbenennen";
+    rename.addEventListener("click", () => renameScriptDefinition(script));
+    actions.append(goTo, rename);
+    item.append(label, actions);
+    return item;
+  });
+  const outgoing = focus.outgoing.map((reference) => dependencyReferenceItem(reference, result));
+  const incoming = focus.incoming.map((reference) => dependencyReferenceItem(reference, result, true));
+  elements["dependency-list"].replaceChildren(
+    dependencySection("Definitionen", definitions, "Keine Script-Definition in dieser Datei."),
+    dependencySection("Verwendet", outgoing, "Diese Scripts verwenden keine erkannten Entitäten oder Scripts."),
+    dependencySection("Verwendet von", incoming, "Keine Package-Scripts verweisen auf diese Scripts."),
+  );
+}
+
+async function loadDependencies() {
+  if (!state.selected) return;
+  elements["dependency-summary"].className = "analysis-summary checking";
+  elements["dependency-summary"].innerHTML = "<strong>Script-Abhängigkeiten</strong><span>Analyse läuft …</span>";
+  const result = await api(`api/dependencies?path=${encodeURIComponent(state.selected.path)}`);
+  if (state.selected?.path === result.focus?.path) renderDependencies(result);
 }
 
 function scheduleValidation() {

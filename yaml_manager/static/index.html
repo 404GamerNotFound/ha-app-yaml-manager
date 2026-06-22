@@ -18,7 +18,6 @@
         </div>
       </div>
       <div class="topbar-actions">
-        <button class="button secondary" id="dashboard-button" aria-label="Qualitätsdashboard">Dashboard</button>
         <button class="button secondary" id="transfer-button" aria-label="Import und Export">Import/Export</button>
         <button class="button secondary" id="configuration-button"><span class="desktop-label">configuration.yaml</span><span class="mobile-label">Config</span></button>
         <button class="button secondary" id="reload-button" title="script.reload ausführen">Skripte neu laden</button>
@@ -27,7 +26,7 @@
       </div>
     </header>
 
-    <main class="workspace hidden" id="workspace">
+    <main class="workspace" id="workspace">
       <aside class="sidebar" id="sidebar">
         <div class="sidebar-header">
           <label class="search-field">
@@ -36,6 +35,10 @@
           </label>
           <button class="icon-button mobile-only" id="sidebar-close" aria-label="Dateiliste schließen">×</button>
         </div>
+        <button class="configuration-status dashboard-nav active" id="dashboard-button" type="button" aria-label="Qualitätsdashboard">
+          <span class="configuration-status-icon" aria-hidden="true">Q</span>
+          <span><strong>Dashboard</strong><small>Konfigurationsqualität und Git</small></span>
+        </button>
         <button class="configuration-status checking" id="configuration-status" type="button">
           <span class="configuration-status-icon" aria-hidden="true">…</span>
           <span>
@@ -128,6 +131,7 @@
 
         <div class="helper-tabs" role="tablist">
           <button class="helper-tab active" data-tab="analysis" role="tab" aria-selected="true">Prüfung</button>
+          <button class="helper-tab" data-tab="dependencies" role="tab" aria-selected="false">Bezüge</button>
           <button class="helper-tab" data-tab="blocks" role="tab" aria-selected="false">Bausteine</button>
           <button class="helper-tab" data-tab="entities" role="tab" aria-selected="false">Entitäten</button>
           <button class="helper-tab" data-tab="services" role="tab" aria-selected="false">Dienste</button>
@@ -139,6 +143,14 @@
             <span>Öffne eine Datei, um Hinweise zu sehen.</span>
           </div>
           <div class="analysis-list" id="analysis-list"></div>
+        </div>
+
+        <div class="helper-view hidden" id="tab-dependencies">
+          <div class="analysis-summary checking" id="dependency-summary">
+            <strong>Script-Abhängigkeiten</strong>
+            <span>Öffne eine Datei, um Bezüge zu analysieren.</span>
+          </div>
+          <div class="dependency-list" id="dependency-list"></div>
         </div>
 
         <div class="helper-view hidden" id="tab-blocks">

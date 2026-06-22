@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.10.0 - 2026-06-22
+
+- Script-Abhängigkeitsansicht mit Definitionen sowie ein- und ausgehenden Bezügen
+- Navigation zu Referenzzeilen und bekannten Script-Definitionen
+- Vorschau-basierte Script-ID-Umbenennung über mehrere Package-Dateien
+- Globaler Zustands-Hash, YAML-/Konfliktprüfung, Backups, Rollback und Git-Commit bei Umbenennungen
+- Backend in Module für HTTP, Konfiguration, Git, Backups, Validierung und Abhängigkeiten aufgeteilt
+- Docker-Build auf die zusätzlichen Python-Module erweitert
+- Drei neue Tests für Abhängigkeitsanalyse, Referenzänderungen und veraltete Vorschauen
+
+## 0.9.0 - 2026-06-22
+
+- Dashboard als erster Navigationseintrag oben in der linken Seitenleiste
+- Dauerhaft sichtbare Kategorien, Tags und Script-Direktauswahl während der Dashboard-Anzeige
+- Dashboard auf den Inhaltsbereich rechts neben der Sidebar begrenzt
+- Direkter Wechsel vom Dashboard in den Editor durch Anklicken einer Script-Datei
+- Responsive Darstellung mit weiterhin erreichbarer Scriptliste als mobile Seitenleiste
+
 ## 0.8.0 - 2026-06-22
 
 - Qualitätsdashboard als neue Startseite mit direktem Einstieg in den Script-Manager

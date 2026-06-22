@@ -14,8 +14,7 @@ COPY requirements.txt ./
 RUN apk add --no-cache git \
     && pip install --no-cache-dir -r requirements.txt
 
-COPY app.py ./
-COPY git_askpass.py ./
+COPY *.py ./
 COPY static ./static
 
 RUN chmod 0755 /app/git_askpass.py

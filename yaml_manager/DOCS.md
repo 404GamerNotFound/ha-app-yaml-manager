@@ -19,6 +19,47 @@ Die Prüfung unterstützt außerdem `!include_dir_merge_named` und eine über
 `homeassistant: !include ...` ausgelagerte Konfiguration. Sie ist rein lesend;
 Änderungen erfolgen ausschließlich über den separaten Konfigurationseditor.
 
+## Script-Abhängigkeiten und Umbenennung
+
+Der Tab **Bezüge** im rechten Hilfebereich zeigt für die geöffnete Datei:
+
+- alle darin definierten Scripts,
+- ausgehende Verweise auf Scripts, Szenen und Entitäten,
+- eingehende Verweise aus anderen Package-Scripts,
+- bekannte Script-Definitionen als direktes Navigationsziel.
+
+Erkannt werden `entity_id`-Werte, direkte Script- und Szenenaktionen sowie
+Entitäten in üblichen `states(...)`- und `is_state(...)`-Templates. Ein Klick
+auf einen Bezug öffnet die betreffende Datei und markiert die Fundstelle.
+
+**Umbenennen** an einer Script-Definition arbeitet ausschließlich auf dem
+gespeicherten Package-Stand. Zuerst wird eine Vorschau mit allen betroffenen
+Dateien erzeugt. Vor der Anwendung prüft das Backend einen SHA-256-Zustandshash
+über sämtliche Packages. Zwischenzeitliche Änderungen führen zu HTTP `409`.
+Die neuen Inhalte werden als YAML validiert und dürfen keine zusätzlichen
+Package-Konflikte erzeugen. Anschließend werden Backups angelegt, alle Dateien
+atomar geschrieben, gemeinsam in Git versioniert und durch Home Assistant
+geprüft. Freitext in Alias oder Beschreibung wird nicht als Referenz geändert.
+
+Die zugehörigen HTTP-Endpunkte sind:
+
+- `GET /api/dependencies?path=<package>`
+- `POST /api/script/rename-preview`
+- `POST /api/script/rename`
+
+## Backend-Module
+
+Die Backend-Verantwortlichkeiten sind getrennt aufgebaut:
+
+- `app.py`: Service-Fassade, Package-Dateien, Analyse und Orchestrierung
+- `api.py`: HTTP-Routing, JSON und statische Dateien
+- `configuration.py`: `configuration.yaml`, Package-Einbindung und Migration
+- `git.py`: lokale Historie, Restore und geschützter Remote-Sync
+- `backup.py`: Backup-Historie, Diff und Wiederherstellung
+- `validation.py`: Home-Assistant-kompatibler YAML-Loader und Syntaxprüfung
+- `dependencies.py`: Script-Graph und quellpositionsbasierte Umbenennung
+- `errors.py`: gemeinsamer erwarteter API-Fehlertyp
+
 ## configuration.yaml-Editor
 
 Die Schaltfläche **configuration.yaml** öffnet einen eigenen Editor mit
@@ -177,9 +218,11 @@ Force-Pushes werden nicht ausgeführt.
 
 ## Qualitätsdashboard
 
-Das Dashboard ist die Startseite der App. Über **Scripts öffnen** gelangt man in
-den bisherigen Script-Arbeitsbereich; die Schaltfläche **Dashboard** führt zurück,
-ohne den geöffneten Editorstand zu verwerfen. Das Dashboard kombiniert die
+Das Dashboard ist der erste Eintrag oben in der linken Seitenleiste. Kategorien,
+Tags und die Script-Direktauswahl bleiben während der Dashboard-Anzeige sichtbar.
+Ein Klick auf eine Datei öffnet sie unmittelbar im Script-Editor; der Eintrag
+**Dashboard** führt zurück, ohne den geöffneten Editorstand zu verwerfen. Das
+Dashboard kombiniert die
 globale Package-Konfliktprüfung mit Betriebs- und
 Git-Daten. Angezeigt werden Package-Dateien, Script-Anzahl, Fehler, Warnungen,
 Backups, Git-Ahead/Behind und ein daraus berechneter Qualitätswert.

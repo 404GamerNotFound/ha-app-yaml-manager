@@ -1,39 +1,52 @@
-# Release Notes 0.8.0
+# Release Notes 0.10.0
 
 Veröffentlicht am 22. Juni 2026.
 
-## Dashboard als Startseite
+## Script-Abhängigkeiten
 
-Die App startet nun im Qualitätsdashboard. Von dort führt **Scripts öffnen** in
-den vollständigen Script-Manager. Über **Dashboard** kann jederzeit zur Übersicht
-zurückgekehrt werden, ohne den aktuellen Editorstand zu verlieren.
+Der neue Tab **Bezüge** zeigt Definitionen, verwendete Scripts, Szenen und
+Entitäten sowie eingehende Verweise aus anderen Package-Dateien. Fundstellen und
+bekannte Definitionen lassen sich direkt im Editor öffnen.
 
-## Divergierte Git-Historien auflösen
+## Referenzsichere Script-ID-Umbenennung
 
-Der häufige Fall eines neuen GitHub-/GitLab-Repositories mit eigenem README-
-Commit führt nicht mehr in eine Sackgasse. Das Dashboard bietet zwei Optionen:
+Script-IDs können nach einer Vorschau zusammen mit allen erkannten Referenzen
+umbenannt werden. Die Anwendung ist durch einen globalen Package-Zustandshash,
+YAML- und Konfliktprüfung, Backups, Rollback und einen gemeinsamen Git-Commit
+geschützt.
 
-- **Historien verbinden** übernimmt README-/Lizenzdateien, erzeugt einen sicheren
-  Merge und pusht den gemeinsamen Stand. Dies ist die empfohlene Lösung.
-- **Remote durch lokalen Stand ersetzen** verwirft die bisherige Remote-Historie
-  mit einem gegen parallele Änderungen geschützten `force-with-lease`.
+## Modularisiertes Backend
 
-Vor einem Merge werden Remote-Pfade, Dateitypen, Größen und YAML geprüft sowie
-lokale Dateien gesichert. Bei einem Merge-Konflikt wird der Vorgang automatisch
-abgebrochen und der Ausgangsstand wiederhergestellt.
+HTTP, `configuration.yaml`, Git, Backups, YAML-Validierung und
+Abhängigkeitsanalyse liegen jetzt in eigenen Python-Modulen. `app.py` bleibt als
+kompatible Service-Fassade bestehen; bestehende API-Verträge bleiben erhalten.
+
+## Dashboard in der linken Navigation
+
+Das Dashboard ist jetzt der erste Eintrag links oben. Es belegt ausschließlich
+den Inhaltsbereich rechts neben der Sidebar. Kategorien, Tags und sämtliche
+Script-Dateien bleiben dadurch auch auf der Qualitätsübersicht sichtbar.
+
+## Direkter Zugriff auf Scripts
+
+Ein Klick auf eine Datei in der linken Spalte öffnet unmittelbar den YAML-Editor.
+Der Dashboard-Eintrag führt zurück zur Übersicht, ohne einen geöffneten
+Editorstand zu verwerfen. Auf mobilen Geräten bleibt die Scriptliste über die
+vorhandene Seitenleisten-Schaltfläche erreichbar.
 
 ## Bestehende Funktionen
 
-Qualitätsprüfung, Git-Remote-Verwaltung, Git-Historie sowie ZIP-Import und -Export
-bleiben vollständig im Dashboard beziehungsweise in den Editoren verfügbar.
+Qualitätsprüfung, Git-Divergenzauflösung, Git-Historie sowie ZIP-Import und
+-Export bleiben vollständig verfügbar.
 
 ## Technische API-Erweiterungen
 
-- `POST /api/git/remote/sync` akzeptiert zusätzlich `merge` und `force-push`.
-- Konfliktantworten enthalten `ahead`, `behind` und verfügbare Auflösungsoptionen.
+- `GET /api/dependencies`
+- `POST /api/script/rename-preview`
+- `POST /api/script/rename`
 
 ## Nach dem Update
 
-1. Die App öffnet automatisch das Dashboard.
-2. Wähle bei einem neuen Remote mit README **Historien verbinden**.
-3. Verwende **Remote durch lokalen Stand ersetzen** nur, wenn die Remote-Historie sicher verworfen werden darf.
+1. Öffne eine Package-Datei und wähle rechts **Bezüge**.
+2. Nutze **Öffnen** oder **Definition**, um zwischen Fundstellen zu wechseln.
+3. Nutze **Umbenennen**, prüfe die Vorschau und bestätige die Änderungen.

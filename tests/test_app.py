@@ -210,6 +210,107 @@ class FileApiTests(unittest.TestCase):
 
         self.assertIn("duplicate-script-id", {item["code"] for item in result["findings"]})
 
+    def test_script_dependencies_include_incoming_outgoing_and_definitions(self):
+        app.write_file(
+            "ziel.yaml",
+            "script:\n  ziel:\n    alias: Ziel\n    sequence: []\n",
+            None,
+            "Tests",
+            create=True,
+        )
+        app.write_file(
+            "aufrufer.yaml",
+            "script:\n"
+            "  aufrufer:\n"
+            "    alias: Aufrufer\n"
+            "    sequence:\n"
+            "      - action: script.ziel\n"
+            "      - action: scene.turn_on\n"
+            "        target:\n"
+            "          entity_id: scene.abend\n"
+            "      - condition: template\n"
+            "        value_template: \"{{ is_state('light.flur', 'on') }}\"\n",
+            None,
+            "Tests",
+            create=True,
+        )
+
+        result = app.script_dependency_analysis("ziel.yaml")
+
+        self.assertEqual(result["summary"]["scripts"], 2)
+        self.assertEqual(result["focus"]["scripts"][0]["entityId"], "script.ziel")
+        self.assertEqual(result["focus"]["incoming"][0]["source"], "script.aufrufer")
+        targets = {item["target"] for item in result["references"]}
+        self.assertEqual(targets, {"script.ziel", "scene.abend", "light.flur"})
+
+    def test_script_rename_updates_definition_and_recognized_references(self):
+        app.write_file(
+            "ziel.yaml",
+            "script:\n  'alt':\n    alias: Alt\n    sequence: []\n",
+            None,
+            "Tests",
+            create=True,
+        )
+        app.write_file(
+            "aufrufer.yaml",
+            "script:\n"
+            "  aufrufer:\n"
+            "    description: script.alt bleibt als Beschreibung erhalten\n"
+            "    sequence:\n"
+            "      - action: script.alt\n"
+            "      - action: script.turn_on\n"
+            "        target:\n"
+            "          entity_id: script.alt\n"
+            "      - condition: template\n"
+            "        value_template: \"{{ is_state('script.alt', 'on') }}\"\n",
+            None,
+            "Tests",
+            create=True,
+        )
+        preview = app.preview_script_rename("ziel.yaml", "alt", "neu")
+
+        result = app.rename_script_with_references(
+            "ziel.yaml",
+            "alt",
+            "neu",
+            preview["stateVersion"],
+        )
+
+        self.assertEqual(result["newEntityId"], "script.neu")
+        self.assertIn("'neu':", app.read_file("ziel.yaml")["content"])
+        caller = app.read_file("aufrufer.yaml")["content"]
+        self.assertEqual(caller.count("script.neu"), 3)
+        self.assertIn("description: script.alt bleibt", caller)
+        self.assertNotIn("script.alt", {item["target"] for item in result["dependencies"]["references"]})
+
+    def test_script_rename_rejects_changed_package_state(self):
+        created = app.write_file(
+            "ziel.yaml",
+            "script:\n  alt:\n    sequence: []\n",
+            None,
+            "Tests",
+            create=True,
+        )
+        preview = app.preview_script_rename("ziel.yaml", "alt", "neu")
+        app.write_file(
+            "ziel.yaml",
+            created["content"].replace("sequence: []", "alias: Extern\n    sequence: []"),
+            created["version"],
+            "Tests",
+            create=False,
+        )
+
+        with self.assertRaises(app.ApiError) as raised:
+            app.rename_script_with_references(
+                "ziel.yaml",
+                "alt",
+                "neu",
+                preview["stateVersion"],
+            )
+
+        self.assertEqual(raised.exception.status, 409)
+        self.assertIn("alt:", app.read_file("ziel.yaml")["content"])
+
     def test_configuration_editor_reads_writes_and_backs_up(self):
         configuration = app.PACKAGES_ROOT.parent / "configuration.yaml"
         configuration.write_text("default_config:\n", encoding="utf-8")

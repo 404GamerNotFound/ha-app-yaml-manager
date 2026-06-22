@@ -1,0 +1,341 @@
+"""HTTP transport for the YAML Script Manager backend services."""
+
+from __future__ import annotations
+
+import json
+import mimetypes
+import re
+import urllib.parse
+from http import HTTPStatus
+from http.server import BaseHTTPRequestHandler
+from typing import Any
+
+try:
+    from .errors import ApiError
+except ImportError:  # pragma: no cover - direct execution in the app container
+    from errors import ApiError
+
+
+def create_handler(backend: Any) -> type[BaseHTTPRequestHandler]:
+    """Bind the transport layer to a backend module with the service functions."""
+
+    class Handler(BaseHTTPRequestHandler):
+        server_version = "YamlScriptManager/0.10"
+
+        def log_message(self, format_string: str, *args: Any) -> None:
+            print(f"{self.address_string()} - {format_string % args}", flush=True)
+
+        def send_bytes(
+            self,
+            status: int,
+            body: bytes,
+            content_type: str,
+            extra_headers: dict[str, str] | None = None,
+        ) -> None:
+            self.send_response(status)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header(
+                "Content-Security-Policy",
+                "default-src 'self'; style-src 'self'; script-src 'self'",
+            )
+            for name, value in (extra_headers or {}).items():
+                self.send_header(name, value)
+            self.end_headers()
+            self.wfile.write(body)
+
+        def send_json(self, status: int, value: Any) -> None:
+            self.send_bytes(
+                status,
+                backend.json_bytes(value),
+                "application/json; charset=utf-8",
+            )
+
+        def read_json(self, max_size: int | None = None) -> dict[str, Any]:
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+            except ValueError as exc:
+                raise ApiError(HTTPStatus.BAD_REQUEST, "Ungueltige Anfragegroesse.") from exc
+            if length > (max_size or backend.MAX_FILE_SIZE + 16_384):
+                raise ApiError(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "Die Anfrage ist zu gross.")
+            try:
+                value = json.loads(self.rfile.read(length) or b"{}")
+            except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+                raise ApiError(HTTPStatus.BAD_REQUEST, "Ungueltiges JSON.") from exc
+            if not isinstance(value, dict):
+                raise ApiError(HTTPStatus.BAD_REQUEST, "Ein JSON-Objekt wird erwartet.")
+            return value
+
+        def route(self) -> tuple[str, dict[str, list[str]]]:
+            parsed = urllib.parse.urlsplit(self.path)
+            return parsed.path.rstrip("/") or "/", urllib.parse.parse_qs(parsed.query)
+
+        def do_GET(self) -> None:  # noqa: N802
+            try:
+                path, query = self.route()
+                if path == "/health":
+                    self.send_json(HTTPStatus.OK, {"status": "ok"})
+                elif path == "/api/files":
+                    self.send_json(HTTPStatus.OK, backend.list_files())
+                elif path == "/api/file":
+                    self.send_json(HTTPStatus.OK, backend.read_file(query.get("path", [""])[0]))
+                elif path == "/api/configuration":
+                    self.send_json(HTTPStatus.OK, backend.read_configuration())
+                elif path == "/api/backups":
+                    self.send_json(
+                        HTTPStatus.OK,
+                        backend.backup_history(
+                            query.get("scope", [""])[0],
+                            query.get("path", [""])[0],
+                        ),
+                    )
+                elif path == "/api/backup/diff":
+                    self.send_json(
+                        HTTPStatus.OK,
+                        backend.backup_diff(
+                            query.get("scope", [""])[0],
+                            query.get("path", [""])[0],
+                            query.get("id", [""])[0],
+                        ),
+                    )
+                elif path == "/api/git/history":
+                    self.send_json(
+                        HTTPStatus.OK,
+                        backend.git_history(
+                            query.get("scope", [""])[0],
+                            query.get("path", [""])[0],
+                        ),
+                    )
+                elif path == "/api/git/diff":
+                    self.send_json(
+                        HTTPStatus.OK,
+                        backend.git_diff(
+                            query.get("scope", [""])[0],
+                            query.get("path", [""])[0],
+                            query.get("commit", [""])[0],
+                        ),
+                    )
+                elif path == "/api/package-conflicts":
+                    self.send_json(HTTPStatus.OK, backend.package_conflict_analysis())
+                elif path == "/api/dependencies":
+                    self.send_json(
+                        HTTPStatus.OK,
+                        backend.script_dependency_analysis(query.get("path", [""])[0]),
+                    )
+                elif path == "/api/dashboard":
+                    self.send_json(HTTPStatus.OK, backend.configuration_quality_dashboard())
+                elif path == "/api/git/remote":
+                    self.send_json(HTTPStatus.OK, backend.git_remote_status())
+                elif path == "/api/export":
+                    filename, archive = backend.export_packages(
+                        query.get("scope", ["all"])[0],
+                        query.get("path", [""])[0],
+                        query.get("category", [""])[0],
+                    )
+                    self.send_bytes(
+                        HTTPStatus.OK,
+                        archive,
+                        "application/zip",
+                        {"Content-Disposition": f'attachment; filename="{filename}"'},
+                    )
+                elif path == "/api/helpers":
+                    self.send_json(HTTPStatus.OK, backend.helper_data())
+                elif path.startswith("/static/"):
+                    self.serve_static(path.removeprefix("/static/"))
+                elif path == "/":
+                    self.serve_index()
+                else:
+                    raise ApiError(HTTPStatus.NOT_FOUND, "Unbekannter Endpunkt.")
+            except ApiError as exc:
+                self.send_json(exc.status, {"error": exc.message, **exc.details})
+            except Exception as exc:  # pragma: no cover - final request boundary
+                print(f"Unhandled error: {exc!r}", flush=True)
+                self.send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "Interner Serverfehler."})
+
+        def do_POST(self) -> None:  # noqa: N802
+            try:
+                path, _ = self.route()
+                body = self.read_json(
+                    backend.MAX_IMPORT_SIZE * 2 if path.startswith("/api/import/") else None
+                )
+                if path == "/api/files":
+                    result = backend.write_file(
+                        body.get("path", ""),
+                        body.get("content", ""),
+                        None,
+                        body.get("category", backend.DEFAULT_CATEGORY),
+                        create=True,
+                        tags=body.get("tags"),
+                    )
+                    self.send_json(HTTPStatus.CREATED, result)
+                elif path == "/api/rename":
+                    self.send_json(
+                        HTTPStatus.OK,
+                        backend.rename_file(
+                            body.get("path", ""),
+                            body.get("newPath", ""),
+                            body.get("version"),
+                        ),
+                    )
+                elif path == "/api/validate":
+                    self.send_json(HTTPStatus.OK, backend.validate_yaml(body.get("content", "")))
+                elif path == "/api/analyze":
+                    self.send_json(
+                        HTTPStatus.OK,
+                        backend.analyze_yaml(body.get("content", ""), body.get("path", "")),
+                    )
+                elif path == "/api/script/rename-preview":
+                    self.send_json(
+                        HTTPStatus.OK,
+                        backend.preview_script_rename(
+                            body.get("path", ""),
+                            body.get("oldId", ""),
+                            body.get("newId", ""),
+                        ),
+                    )
+                elif path == "/api/script/rename":
+                    self.send_json(
+                        HTTPStatus.OK,
+                        backend.rename_script_with_references(
+                            body.get("path", ""),
+                            body.get("oldId", ""),
+                            body.get("newId", ""),
+                            body.get("stateVersion", ""),
+                        ),
+                    )
+                elif path == "/api/configuration/enable-packages":
+                    self.send_json(
+                        HTTPStatus.OK,
+                        backend.enable_packages(body.get("content", ""), body.get("version")),
+                    )
+                elif path == "/api/configuration/migration-preview":
+                    self.send_json(
+                        HTTPStatus.OK,
+                        backend.configuration_migration_preview(
+                            body.get("content", ""),
+                            body.get("packageName", "configuration_import"),
+                        ),
+                    )
+                elif path == "/api/configuration/migrate":
+                    self.send_json(
+                        HTTPStatus.OK,
+                        backend.migrate_configuration(
+                            body.get("content", ""),
+                            body.get("version"),
+                            body.get("packageName", "configuration_import"),
+                        ),
+                    )
+                elif path == "/api/configuration/check":
+                    self.send_json(HTTPStatus.OK, backend.check_home_assistant_configuration())
+                elif path == "/api/backup/restore":
+                    self.send_json(
+                        HTTPStatus.OK,
+                        backend.restore_backup(
+                            body.get("scope", ""),
+                            body.get("path", ""),
+                            body.get("id", ""),
+                            body.get("version"),
+                        ),
+                    )
+                elif path == "/api/git/restore":
+                    self.send_json(
+                        HTTPStatus.OK,
+                        backend.restore_git_version(
+                            body.get("scope", ""),
+                            body.get("path", ""),
+                            body.get("commit", ""),
+                            body.get("version"),
+                        ),
+                    )
+                elif path == "/api/git/remote/sync":
+                    self.send_json(
+                        HTTPStatus.OK,
+                        backend.synchronize_git_remote(body.get("action", "sync")),
+                    )
+                elif path == "/api/import/preview":
+                    self.send_json(
+                        HTTPStatus.OK,
+                        backend.preview_package_import(body.get("archive")),
+                    )
+                elif path == "/api/import/apply":
+                    self.send_json(
+                        HTTPStatus.OK,
+                        backend.apply_package_import(
+                            body.get("archive"),
+                            body.get("strategy", "skip"),
+                            body.get("archiveVersion"),
+                            body.get("destinationVersion"),
+                        ),
+                    )
+                elif path == "/api/reload":
+                    backend.home_assistant_request("services/script/reload", method="POST")
+                    self.send_json(HTTPStatus.OK, {"message": "Skripte wurden neu geladen."})
+                else:
+                    raise ApiError(HTTPStatus.NOT_FOUND, "Unbekannter Endpunkt.")
+            except ApiError as exc:
+                self.send_json(exc.status, {"error": exc.message, **exc.details})
+
+        def do_PUT(self) -> None:  # noqa: N802
+            try:
+                path, _ = self.route()
+                body = self.read_json()
+                if path == "/api/file":
+                    result = backend.write_file(
+                        body.get("path", ""),
+                        body.get("content", ""),
+                        body.get("version"),
+                        body.get("category", backend.DEFAULT_CATEGORY),
+                        create=False,
+                        tags=body.get("tags"),
+                    )
+                elif path == "/api/configuration":
+                    result = backend.write_configuration(
+                        body.get("content", ""), body.get("version")
+                    )
+                elif path == "/api/git/remote":
+                    result = backend.update_git_remote(body)
+                else:
+                    raise ApiError(HTTPStatus.NOT_FOUND, "Unbekannter Endpunkt.")
+                self.send_json(HTTPStatus.OK, result)
+            except ApiError as exc:
+                self.send_json(exc.status, {"error": exc.message, **exc.details})
+
+        def do_DELETE(self) -> None:  # noqa: N802
+            try:
+                path, _ = self.route()
+                if path == "/api/git/remote":
+                    self.send_json(HTTPStatus.OK, backend.remove_git_remote())
+                    return
+                if path != "/api/file":
+                    raise ApiError(HTTPStatus.NOT_FOUND, "Unbekannter Endpunkt.")
+                body = self.read_json()
+                git_result = backend.delete_file(body.get("path", ""), body.get("version"))
+                self.send_json(
+                    HTTPStatus.OK,
+                    {"message": "Datei wurde in den Papierkorb verschoben.", "git": git_result},
+                )
+            except ApiError as exc:
+                self.send_json(exc.status, {"error": exc.message, **exc.details})
+
+        def serve_index(self) -> None:
+            template = (backend.STATIC_ROOT / "index.html").read_text(encoding="utf-8")
+            ingress = self.headers.get("X-Ingress-Path", "").rstrip("/")
+            if not ingress.startswith("/") or not re.fullmatch(r"/[A-Za-z0-9_./-]*", ingress):
+                ingress = ""
+            html = template.replace("__BASE_PATH__", f"{ingress}/")
+            self.send_bytes(HTTPStatus.OK, html.encode("utf-8"), "text/html; charset=utf-8")
+
+        def serve_static(self, raw_name: str) -> None:
+            if not re.fullmatch(r"[A-Za-z0-9_.-]+", raw_name):
+                raise ApiError(HTTPStatus.NOT_FOUND, "Datei nicht gefunden.")
+            path = backend.STATIC_ROOT / raw_name
+            try:
+                body = path.read_bytes()
+            except FileNotFoundError as exc:
+                raise ApiError(HTTPStatus.NOT_FOUND, "Datei nicht gefunden.") from exc
+            content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+            self.send_bytes(HTTPStatus.OK, body, f"{content_type}; charset=utf-8")
+
+    return Handler
