@@ -57,7 +57,7 @@ const elements = Object.fromEntries([
   "git-dialog", "git-history-close", "git-history-path", "git-history-list", "git-diff-placeholder", "git-diff-view", "git-history-summary", "git-history-restore",
   "package-conflicts-button", "conflict-dialog", "conflict-close", "conflict-summary", "conflict-list",
   "dashboard-button", "dashboard-dialog", "dashboard-close", "dashboard-refresh", "quality-score", "quality-stats", "dashboard-findings",
-  "remote-status", "remote-badge", "remote-url", "remote-branch", "remote-username", "remote-token", "remote-clear-token", "remote-save", "remote-fetch", "remote-pull", "remote-push", "remote-sync", "remote-remove", "remote-resolution", "remote-merge", "remote-force-push",
+  "remote-status", "remote-badge", "remote-url", "remote-branch", "remote-username", "remote-token", "remote-auto-push", "remote-clear-token", "remote-save", "remote-fetch", "remote-pull", "remote-push", "remote-sync", "remote-remove", "remote-resolution", "remote-merge", "remote-force-push",
   "transfer-button", "transfer-dialog", "transfer-close", "export-scope", "export-category", "export-start", "import-file", "import-strategy", "import-preview", "import-apply", "import-summary", "import-preview-list",
   "objects-button", "objects-dialog", "objects-close", "objects-refresh", "object-search", "object-domain", "objects-summary", "object-list",
   "resource-dialog", "resource-close", "resource-title", "resource-path", "resource-save", "resource-editor", "resource-highlighting", "resource-line-numbers", "resource-validation", "resource-cursor",
@@ -161,6 +161,16 @@ function toast(message, type = "") {
   item.textContent = message;
   elements["toast-region"].append(item);
   setTimeout(() => item.remove(), 3600);
+}
+
+function toastSaveResult(result, successMessage) {
+  if (result.gitSync?.enabled && result.gitSync.success === false) {
+    toast(result.gitSync.message, "error");
+  } else if (result.gitSync?.enabled && !result.gitSync.skipped) {
+    toast(`${successMessage} Git-Remote wurde aktualisiert.`, "success");
+  } else {
+    toast(successMessage, "success");
+  }
 }
 
 function fileMatches(file) {
@@ -417,7 +427,7 @@ async function saveConfiguration() {
     applyConfigurationResult(result);
     await refreshFiles();
     showConfigurationActionResult(result, "configuration.yaml wurde gespeichert und gesichert.");
-    toast("configuration.yaml gespeichert", "success");
+    toastSaveResult(result, "configuration.yaml gespeichert.");
   } catch (error) {
     elements["configuration-save"].disabled = false;
     if (error.details?.line) showConfigurationValidation(error.details);
@@ -755,6 +765,7 @@ function renderRemoteStatus(remote) {
   elements["remote-token"].value = "";
   elements["remote-token"].placeholder = remote.tokenConfigured ? "Token ist gespeichert" : "Personal Access Token";
   elements["remote-clear-token"].checked = false;
+  elements["remote-auto-push"].checked = remote.autoPush !== false;
   const syncDetails = configured
     ? `${remote.ahead || 0} voraus · ${remote.behind || 0} zurück${remote.dirty ? " · lokale Änderungen" : ""}`
     : "Noch nicht konfiguriert";
@@ -811,14 +822,18 @@ async function loadDashboard() {
 }
 
 async function openDashboard() {
+  elements["objects-dialog"].classList.add("hidden");
   elements["dashboard-dialog"].classList.remove("hidden");
   elements["dashboard-button"].classList.add("active");
+  elements["objects-button"].classList.remove("active");
   await Promise.all([loadDashboard(), loadBranches()]);
 }
 
 function openScriptManager() {
   elements["dashboard-dialog"].classList.add("hidden");
+  elements["objects-dialog"].classList.add("hidden");
   elements["dashboard-button"].classList.remove("active");
+  elements["objects-button"].classList.remove("active");
 }
 
 function renderBranches(result) {
@@ -941,6 +956,7 @@ async function saveRemoteConfiguration() {
         username: elements["remote-username"].value,
         token: elements["remote-token"].value,
         clearToken: elements["remote-clear-token"].checked,
+        autoPush: elements["remote-auto-push"].checked,
       }),
     });
     renderRemoteStatus(remote);
@@ -1137,7 +1153,7 @@ function renderHaObjects() {
     button.className = "object-item";
     const outgoing = result.references.filter((reference) => reference.sourceObject === item.key);
     const targets = outgoing.slice(0, 4).map((reference) => reference.target).join(" · ");
-    button.innerHTML = `<span class="object-item-header"><strong>${escapeHtml(item.alias)}</strong><span class="object-kind">${labels[item.domain]}</span></span><small>${escapeHtml(item.entityId)} · ${escapeHtml(item.path)}:${item.line}</small><span class="object-references">${targets ? escapeHtml(targets) : "Keine erkannten Bezüge"}</span><small>${item.incoming} eingehend · ${item.outgoing} ausgehend</small>`;
+    button.innerHTML = `<span class="object-primary"><span class="object-item-header"><strong>${escapeHtml(item.alias)}</strong><span class="object-kind">${labels[item.domain]}</span></span><small>${escapeHtml(item.entityId)}</small></span><span class="object-location"><strong>${escapeHtml(item.path)}</strong><small>Zeile ${item.line}</small></span><span class="object-references">${targets ? escapeHtml(targets) : "Keine erkannten Bezüge"}</span><span class="object-counts">${item.incoming} eingehend · ${item.outgoing} ausgehend</span>`;
     button.addEventListener("click", () => openHaObject(item));
     return button;
   }));
@@ -1151,12 +1167,15 @@ async function loadHaObjects() {
 }
 
 async function openObjectsDialog() {
-  elements["objects-dialog"].showModal();
+  elements["dashboard-dialog"].classList.add("hidden");
+  elements["objects-dialog"].classList.remove("hidden");
+  elements["dashboard-button"].classList.remove("active");
+  elements["objects-button"].classList.add("active");
   try { await loadHaObjects(); } catch (error) { toast(error.message, "error"); }
 }
 
 async function openHaObject(item) {
-  elements["objects-dialog"].close();
+  openScriptManager();
   if (item.editor === "package") {
     const path = item.path.replace(/^packages\//, "");
     await openFile(path);
@@ -1250,7 +1269,7 @@ async function saveResource() {
     state.resource = { ...result, dirty: false };
     elements["resource-save"].disabled = true;
     await loadHaObjects();
-    toast("HA-Ressource gespeichert", "success");
+    toastSaveResult(result, "HA-Ressource gespeichert.");
   } catch (error) {
     elements["resource-save"].disabled = false;
     toast(error.message, "error");
@@ -1383,7 +1402,7 @@ async function saveCurrent() {
     renderFileHomeAssistantCheck(file.configurationCheck);
     await refreshFiles();
     await loadDependencies();
-    toast("Datei gespeichert", "success");
+    toastSaveResult(file, "Datei gespeichert.");
   } catch (error) {
     elements["save-button"].disabled = false;
     if (error.details?.line) showValidation(error.details);
@@ -1809,11 +1828,10 @@ elements["transfer-button"].addEventListener("click", openTransferDialog);
 elements["transfer-close"].addEventListener("click", () => elements["transfer-dialog"].close());
 elements["transfer-dialog"].addEventListener("cancel", () => elements["transfer-dialog"].close());
 elements["objects-button"].addEventListener("click", openObjectsDialog);
-elements["objects-close"].addEventListener("click", () => elements["objects-dialog"].close());
+elements["objects-close"].addEventListener("click", openScriptManager);
 elements["objects-refresh"].addEventListener("click", loadHaObjects);
 elements["object-search"].addEventListener("input", renderHaObjects);
 elements["object-domain"].addEventListener("change", renderHaObjects);
-elements["objects-dialog"].addEventListener("cancel", () => elements["objects-dialog"].close());
 elements["resource-close"].addEventListener("click", closeResourceEditor);
 elements["resource-save"].addEventListener("click", saveResource);
 elements["resource-dialog"].addEventListener("cancel", (event) => {

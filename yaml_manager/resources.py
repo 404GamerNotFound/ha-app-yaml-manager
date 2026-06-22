@@ -362,6 +362,7 @@ def write_resource(
         git_result = backend.git_commit_paths([absolute], f"HA-Ressource gespeichert: {relative}")
     result = read_resource(backend, relative)
     result["git"] = git_result
+    result["gitSync"] = backend.auto_push_after_change(git_result)
     result["configurationCheck"] = backend.check_home_assistant_configuration()
     return result
 
@@ -498,6 +499,7 @@ def apply_search_replace(
         {
             "message": f"{plan['matches']} Treffer in {len(plan['files'])} Dateien wurden ersetzt.",
             "git": git_result,
+            "gitSync": backend.auto_push_after_change(git_result),
             "configurationCheck": backend.check_home_assistant_configuration(),
         }
     )

@@ -11,6 +11,7 @@ Automationen, Szenen und zugehörigen YAML-Ressourcen.
 - Script-Abhängigkeitsansicht mit Sprung zu Verwendung und Definition
 - Vorschau-basierte Script-ID-Umbenennung einschließlich erkannter Referenzen
 - Objektbrowser für Automationen, Scripts und Szenen aus Packages und Includes
+- In die Sidebar integrierte, kompakte HA-Objektliste statt modaler Kartenansicht
 - Geschützter Editor für `automations.yaml`, `scripts.yaml`, `scenes.yaml` und Include-Verzeichnisse
 - Multi-Datei-Suche und Ersetzung mit Vorschau, Backups und gemeinsamem Git-Commit
 - Schutz vor dem Überschreiben parallel geänderter Dateien
@@ -27,6 +28,7 @@ Automationen, Szenen und zugehörigen YAML-Ressourcen.
 - Automatische lokale Git-Commits mit Historie, Diff und Wiederherstellung
 - Git-Branches anzeigen, erstellen, wechseln, vergleichen und konfliktgeprüft zusammenführen
 - Optionaler manueller GitHub-/GitLab-Remote-Sync mit geschützter Token-Ablage
+- Optionaler automatischer Remote-Push nach jedem erfolgreichen Speichern
 - Globale Package-Konfliktprüfung nach den Home-Assistant-Merge-Regeln
 - Qualitätsdashboard für Konflikte, Warnungen, Script-Nutzung, Backups und Git
 - Konfliktgeprüfter ZIP-Import und Export nach Datei, Kategorie oder Gesamtbestand
@@ -121,6 +123,19 @@ Vergleich bindet Branch-Kopf und Ziel-Commit kryptografisch an die anschließend
 Merge-Aktion. Ziel-YAML wird vorab geprüft; der Merge bleibt zunächst ohne
 Commit, wird erneut validiert und bei Konflikten oder ungültigem YAML über
 `git merge --abort` vollständig abgebrochen.
+
+Die HA-Objektübersicht ist wie das Dashboard als eigener Inhaltsbereich rechts
+neben der dauerhaft sichtbaren Sidebar eingebunden. Automationen, Scripts und
+Szenen erscheinen in kompakten Tabellenzeilen mit Typ, Entity-ID, Quelldatei,
+Fundzeile, Referenzen und Beziehungszählern. Dadurch bleiben auch große
+`automations.yaml`-Bestände ohne überlagernden Dialog durchsuchbar.
+
+Lokale Git-Commits werden weiterhin bei jedem Schreibvorgang erzeugt. Ist im
+Dashboard **Nach jedem Speichern automatisch pushen** aktiviert, führt das
+Backend danach zusätzlich einen geschützten Push auf den konfigurierten
+Remote-Branch aus. Dabei wird zuerst der Remote-Stand ermittelt; ein neuerer oder
+divergierter Remote führt zu einem sichtbaren Sync-Fehler, ohne den bereits
+erfolgreichen lokalen Speichervorgang rückgängig zu machen.
 
 Das Frontend ist ohne externe Laufzeitabhängigkeiten umgesetzt. HTML, CSS und
 JavaScript werden direkt von der App ausgeliefert und funktionieren unter dem von

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.12.0 - 2026-06-22
+
+- HA-Objekte als reguläre Inhaltsseite in die linke Navigation integriert
+- Modal und großflächige Karten durch kompakte, scanbare Objektzeilen ersetzt
+- HA-Objekte und Multi-Datei-Suche aus der überfüllten Topbar entfernt
+- Option für automatischen Git-Remote-Push nach jedem erfolgreichen Speichern
+- Sicherer Auto-Push mit Fetch-Prüfung und Abbruch bei neuerem oder divergiertem Remote
+- Getrennter `gitSync`-Status, damit Remote-Fehler einen erfolgreichen lokalen Save nicht verdecken
+- Integrationstest mit echtem Bare-Remote für automatisches Pushen
+
 ## 0.11.0 - 2026-06-22
 
 - Lokale Git-Branches anzeigen, erstellen und sicher wechseln

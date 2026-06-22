@@ -1,6 +1,21 @@
-# Release Notes 0.11.0
+# Release Notes 0.12.0
 
 Veröffentlicht am 22. Juni 2026.
+
+## Integrierte HA-Objektansicht
+
+Automationen, Scripts und Szenen öffnen jetzt als reguläre App-Seite neben der
+sichtbaren Sidebar. Die bisherige große Modalansicht wurde durch kompakte Zeilen
+mit Objekt, Quelldatei, Referenzen und Beziehungszählern ersetzt. HA-Objekte und
+Suchen/Ersetzen liegen als logische Werkzeuge in der Sidebar statt in der
+Topbar.
+
+## Automatischer Git-Push
+
+Unter **Git Remote** kann Auto-Push pro Remote aktiviert werden. Nach jedem
+erfolgreichen lokalen App-Commit wird der konfigurierte Remote-Branch sicher
+aktualisiert. Ein neuerer oder divergierter Remote wird nicht überschrieben;
+der lokale Save bleibt erfolgreich und der Sync-Fehler wird separat angezeigt.
 
 ## Git-Branch-Verwaltung
 

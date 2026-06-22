@@ -782,6 +782,42 @@ class FileApiTests(unittest.TestCase):
         self.assertEqual(result["action"], "push")
         self.assertEqual(remote_head, app.run_git(["rev-parse", "HEAD"]).stdout.decode().strip())
 
+    def test_file_save_automatically_pushes_to_configured_remote(self):
+        remote = app.PACKAGES_ROOT.parent / "automatic-remote.git"
+        app.run_git(["init", "--bare", str(remote)])
+        created = app.write_file(
+            "automatic.yaml",
+            "script:\n  automatic:\n    alias: Vorher\n    sequence: []\n",
+            None,
+            "Tests",
+            create=True,
+        )
+        app.save_git_remote_file(
+            {
+                "url": str(remote),
+                "provider": "test",
+                "branch": "main",
+                "username": "test",
+                "token": "",
+                "autoPush": True,
+            }
+        )
+
+        saved = app.write_file(
+            created["path"],
+            created["content"].replace("Vorher", "Nachher"),
+            created["version"],
+            "Tests",
+            create=False,
+        )
+
+        self.assertTrue(saved["gitSync"]["enabled"])
+        self.assertTrue(saved["gitSync"]["success"])
+        remote_head = app.run_git(
+            ["--git-dir", str(remote), "rev-parse", "refs/heads/main"]
+        ).stdout.decode().strip()
+        self.assertEqual(remote_head, app.run_git(["rev-parse", "HEAD"]).stdout.decode().strip())
+
     def test_git_remote_can_merge_unrelated_initial_readme_history(self):
         root = app.PACKAGES_ROOT.parent
         remote = root / "remote.git"

@@ -103,9 +103,9 @@ button { color: inherit; }
 .configuration-status.missing .configuration-status-icon { background: var(--warning); }
 .configuration-status.invalid, .configuration-status.unavailable { color: var(--danger); background: rgba(217, 74, 74, .08); border-color: rgba(217, 74, 74, .3); }
 .configuration-status.invalid .configuration-status-icon, .configuration-status.unavailable .configuration-status-icon { background: var(--danger); }
-.dashboard-nav { margin-bottom: 8px; }
-.dashboard-nav.active { color: var(--primary-dark); background: var(--primary-soft); border-color: rgba(3, 169, 244, .4); }
-.dashboard-nav.active .configuration-status-icon { background: var(--primary-dark); }
+.dashboard-nav, .object-nav, .search-nav { margin-bottom: 8px; }
+.configuration-status.active { color: var(--primary-dark); background: var(--primary-soft); border-color: rgba(3, 169, 244, .4); }
+.configuration-status.active .configuration-status-icon { background: var(--primary-dark); }
 
 .sidebar-filters { flex: none; max-height: 250px; padding-bottom: 8px; overflow-y: auto; border-bottom: 1px solid var(--border); }
 .filter-heading { padding: 4px 17px 3px; color: var(--muted); font-size: 10px; font-weight: 750; text-transform: uppercase; letter-spacing: .06em; }
@@ -245,14 +245,17 @@ button.analysis-finding:hover { border-color: var(--primary); }
 .object-browser-body, .search-replace-body { min-height: 0; padding: 16px 18px; overflow: auto; }
 .object-toolbar { display: grid; grid-template-columns: minmax(220px, 1fr) 180px auto; gap: 8px; margin-bottom: 10px; }
 .object-toolbar .search-field { height: 34px; }
-.object-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; margin-top: 12px; }
-.object-item { padding: 11px; display: grid; gap: 5px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 9px; cursor: pointer; text-align: left; }
+.object-list { display: grid; gap: 5px; margin-top: 12px; }
+.object-item { min-width: 0; padding: 9px 11px; display: grid; grid-template-columns: minmax(240px, 1.7fr) minmax(160px, 1fr) minmax(180px, 1.2fr) auto; align-items: center; gap: 12px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; text-align: left; }
 .object-item:hover { border-color: var(--primary); background: var(--primary-soft); }
 .object-item-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.object-item strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-.object-item small { color: var(--muted); font-size: 10px; }
+.object-primary, .object-location { min-width: 0; display: grid; gap: 2px; }
+.object-item strong, .object-item small, .object-references { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.object-item strong { font-size: 11px; }
+.object-item small { color: var(--muted); font-size: 9px; }
 .object-kind { padding: 2px 6px; color: var(--primary-dark); background: var(--primary-soft); border-radius: 999px; font-size: 9px; font-weight: 700; text-transform: uppercase; }
-.object-references { overflow: hidden; color: var(--muted); font: 10px var(--font-code); text-overflow: ellipsis; white-space: nowrap; }
+.object-references { color: var(--muted); font: 9px var(--font-code); }
+.object-counts { color: var(--muted); font-size: 9px; white-space: nowrap; }
 .resource-dialog-content { grid-template-rows: auto auto minmax(0, 1fr) 32px; }
 .resource-editor-shell { min-height: 0; }
 .search-replace-content { grid-template-rows: auto minmax(0, 1fr); }
@@ -359,8 +362,8 @@ dialog.history-dialog, dialog.conflict-dialog { width: min(920px, calc(100vw - 2
 .conflict-item small { color: var(--muted); font-size: 10px; }
 .conflict-files { color: var(--primary-dark) !important; font-family: var(--font-code); overflow-wrap: anywhere; }
 
-.dashboard-page { position: fixed; z-index: 15; top: 64px; right: 0; bottom: 0; left: 270px; min-height: 0; background: var(--surface-soft); }
-.dashboard-page-content { width: min(1120px, 100%); height: 100%; min-height: 0; margin: 0 auto; display: grid; grid-template-rows: auto minmax(0, 1fr); background: var(--surface); border-inline: 1px solid var(--border); }
+.dashboard-page, .objects-page { position: fixed; z-index: 15; top: 64px; right: 0; bottom: 0; left: 270px; min-height: 0; background: var(--surface-soft); }
+.dashboard-page-content, .objects-page-content { width: min(1180px, 100%); height: 100%; min-height: 0; margin: 0 auto; display: grid; grid-template-rows: auto minmax(0, 1fr); background: var(--surface); border-inline: 1px solid var(--border); }
 dialog.transfer-dialog { width: min(1040px, calc(100vw - 28px)); height: min(820px, calc(100vh - 28px)); max-width: none; max-height: none; }
 .transfer-dialog[open] { display: block; }
 .transfer-dialog-content { height: 100%; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); }
@@ -393,6 +396,7 @@ dialog.transfer-dialog { width: min(1040px, calc(100vw - 28px)); height: min(820
 .remote-form input, .transfer-controls input, .transfer-controls select { min-width: 0; height: 37px; padding: 0 9px; color: var(--text); background: var(--surface-soft); border: 1px solid var(--border); border-radius: 7px; outline: 0; }
 .remote-form input:focus, .transfer-controls input:focus, .transfer-controls select:focus { border-color: var(--primary); }
 .remote-clear { margin-top: 9px; display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 10px; }
+.remote-options { display: flex; flex-wrap: wrap; gap: 8px 18px; }
 .security-notice { margin: 9px 0; padding: 8px 10px; color: #7a4b00; background: rgba(210, 138, 25, .08); border-radius: 7px; font-size: 10px; }
 .remote-resolution { margin: 10px 0; padding: 11px; color: var(--danger); background: rgba(217, 74, 74, .07); border: 1px solid rgba(217, 74, 74, .28); border-radius: 8px; }
 .remote-resolution > strong { font-size: 12px; }
@@ -442,7 +446,7 @@ dialog.transfer-dialog { width: min(1040px, calc(100vw - 28px)); height: min(820
   .helpers { position: fixed; top: 64px; right: 0; bottom: 0; width: 310px; box-shadow: var(--shadow); transform: translateX(105%); transition: transform .2s ease; }
   .helpers.open { transform: translateX(0); }
   .mobile-only#helpers-toggle, .helpers .mobile-only { display: grid; }
-  .dashboard-page { left: 245px; }
+  .dashboard-page, .objects-page { left: 245px; }
 }
 
 @media (max-width: 700px) {
@@ -475,8 +479,10 @@ dialog.transfer-dialog { width: min(1040px, calc(100vw - 28px)); height: min(820
   dialog.history-dialog, dialog.conflict-dialog { width: calc(100vw - 12px); height: calc(100vh - 12px); }
   dialog.transfer-dialog { width: calc(100vw - 12px); height: calc(100vh - 12px); }
   .branch-controls, .search-replace-controls, .object-toolbar { grid-template-columns: 1fr; }
-  .dashboard-page { top: 56px; left: 0; }
-  .dashboard-page-content { border-inline: 0; }
+  .dashboard-page, .objects-page { top: 56px; left: 0; }
+  .dashboard-page-content, .objects-page-content { border-inline: 0; }
+  .object-item { grid-template-columns: minmax(0, 1fr) auto; }
+  .object-location, .object-references { grid-column: 1 / -1; }
   .configuration-toolbar { align-items: stretch; flex-wrap: wrap; padding: 8px; }
   .configuration-actions { width: 100%; flex-wrap: wrap; }
   .configuration-actions .button { flex: 1; }

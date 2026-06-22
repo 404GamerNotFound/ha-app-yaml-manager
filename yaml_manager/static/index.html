@@ -18,8 +18,6 @@
         </div>
       </div>
       <div class="topbar-actions">
-        <button class="button secondary" id="objects-button" aria-label="Home-Assistant-Objekte">HA-Objekte</button>
-        <button class="button secondary" id="search-replace-button" aria-label="Mehrere Dateien durchsuchen">Suchen/Ersetzen</button>
         <button class="button secondary" id="transfer-button" aria-label="Import und Export">Import/Export</button>
         <button class="button secondary" id="configuration-button"><span class="desktop-label">configuration.yaml</span><span class="mobile-label">Config</span></button>
         <button class="button secondary" id="reload-button" title="script.reload ausführen">Skripte neu laden</button>
@@ -40,6 +38,14 @@
         <button class="configuration-status dashboard-nav active" id="dashboard-button" type="button" aria-label="Qualitätsdashboard">
           <span class="configuration-status-icon" aria-hidden="true">Q</span>
           <span><strong>Dashboard</strong><small>Konfigurationsqualität und Git</small></span>
+        </button>
+        <button class="configuration-status object-nav" id="objects-button" type="button" aria-label="Home-Assistant-Objekte">
+          <span class="configuration-status-icon" aria-hidden="true">HA</span>
+          <span><strong>HA-Objekte</strong><small>Automationen, Scripts und Szenen</small></span>
+        </button>
+        <button class="configuration-status search-nav" id="search-replace-button" type="button" aria-label="Mehrere Dateien durchsuchen">
+          <span class="configuration-status-icon" aria-hidden="true">⌕</span>
+          <span><strong>Suchen und Ersetzen</strong><small>Mehrere YAML-Dateien ändern</small></span>
         </button>
         <button class="configuration-status checking" id="configuration-status" type="button">
           <span class="configuration-status-icon" aria-hidden="true">…</span>
@@ -360,8 +366,11 @@
               <label><span>Benutzername</span><input id="remote-username" autocomplete="username"></label>
               <label><span>Token</span><input id="remote-token" type="password" autocomplete="new-password" placeholder="Leer lassen zum Beibehalten"></label>
             </div>
-            <label class="remote-clear"><input id="remote-clear-token" type="checkbox"> Gespeichertes Token entfernen</label>
-            <p class="security-notice">Tokens werden mit Dateirechten 0600 unter /data gespeichert und weder angezeigt noch in die Remote-URL geschrieben. Ein Push kann sensible Konfigurationsdaten übertragen; verwende ein privates Repository.</p>
+            <div class="remote-options">
+              <label class="remote-clear"><input id="remote-auto-push" type="checkbox" checked> Nach jedem Speichern automatisch pushen</label>
+              <label class="remote-clear"><input id="remote-clear-token" type="checkbox"> Gespeichertes Token entfernen</label>
+            </div>
+            <p class="security-notice">Bei aktivem Auto-Push wird jeder erfolgreiche lokale App-Commit direkt zum konfigurierten Remote übertragen. Tokens werden mit Dateirechten 0600 unter /data gespeichert und nie angezeigt oder in die Remote-URL geschrieben. Verwende ein privates Repository.</p>
             <div class="remote-resolution hidden" id="remote-resolution">
               <strong>Lokaler und Remote-Stand sind auseinander gelaufen</strong>
               <p>Das passiert häufig, wenn das neue Remote bereits einen README-Commit enthält.</p>
@@ -417,14 +426,14 @@
       </div>
     </dialog>
 
-    <dialog class="transfer-dialog" id="objects-dialog">
-      <div class="transfer-dialog-content">
+    <section class="objects-page hidden" id="objects-dialog">
+      <div class="objects-page-content">
         <div class="dialog-header admin-dialog-header">
           <div>
             <h2>Home-Assistant-Objekte</h2>
             <p>Automationen, Scripts, Szenen und ihre Referenzen direkt finden.</p>
           </div>
-          <button class="icon-button" id="objects-close" type="button" aria-label="Objektübersicht schließen">×</button>
+          <button class="button primary" id="objects-close" type="button">Scripts öffnen</button>
         </div>
         <div class="object-browser-body">
           <div class="object-toolbar">
@@ -436,7 +445,7 @@
           <div class="object-list" id="object-list"></div>
         </div>
       </div>
-    </dialog>
+    </section>
 
     <dialog class="configuration-dialog" id="resource-dialog">
       <div class="configuration-dialog-content resource-dialog-content">

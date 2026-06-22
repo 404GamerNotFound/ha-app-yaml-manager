@@ -29,6 +29,7 @@ def bind(backend: Any) -> None:
         "PACKAGES_ROOT",
         "PACKAGE_DIRECTORY_TAGS",
         "VALID_SUFFIXES",
+        "auto_push_after_change",
         "check_home_assistant_configuration",
         "create_backup",
         "file_lock",
@@ -216,6 +217,7 @@ def write_configuration(content: str, expected_version: str | None) -> dict[str,
     result = read_configuration()
     result["configurationCheck"] = check_home_assistant_configuration()
     result["git"] = git_result
+    result["gitSync"] = auto_push_after_change(git_result)
     return result
 
 
@@ -372,6 +374,7 @@ def enable_packages(content: str, expected_version: str | None) -> dict[str, Any
             "message": "Package-Import wurde in der Home-Assistant-Konfiguration eingetragen.",
             "configurationCheck": check_home_assistant_configuration(),
             "git": git_result,
+            "gitSync": auto_push_after_change(git_result),
         }
     )
     return result
@@ -585,8 +588,8 @@ def migrate_configuration(
             "components": prepared["components"],
             "configurationCheck": check_home_assistant_configuration(),
             "git": git_result,
+            "gitSync": auto_push_after_change(git_result),
         }
     )
     return result
-
 

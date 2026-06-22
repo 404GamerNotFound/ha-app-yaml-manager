@@ -159,6 +159,7 @@ def public_git_remote_config(config: dict[str, Any]) -> dict[str, Any]:
         "branch": config.get("branch", "main"),
         "username": config.get("username", ""),
         "tokenConfigured": bool(config.get("token")),
+        "autoPush": bool(config.get("autoPush", True)),
         "lastSync": config.get("lastSync"),
     }
 
@@ -514,12 +515,16 @@ def update_git_remote(body: dict[str, Any]) -> dict[str, Any]:
     username = body.get("username") or existing.get("username") or ("x-access-token" if provider == "github" else "oauth2")
     if not isinstance(username, str) or not re.fullmatch(r"[^\s:@/]{1,128}", username):
         raise ApiError(HTTPStatus.BAD_REQUEST, "Der Git-Benutzername ist ungültig.")
+    auto_push = body.get("autoPush", existing.get("autoPush", True))
+    if not isinstance(auto_push, bool):
+        raise ApiError(HTTPStatus.BAD_REQUEST, "Die Auto-Push-Einstellung ist ungültig.")
     config = {
         "url": url,
         "provider": provider,
         "branch": branch,
         "username": username,
         "token": token,
+        "autoPush": auto_push,
         "lastSync": existing.get("lastSync"),
     }
     with git_lock:
@@ -530,6 +535,40 @@ def update_git_remote(body: dict[str, Any]) -> dict[str, Any]:
             raise ApiError(HTTPStatus.SERVICE_UNAVAILABLE, str(exc)) from exc
         save_git_remote_file(config)
     return git_remote_status()
+
+
+def auto_push_after_change(git_result: dict[str, Any] | None = None) -> dict[str, Any]:
+    config = load_git_remote_config()
+    enabled = bool(config.get("url")) and bool(config.get("autoPush", True))
+    if not enabled:
+        return {
+            "enabled": False,
+            "success": True,
+            "message": "Automatischer Git-Push ist nicht aktiviert.",
+        }
+    if git_result is not None and not git_result.get("committed"):
+        return {
+            "enabled": True,
+            "success": True,
+            "skipped": True,
+            "message": "Keine neue Git-Änderung zum Pushen vorhanden.",
+        }
+    try:
+        result = synchronize_git_remote("push")
+        return {
+            "enabled": True,
+            "success": True,
+            "message": "Lokaler Commit wurde automatisch zum Git-Remote gepusht.",
+            "ahead": result.get("ahead", 0),
+            "behind": result.get("behind", 0),
+        }
+    except ApiError as exc:
+        return {
+            "enabled": True,
+            "success": False,
+            "message": f"Datei gespeichert, automatischer Git-Push fehlgeschlagen: {exc.message}",
+            **exc.details,
+        }
 
 
 def remove_git_remote() -> dict[str, Any]:

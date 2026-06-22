@@ -325,6 +325,10 @@ def update_git_remote(body: dict[str, Any]) -> dict[str, Any]:
     return _git_call("update_git_remote", body)
 
 
+def auto_push_after_change(git_result: dict[str, Any] | None = None) -> dict[str, Any]:
+    return _git_call("auto_push_after_change", git_result)
+
+
 def remove_git_remote() -> dict[str, Any]:
     return _git_call("remove_git_remote")
 
@@ -811,6 +815,7 @@ def write_file(
     result = read_file(relative)
     result["configurationCheck"] = check_home_assistant_configuration()
     result["git"] = git_result
+    result["gitSync"] = auto_push_after_change(git_result)
     return result
 
 
@@ -846,6 +851,7 @@ def rename_file(raw_path: str, new_raw_path: str, expected_version: str | None) 
         save_metadata(metadata)
     result = read_file(new_relative)
     result["git"] = git_result
+    result["gitSync"] = auto_push_after_change(git_result)
     return result
 
 
@@ -869,6 +875,7 @@ def delete_file(raw_path: str, expected_version: str | None) -> dict[str, Any]:
         metadata = load_metadata()
         metadata["files"].pop(relative, None)
         save_metadata(metadata)
+    git_result["autoSync"] = auto_push_after_change(git_result)
     return git_result
 
 
@@ -1079,6 +1086,7 @@ def rename_script_with_references(
             "dependencies": script_dependency_analysis(relative),
             "configurationCheck": check_home_assistant_configuration(),
             "git": git_result,
+            "gitSync": auto_push_after_change(git_result),
         }
     )
     return result
@@ -1637,6 +1645,7 @@ def apply_package_import(
         "imported": sorted(selected),
         "skipped": sorted(skipped),
         "git": git_result,
+        "gitSync": auto_push_after_change(git_result),
         "configurationCheck": check_home_assistant_configuration(),
         "conflicts": package_conflict_analysis(),
     }

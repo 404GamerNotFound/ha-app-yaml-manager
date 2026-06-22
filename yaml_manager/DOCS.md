@@ -62,8 +62,12 @@ Die Backend-Verantwortlichkeiten sind getrennt aufgebaut:
 
 ## Home-Assistant-Objektbrowser
 
-**HA-Objekte** öffnet eine durchsuchbare Übersicht über Automationen, Scripts
-und Szenen. Berücksichtigt werden Definitionen in Packages sowie die
+**HA-Objekte** ist ein eigener Navigationseintrag in der linken Sidebar und
+öffnet eine durchsuchbare Inhaltsseite über Automationen, Scripts und Szenen.
+Die Sidebar bleibt dabei sichtbar; ein modaler Dialog wird nicht mehr verwendet.
+Die kompakte Liste trennt Objektname und Entity-ID, Quelldatei und Zeile,
+erkannte Referenzen sowie ein- und ausgehende Bezüge. Berücksichtigt werden
+Definitionen in Packages sowie die
 Top-Level-Bereiche `automation`, `script` und `scene` aus `configuration.yaml`.
 Folgende ausgelagerte Varianten werden verfolgt:
 
@@ -128,6 +132,25 @@ API-Endpunkte:
 - `POST /api/git/branches/switch`
 - `POST /api/git/branches/compare`
 - `POST /api/git/branches/merge`
+
+## Automatischer Git-Remote-Push
+
+Die App erstellt bei jedem erfolgreichen Schreibvorgang weiterhin zuerst einen
+lokalen, pfadbegrenzten Commit. Im Dashboard kann unter **Git Remote** zusätzlich
+**Nach jedem Speichern automatisch pushen** aktiviert werden. Diese Einstellung
+wird zusammen mit der Remote-Konfiguration unter `/data/git_remote.json`
+gespeichert und ist bei konfigurierten Remotes standardmäßig aktiv.
+
+Nach dem lokalen Commit führt das Backend die geschützte Push-Variante der
+bestehenden Synchronisation aus. Vor dem Push wird der Remote-Branch abgerufen.
+Ist er neuer oder divergiert, wird nicht überschrieben. Der Datei-Speichervorgang
+bleibt in diesem Fall erfolgreich und die API liefert unter `gitSync` eine
+separate Fehlermeldung, die das Frontend sichtbar anzeigt.
+
+Auto-Push gilt für Package- und Konfigurationsspeicherungen, HA-Ressourcen,
+Package-Einbindung, Migration, Script-Umbenennung, Multi-Datei-Ersetzung und
+ZIP-Import. Tokens bleiben aus API-Antworten, Remote-URLs und Prozessargumenten
+ausgeschlossen.
 
 ## configuration.yaml-Editor
 
