@@ -18,9 +18,23 @@
         </div>
       </div>
       <div class="topbar-actions">
-        <button class="button secondary" id="transfer-button" aria-label="Import und Export">Import/Export</button>
-        <button class="button secondary" id="configuration-button"><span class="desktop-label">configuration.yaml</span><span class="mobile-label">Config</span></button>
-        <button class="button secondary" id="reload-button" title="script.reload ausführen">Skripte neu laden</button>
+        <details class="action-menu topbar-menu">
+          <summary class="button secondary">Werkzeuge <span class="menu-chevron" aria-hidden="true">⌄</span></summary>
+          <div class="action-menu-popover" role="menu">
+            <button class="action-menu-item" id="transfer-button" type="button" role="menuitem">
+              <span class="menu-icon" aria-hidden="true">⇄</span>
+              <span><strong>Import/Export</strong><small>Package-Archive übertragen</small></span>
+            </button>
+            <button class="action-menu-item" id="configuration-button" type="button" role="menuitem">
+              <span class="menu-icon" aria-hidden="true">CFG</span>
+              <span><strong>configuration.yaml</strong><small>Hauptkonfiguration bearbeiten</small></span>
+            </button>
+            <button class="action-menu-item" id="reload-button" type="button" role="menuitem" title="script.reload ausführen">
+              <span class="menu-icon" aria-hidden="true">↻</span>
+              <span><strong>Skripte neu laden</strong><small>Home-Assistant-Dienst ausführen</small></span>
+            </button>
+          </div>
+        </details>
         <button class="button secondary" id="new-button">Neue Datei</button>
         <button class="button primary" id="save-button" disabled>Speichern</button>
       </div>
@@ -35,38 +49,54 @@
           </label>
           <button class="icon-button mobile-only" id="sidebar-close" aria-label="Dateiliste schließen">×</button>
         </div>
-        <button class="configuration-status dashboard-nav active" id="dashboard-button" type="button" aria-label="Qualitätsdashboard">
-          <span class="configuration-status-icon" aria-hidden="true">Q</span>
-          <span><strong>Dashboard</strong><small>Konfigurationsqualität und Git</small></span>
-        </button>
-        <button class="configuration-status object-nav" id="objects-button" type="button" aria-label="Home-Assistant-Objekte">
-          <span class="configuration-status-icon" aria-hidden="true">HA</span>
-          <span><strong>HA-Objekte</strong><small>Automationen, Scripts und Szenen</small></span>
-        </button>
-        <button class="configuration-status search-nav" id="search-replace-button" type="button" aria-label="Mehrere Dateien durchsuchen">
-          <span class="configuration-status-icon" aria-hidden="true">⌕</span>
-          <span><strong>Suchen und Ersetzen</strong><small>Mehrere YAML-Dateien ändern</small></span>
-        </button>
-        <button class="configuration-status checking" id="configuration-status" type="button">
-          <span class="configuration-status-icon" aria-hidden="true">…</span>
-          <span>
-            <strong>Packages-Einbindung</strong>
-            <small>configuration.yaml wird geprüft</small>
-          </span>
-        </button>
-        <button class="configuration-status checking" id="package-conflicts-button" type="button">
-          <span class="configuration-status-icon" aria-hidden="true">…</span>
-          <span>
-            <strong>Package-Konflikte</strong>
-            <small>Konfiguration wird analysiert</small>
-          </span>
-        </button>
-        <div class="sidebar-filters">
-          <div class="filter-heading">Kategorien</div>
-          <nav class="categories" id="categories" aria-label="Kategorien"></nav>
-          <div class="filter-heading">Tags</div>
-          <nav class="tags" id="tags" aria-label="Tags"></nav>
-        </div>
+        <nav class="sidebar-primary-nav" aria-label="Hauptbereiche">
+          <button class="sidebar-nav-item dashboard-nav active" id="dashboard-button" type="button" aria-label="Qualitätsdashboard">
+            <span class="sidebar-nav-icon" aria-hidden="true">Q</span>
+            <span><strong>Dashboard</strong><small>Qualität und Git</small></span>
+          </button>
+          <button class="sidebar-nav-item object-nav" id="objects-button" type="button" aria-label="Home-Assistant-Objekte">
+            <span class="sidebar-nav-icon" aria-hidden="true">HA</span>
+            <span><strong>HA-Objekte</strong><small>Automationen, Scripts, Szenen</small></span>
+          </button>
+          <button class="sidebar-nav-item search-nav" id="search-replace-button" type="button" aria-label="Mehrere Dateien durchsuchen">
+            <span class="sidebar-nav-icon" aria-hidden="true">⌕</span>
+            <span><strong>Suchen &amp; Ersetzen</strong><small>Mehrere Dateien ändern</small></span>
+          </button>
+        </nav>
+        <details class="sidebar-section system-section">
+          <summary>
+            <span>Systemstatus</span>
+            <span class="status-dots" aria-label="Zwei Systemprüfungen">
+              <i class="status-dot checking" id="configuration-status-dot"></i>
+              <i class="status-dot checking" id="package-conflicts-status-dot"></i>
+            </span>
+          </summary>
+          <div class="sidebar-section-content">
+            <button class="configuration-status checking" id="configuration-status" type="button">
+              <span class="configuration-status-icon" aria-hidden="true">…</span>
+              <span>
+                <strong>Packages-Einbindung</strong>
+                <small>configuration.yaml wird geprüft</small>
+              </span>
+            </button>
+            <button class="configuration-status checking" id="package-conflicts-button" type="button">
+              <span class="configuration-status-icon" aria-hidden="true">…</span>
+              <span>
+                <strong>Package-Konflikte</strong>
+                <small>Konfiguration wird analysiert</small>
+              </span>
+            </button>
+          </div>
+        </details>
+        <details class="sidebar-section sidebar-filters" open>
+          <summary><span>Filter</span><span class="section-summary" id="filter-summary">Alle Dateien</span></summary>
+          <div class="sidebar-section-content">
+            <div class="filter-heading">Kategorien</div>
+            <nav class="categories" id="categories" aria-label="Kategorien"></nav>
+            <div class="filter-heading">Tags</div>
+            <nav class="tags" id="tags" aria-label="Tags"></nav>
+          </div>
+        </details>
         <div class="file-list-header">
           <span>Dateien</span>
           <span id="file-count">0</span>
@@ -101,11 +131,26 @@
                 <span>Tags</span>
                 <input id="tag-input" type="text" placeholder="licht, abend" autocomplete="off">
               </label>
-              <button class="icon-button" id="rename-button" title="Datei umbenennen oder verschieben" aria-label="Datei umbenennen">✎</button>
-              <button class="icon-button" id="history-button" title="Versionsverlauf anzeigen" aria-label="Versionsverlauf anzeigen">↶</button>
-              <button class="icon-button git-button" id="git-history-button" title="Git-Historie anzeigen" aria-label="Git-Historie anzeigen">G</button>
-              <button class="icon-button" id="duplicate-button" title="Datei duplizieren" aria-label="Datei duplizieren">⧉</button>
-              <button class="icon-button danger" id="delete-button" title="Datei löschen" aria-label="Datei löschen">⌫</button>
+              <details class="action-menu document-menu">
+                <summary class="button secondary">Datei <span class="menu-chevron" aria-hidden="true">⌄</span></summary>
+                <div class="action-menu-popover" role="menu">
+                  <button class="action-menu-item" id="rename-button" type="button" role="menuitem">
+                    <span class="menu-icon" aria-hidden="true">✎</span><span><strong>Umbenennen</strong><small>Datei verschieben oder umbenennen</small></span>
+                  </button>
+                  <button class="action-menu-item" id="history-button" type="button" role="menuitem">
+                    <span class="menu-icon" aria-hidden="true">↶</span><span><strong>Versionsverlauf</strong><small>Lokale Sicherungen anzeigen</small></span>
+                  </button>
+                  <button class="action-menu-item" id="git-history-button" type="button" role="menuitem">
+                    <span class="menu-icon git-button" aria-hidden="true">G</span><span><strong>Git-Historie</strong><small>Commits vergleichen</small></span>
+                  </button>
+                  <button class="action-menu-item" id="duplicate-button" type="button" role="menuitem">
+                    <span class="menu-icon" aria-hidden="true">⧉</span><span><strong>Duplizieren</strong><small>Kopie der Datei anlegen</small></span>
+                  </button>
+                  <button class="action-menu-item danger" id="delete-button" type="button" role="menuitem">
+                    <span class="menu-icon" aria-hidden="true">⌫</span><span><strong>Löschen</strong><small>Datei in den Papierkorb legen</small></span>
+                  </button>
+                </div>
+              </details>
               <button class="icon-button mobile-only" id="helpers-toggle" title="Hilfen öffnen" aria-label="Hilfen öffnen">?</button>
             </div>
           </div>

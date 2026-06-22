@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.13.0 - 2026-06-22
+
+- Linke Navigation in kompakte Hauptbereiche, Systemstatus und Filter gegliedert
+- Selten benötigte Kopfzeilenaktionen in einem übersichtlichen Werkzeugmenü gebündelt
+- Dateiaktionen durch ein beschriftetes Menü statt fünf gleichrangiger Symbolschaltflächen ersetzt
+- Kurzindikatoren für Systemprüfungen und aktive Filter auch im eingeklappten Zustand ergänzt
+- Bestehende Funktionen, Aktions-IDs und Tastaturabläufe vollständig beibehalten
+
 ## 0.12.0 - 2026-06-22
 
 - HA-Objekte als reguläre Inhaltsseite in die linke Navigation integriert

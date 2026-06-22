@@ -42,7 +42,7 @@ const state = {
 };
 
 const elements = Object.fromEntries([
-  "workspace", "sidebar", "sidebar-toggle", "sidebar-close", "file-search", "configuration-status", "categories", "tags", "file-list", "file-count", "root-path",
+  "workspace", "sidebar", "sidebar-toggle", "sidebar-close", "file-search", "configuration-status", "configuration-status-dot", "package-conflicts-status-dot", "filter-summary", "categories", "tags", "file-list", "file-count", "root-path",
   "empty-state", "empty-new-button", "editor-content", "document-name", "document-path", "dirty-dot", "category-select", "tag-input",
   "rename-button", "duplicate-button", "delete-button", "editor", "highlighting", "line-numbers", "validation-status", "file-ha-check", "cursor-status",
   "save-button", "new-button", "reload-button", "helpers", "helpers-toggle", "helpers-close", "snippet-list", "analysis-summary", "analysis-list", "api-notice",
@@ -191,6 +191,7 @@ function renderCategories() {
     button.addEventListener("click", () => { state.selectedCategory = category; renderCategories(); renderFiles(); });
     return button;
   }));
+  updateFilterSummary();
 }
 
 function renderTags() {
@@ -207,6 +208,14 @@ function renderTags() {
     });
     return button;
   }));
+  updateFilterSummary();
+}
+
+function updateFilterSummary() {
+  const active = [];
+  if (state.selectedCategory !== "Alle") active.push(state.selectedCategory);
+  if (state.selectedTag) active.push(`#${state.selectedTag}`);
+  elements["filter-summary"].textContent = active.length ? active.join(" · ") : "Alle Dateien";
 }
 
 function renderFiles() {
@@ -268,6 +277,8 @@ function renderConfigurationStatus(configuration) {
   elements["configuration-status"].dataset.message = status.message || label;
   elements["configuration-status"].dataset.expected = status.configured ? "" : status.expected || "";
   elements["configuration-status"].title = status.message || label;
+  elements["configuration-status-dot"].className = `status-dot ${status.status}`;
+  elements["configuration-status-dot"].title = label;
 }
 
 function syncConfigurationScroll() {
@@ -728,6 +739,8 @@ function renderPackageConflicts(result) {
   const label = errors ? `${errors} Konflikte` : warnings ? `${warnings} Warnungen` : "Keine Konflikte";
   elements["package-conflicts-button"].className = `configuration-status ${css}`;
   elements["package-conflicts-button"].innerHTML = `<span class="configuration-status-icon" aria-hidden="true">${icon}</span><span><strong>Package-Konflikte</strong><small>${label}</small></span>`;
+  elements["package-conflicts-status-dot"].className = `status-dot ${css}`;
+  elements["package-conflicts-status-dot"].title = label;
   elements["conflict-summary"].textContent = `${result.fileCount} Dateien geprüft · ${errors} Fehler · ${warnings} Warnungen · Modus: ${result.mode}`;
   if (!result.findings.length) {
     const empty = document.createElement("div");
@@ -1939,6 +1952,14 @@ elements["sidebar-toggle"].addEventListener("click", () => elements.sidebar.clas
 elements["sidebar-close"].addEventListener("click", () => elements.sidebar.classList.remove("open"));
 elements["helpers-toggle"].addEventListener("click", () => elements.helpers.classList.add("open"));
 elements["helpers-close"].addEventListener("click", () => elements.helpers.classList.remove("open"));
+document.querySelectorAll(".action-menu").forEach((menu) => menu.addEventListener("click", (event) => {
+  if (event.target.closest(".action-menu-item")) menu.removeAttribute("open");
+}));
+document.addEventListener("click", (event) => {
+  document.querySelectorAll(".action-menu[open]").forEach((menu) => {
+    if (!menu.contains(event.target)) menu.removeAttribute("open");
+  });
+});
 document.querySelectorAll(".helper-tab").forEach((tab) => tab.addEventListener("click", () => {
   document.querySelectorAll(".helper-tab").forEach((item) => {
     item.classList.toggle("active", item === tab);

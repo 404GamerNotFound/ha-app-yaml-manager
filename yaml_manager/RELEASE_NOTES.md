@@ -1,6 +1,23 @@
-# Release Notes 0.12.0
+# Release Notes 0.13.0
 
 Veröffentlicht am 22. Juni 2026.
+
+## Aufgeräumte Navigation
+
+Die linke Seitenleiste trennt Hauptbereiche, Systemstatus und Filter jetzt klar
+voneinander. Dashboard, HA-Objekte sowie Suchen und Ersetzen bleiben direkt
+erreichbar. Diagnose und Filter lassen sich platzsparend ein- und ausklappen;
+Statuspunkte und die aktive Filterauswahl bleiben dabei sichtbar.
+
+## Kompakte Aktionsmenüs
+
+Import/Export, `configuration.yaml` und das Neuladen der Scripts sind im neuen
+Werkzeugmenü gebündelt. Im Editor fasst das Menü **Datei** Umbenennen,
+Versionsverlauf, Git-Historie, Duplizieren und Löschen verständlich beschriftet
+zusammen. **Neue Datei** und **Speichern** bleiben dauerhaft sichtbar.
+
+Alle bisherigen Funktionen, Dialoge, Tastaturkürzel und Sicherheitsprüfungen
+bleiben unverändert verfügbar.
 
 ## Integrierte HA-Objektansicht
 
