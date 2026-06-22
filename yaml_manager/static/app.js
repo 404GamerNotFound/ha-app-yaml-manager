@@ -36,7 +36,7 @@ const state = {
 };
 
 const elements = Object.fromEntries([
-  "sidebar", "sidebar-toggle", "sidebar-close", "file-search", "configuration-status", "categories", "tags", "file-list", "file-count", "root-path",
+  "workspace", "sidebar", "sidebar-toggle", "sidebar-close", "file-search", "configuration-status", "categories", "tags", "file-list", "file-count", "root-path",
   "empty-state", "empty-new-button", "editor-content", "document-name", "document-path", "dirty-dot", "category-select", "tag-input",
   "rename-button", "duplicate-button", "delete-button", "editor", "highlighting", "line-numbers", "validation-status", "file-ha-check", "cursor-status",
   "save-button", "new-button", "reload-button", "helpers", "helpers-toggle", "helpers-close", "snippet-list", "analysis-summary", "analysis-list", "api-notice",
@@ -50,7 +50,7 @@ const elements = Object.fromEntries([
   "git-dialog", "git-history-close", "git-history-path", "git-history-list", "git-diff-placeholder", "git-diff-view", "git-history-summary", "git-history-restore",
   "package-conflicts-button", "conflict-dialog", "conflict-close", "conflict-summary", "conflict-list",
   "dashboard-button", "dashboard-dialog", "dashboard-close", "dashboard-refresh", "quality-score", "quality-stats", "dashboard-findings",
-  "remote-status", "remote-badge", "remote-url", "remote-branch", "remote-username", "remote-token", "remote-clear-token", "remote-save", "remote-fetch", "remote-pull", "remote-push", "remote-sync", "remote-remove",
+  "remote-status", "remote-badge", "remote-url", "remote-branch", "remote-username", "remote-token", "remote-clear-token", "remote-save", "remote-fetch", "remote-pull", "remote-push", "remote-sync", "remote-remove", "remote-resolution", "remote-merge", "remote-force-push",
   "transfer-button", "transfer-dialog", "transfer-close", "export-scope", "export-category", "export-start", "import-file", "import-strategy", "import-preview", "import-apply", "import-summary", "import-preview-list",
 ].map((id) => [id, document.getElementById(id)]));
 
@@ -748,7 +748,8 @@ function renderRemoteStatus(remote) {
     : "Noch nicht konfiguriert";
   elements["remote-status"].textContent = remote.message || syncDetails;
   elements["remote-badge"].textContent = configured ? `${(remote.provider || "git").toUpperCase()} · ${remote.branch}` : "Lokal";
-  ["remote-fetch", "remote-pull", "remote-push", "remote-sync", "remote-remove"].forEach((id) => {
+  elements["remote-resolution"].classList.toggle("hidden", !remote.diverged);
+  ["remote-fetch", "remote-pull", "remote-push", "remote-sync", "remote-remove", "remote-merge", "remote-force-push"].forEach((id) => {
     elements[id].disabled = !configured;
   });
 }
@@ -798,8 +799,14 @@ async function loadDashboard() {
 }
 
 async function openDashboard() {
-  const result = await loadDashboard();
-  if (result) elements["dashboard-dialog"].showModal();
+  elements["workspace"].classList.add("hidden");
+  elements["dashboard-dialog"].classList.remove("hidden");
+  await loadDashboard();
+}
+
+function openScriptManager() {
+  elements["dashboard-dialog"].classList.add("hidden");
+  elements["workspace"].classList.remove("hidden");
 }
 
 async function saveRemoteConfiguration() {
@@ -831,6 +838,8 @@ async function synchronizeRemote(action) {
     pull: "Remote-Änderungen übernehmen? Verwaltete Dateien können aktualisiert werden.",
     push: "Lokale Git-Historie an das Remote übertragen? Das Repository sollte privat sein.",
     sync: "Sicher synchronisieren? Dabei können verwaltete Dateien empfangen und sensible Konfigurationsdaten übertragen werden.",
+    merge: "Lokale und Remote-Historie verbinden und das Ergebnis pushen? Remote-README- und Lizenzdateien bleiben erhalten.",
+    "force-push": "Remote-Historie wirklich durch den lokalen Stand ersetzen? Vorhandene Remote-Commits gehen dabei verloren.",
   };
   if (!confirm(descriptions[action])) return;
   const button = elements[`remote-${action}`];
@@ -847,7 +856,13 @@ async function synchronizeRemote(action) {
     } else {
       toast(result.message, "success");
     }
-  } catch (error) { toast(error.message, "error"); }
+  } catch (error) {
+    if (error.details?.resolutionOptions) {
+      elements["remote-resolution"].classList.remove("hidden");
+      elements["remote-status"].textContent = `${error.message} ${error.details.ahead} voraus · ${error.details.behind} zurück`;
+    }
+    toast(error.message, "error");
+  }
   finally { button.disabled = false; }
 }
 
@@ -1294,14 +1309,15 @@ elements["category-select"].addEventListener("change", () => {
 elements["tag-input"].addEventListener("input", setDirty);
 elements["file-search"].addEventListener("input", renderFiles);
 elements["dashboard-button"].addEventListener("click", openDashboard);
-elements["dashboard-close"].addEventListener("click", () => elements["dashboard-dialog"].close());
+elements["dashboard-close"].addEventListener("click", openScriptManager);
 elements["dashboard-refresh"].addEventListener("click", loadDashboard);
-elements["dashboard-dialog"].addEventListener("cancel", () => elements["dashboard-dialog"].close());
 elements["remote-save"].addEventListener("click", saveRemoteConfiguration);
 elements["remote-fetch"].addEventListener("click", () => synchronizeRemote("fetch"));
 elements["remote-pull"].addEventListener("click", () => synchronizeRemote("pull"));
 elements["remote-push"].addEventListener("click", () => synchronizeRemote("push"));
 elements["remote-sync"].addEventListener("click", () => synchronizeRemote("sync"));
+elements["remote-merge"].addEventListener("click", () => synchronizeRemote("merge"));
+elements["remote-force-push"].addEventListener("click", () => synchronizeRemote("force-push"));
 elements["remote-remove"].addEventListener("click", removeRemoteConfiguration);
 elements["transfer-button"].addEventListener("click", openTransferDialog);
 elements["transfer-close"].addEventListener("click", () => elements["transfer-dialog"].close());
@@ -1392,4 +1408,4 @@ window.addEventListener("beforeunload", (event) => {
 });
 
 renderSnippets();
-Promise.all([refreshFiles(), loadHelpers()]).catch((error) => toast(error.message, "error"));
+Promise.all([refreshFiles(), loadHelpers(), loadDashboard()]).catch((error) => toast(error.message, "error"));

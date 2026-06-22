@@ -511,6 +511,84 @@ class FileApiTests(unittest.TestCase):
         self.assertEqual(result["action"], "push")
         self.assertEqual(remote_head, app.run_git(["rev-parse", "HEAD"]).stdout.decode().strip())
 
+    def test_git_remote_can_merge_unrelated_initial_readme_history(self):
+        root = app.PACKAGES_ROOT.parent
+        remote = root / "remote.git"
+        seed = root / "remote-seed"
+        app.run_git(["init", "--bare", str(remote)])
+        app.run_git(["init", str(seed)])
+        (seed / "README.md").write_text("# Home Assistant\n", encoding="utf-8")
+        app.run_git(["-C", str(seed), "add", "README.md"])
+        app.run_git(
+            [
+                "-C", str(seed),
+                "-c", "user.name=Remote User",
+                "-c", "user.email=remote@example.test",
+                "commit", "-m", "Initial README",
+            ]
+        )
+        app.run_git(["-C", str(seed), "remote", "add", "origin", str(remote)])
+        app.run_git(["-C", str(seed), "push", "origin", "HEAD:refs/heads/main"])
+
+        app.write_file("local.yaml", "script: {}\n", None, "Tests", create=True)
+        app.save_git_remote_file(
+            {
+                "url": str(remote),
+                "provider": "test",
+                "branch": "main",
+                "username": "test",
+                "token": "",
+            }
+        )
+
+        with self.assertRaises(app.ApiError) as diverged:
+            app.synchronize_git_remote("sync")
+        self.assertEqual(diverged.exception.details["resolutionOptions"], ["merge", "force-push"])
+
+        result = app.synchronize_git_remote("merge")
+        remote_head = app.run_git(
+            ["--git-dir", str(remote), "rev-parse", "refs/heads/main"]
+        ).stdout.decode().strip()
+
+        self.assertEqual(result["action"], "merge")
+        self.assertTrue((root / "README.md").is_file())
+        self.assertTrue((app.PACKAGES_ROOT / "local.yaml").is_file())
+        self.assertEqual(remote_head, app.run_git(["rev-parse", "HEAD"]).stdout.decode().strip())
+
+    def test_git_remote_can_replace_diverged_remote_with_force_lease(self):
+        root = app.PACKAGES_ROOT.parent
+        remote = root / "remote.git"
+        seed = root / "remote-seed"
+        app.run_git(["init", "--bare", str(remote)])
+        app.run_git(["init", str(seed)])
+        (seed / "README.md").write_text("# Remote\n", encoding="utf-8")
+        app.run_git(["-C", str(seed), "add", "README.md"])
+        app.run_git(
+            [
+                "-C", str(seed),
+                "-c", "user.name=Remote User",
+                "-c", "user.email=remote@example.test",
+                "commit", "-m", "Remote README",
+            ]
+        )
+        app.run_git(["-C", str(seed), "remote", "add", "origin", str(remote)])
+        app.run_git(["-C", str(seed), "push", "origin", "HEAD:refs/heads/main"])
+        app.write_file("local.yaml", "script: {}\n", None, "Tests", create=True)
+        app.save_git_remote_file(
+            {"url": str(remote), "provider": "test", "branch": "main", "username": "test", "token": ""}
+        )
+        with self.assertRaises(app.ApiError):
+            app.synchronize_git_remote("sync")
+
+        result = app.synchronize_git_remote("force-push")
+        remote_tree = app.run_git(
+            ["--git-dir", str(remote), "ls-tree", "-r", "--name-only", "refs/heads/main"]
+        ).stdout.decode().splitlines()
+
+        self.assertEqual(result["action"], "force-push")
+        self.assertIn("packages/local.yaml", remote_tree)
+        self.assertNotIn("README.md", remote_tree)
+
     def test_quality_dashboard_reports_possibly_unused_scripts(self):
         app.write_file(
             "scripts.yaml",

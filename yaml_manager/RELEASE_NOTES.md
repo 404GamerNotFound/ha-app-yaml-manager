@@ -1,46 +1,39 @@
-# Release Notes 0.7.0
+# Release Notes 0.8.0
 
 Veröffentlicht am 22. Juni 2026.
 
-## GitHub- und GitLab-Synchronisation
+## Dashboard als Startseite
 
-Im neuen Qualitätsdashboard kann ein HTTPS-Remote auf GitHub.com oder GitLab.com
-hinterlegt werden. Fetch, Fast-forward-Pull, Push und sichere Synchronisation
-werden ausschließlich manuell gestartet. Divergierte Historien, Force-Pushes und
-Remote-Änderungen außerhalb von `configuration.yaml` und `packages/` werden
-nicht automatisch übernommen.
+Die App startet nun im Qualitätsdashboard. Von dort führt **Scripts öffnen** in
+den vollständigen Script-Manager. Über **Dashboard** kann jederzeit zur Übersicht
+zurückgekehrt werden, ohne den aktuellen Editorstand zu verlieren.
 
-Personal Access Tokens werden mit Dateimodus `0600` im persistenten App-Datenordner
-gespeichert. Sie erscheinen weder in der Git-Remote-URL noch in API-Antworten oder
-Prozessargumenten.
+## Divergierte Git-Historien auflösen
 
-## Qualitätsdashboard
+Der häufige Fall eines neuen GitHub-/GitLab-Repositories mit eigenem README-
+Commit führt nicht mehr in eine Sackgasse. Das Dashboard bietet zwei Optionen:
 
-Das Dashboard bündelt Package-Konflikte, Warnungen, Script-Anzahl, mögliche
-ungenutzte Scripts, Backups und Git-Status in einer Übersicht. Der Qualitätswert
-macht sichtbar, wo zuerst nachgebessert werden sollte. Die Script-Nutzungsanalyse
-bleibt bewusst eine Warnung, da externe Aufrufe nicht vollständig erkennbar sind.
+- **Historien verbinden** übernimmt README-/Lizenzdateien, erzeugt einen sicheren
+  Merge und pusht den gemeinsamen Stand. Dies ist die empfohlene Lösung.
+- **Remote durch lokalen Stand ersetzen** verwirft die bisherige Remote-Historie
+  mit einem gegen parallele Änderungen geschützten `force-with-lease`.
 
-## ZIP-Import und -Export
+Vor einem Merge werden Remote-Pfade, Dateitypen, Größen und YAML geprüft sowie
+lokale Dateien gesichert. Bei einem Merge-Konflikt wird der Vorgang automatisch
+abgebrochen und der Ausgangsstand wiederhergestellt.
 
-Einzelne Package-Dateien, Kategorien oder alle Packages lassen sich samt Tags und
-Kategorien exportieren. Vor einem Import prüft die App ZIP-Pfade, Größenlimits,
-UTF-8, YAML, vorhandene Dateien und globale Package-Konflikte.
+## Bestehende Funktionen
 
-Der bestätigte Import läuft transaktional und unterstützt Überspringen oder
-Überschreiben. Backups, Git-Commit, Rollback bei Schreibfehlern und die
-Home-Assistant-Prüfung bleiben Bestandteil des Ablaufs.
+Qualitätsprüfung, Git-Remote-Verwaltung, Git-Historie sowie ZIP-Import und -Export
+bleiben vollständig im Dashboard beziehungsweise in den Editoren verfügbar.
 
 ## Technische API-Erweiterungen
 
-- `GET /api/dashboard` liefert Qualitäts- und Git-Status.
-- `GET|PUT|DELETE /api/git/remote` verwaltet den geschützten Remote.
-- `POST /api/git/remote/sync` führt die gewählte Synchronisationsaktion aus.
-- `GET /api/export` erzeugt Package-ZIP-Archive.
-- `POST /api/import/preview` und `/api/import/apply` prüfen und importieren Archive.
+- `POST /api/git/remote/sync` akzeptiert zusätzlich `merge` und `force-push`.
+- Konfliktantworten enthalten `ahead`, `behind` und verfügbare Auflösungsoptionen.
 
 ## Nach dem Update
 
-1. Öffne **Dashboard** und prüfe Qualitätswert und Hinweise.
-2. Hinterlege bei Bedarf einen privaten GitHub-/GitLab-Remote mit minimal berechtigtem Token.
-3. Teste unter **Import/Export** zunächst einen ZIP-Export und anschließend die Importvorschau.
+1. Die App öffnet automatisch das Dashboard.
+2. Wähle bei einem neuen Remote mit README **Historien verbinden**.
+3. Verwende **Remote durch lokalen Stand ersetzen** nur, wenn die Remote-Historie sicher verworfen werden darf.

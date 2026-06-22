@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.8.0 - 2026-06-22
+
+- Qualitätsdashboard als neue Startseite mit direktem Einstieg in den Script-Manager
+- Erkennung divergierter lokaler und Remote-Historien mit konkreten Auflösungsaktionen
+- Empfohlene Aktion **Historien verbinden** für neue Remotes mit unabhängigem README-/Lizenz-Commit
+- Geschützte Aktion **Remote durch lokalen Stand ersetzen** über `force-with-lease`
+- Automatischer Merge-Abbruch und Wiederherstellung des Ausgangsstands bei Dateikonflikten
+- Zulässige Remote-Begleitdateien auf README, LICENSE, CHANGELOG, `.gitignore` und `.gitattributes` begrenzt
+- YAML-, Dateityp-, Größen-, Backup- und Home-Assistant-Prüfung bei Remote-Übernahmen
+
 ## 0.7.0 - 2026-06-22
 
 - Optionales Git-Remote für GitHub.com und GitLab.com über HTTPS mit manuellen Fetch-, Pull-, Push- und Sync-Aktionen

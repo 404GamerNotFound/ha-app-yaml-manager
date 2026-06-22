@@ -545,7 +545,7 @@ def git_remote_status() -> dict[str, Any]:
     config = load_git_remote_config()
     result = public_git_remote_config(config)
     if not result["configured"]:
-        return {**result, "available": True, "ahead": 0, "behind": 0, "dirty": False}
+        return {**result, "available": True, "ahead": 0, "behind": 0, "diverged": False, "dirty": False}
     with git_lock:
         try:
             ensure_git_repository()
@@ -561,11 +561,12 @@ def git_remote_status() -> dict[str, Any]:
                 "available": True,
                 "ahead": ahead,
                 "behind": behind,
+                "diverged": bool(ahead and behind),
                 "dirty": dirty,
                 "currentBranch": current_branch,
             }
         except GitOperationError as exc:
-            return {**result, "available": False, "message": str(exc), "ahead": 0, "behind": 0, "dirty": False}
+            return {**result, "available": False, "message": str(exc), "ahead": 0, "behind": 0, "diverged": False, "dirty": False}
 
 
 def update_git_remote(body: dict[str, Any]) -> dict[str, Any]:
@@ -613,6 +614,44 @@ def remove_git_remote() -> dict[str, Any]:
     return git_remote_status()
 
 
+def validate_remote_yaml(reference: str, relative: str) -> None:
+    tree = run_git(["ls-tree", reference, "--", relative]).stdout.decode().strip()
+    if relative == "configuration.yaml" and not tree:
+        raise ApiError(HTTPStatus.CONFLICT, "Der Remote-Stand würde configuration.yaml löschen.")
+    if not tree:
+        return
+    mode = tree.split(None, 1)[0]
+    if mode not in {"100644", "100755"}:
+        raise ApiError(HTTPStatus.CONFLICT, f"{relative} ist im Remote kein regulärer Dateieintrag.")
+    content = run_git(["show", f"{reference}:{relative}"]).stdout
+    try:
+        text = content.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ApiError(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, f"{relative} ist im Remote nicht UTF-8-kodiert.") from exc
+    validation = validate_yaml(text)
+    if not validation["valid"]:
+        raise ApiError(HTTPStatus.UNPROCESSABLE_ENTITY, f"{relative} ist im Remote kein gültiges YAML.", validation)
+
+
+def safe_remote_auxiliary_path(relative: str) -> bool:
+    documentation_pattern = re.compile(
+        r"(?:README|LICENSE|CHANGELOG)(?:\.[A-Za-z0-9_.-]+)?$",
+        re.IGNORECASE,
+    )
+    return relative in {".gitignore", ".gitattributes"} or bool(documentation_pattern.fullmatch(relative))
+
+
+def validate_remote_auxiliary_file(reference: str, relative: str) -> None:
+    tree = run_git(["ls-tree", reference, "--", relative]).stdout.decode().strip()
+    if not tree:
+        return
+    if tree.split(None, 1)[0] not in {"100644", "100755"}:
+        raise ApiError(HTTPStatus.CONFLICT, f"{relative} ist im Remote kein regulärer Dateieintrag.")
+    size = int(run_git(["cat-file", "-s", f"{reference}:{relative}"]).stdout.decode().strip())
+    if size > MAX_FILE_SIZE:
+        raise ApiError(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, f"{relative} ist im Remote größer als 2 MiB.")
+
+
 def prepare_remote_fast_forward(branch: str) -> list[str]:
     reference = f"refs/remotes/{GIT_REMOTE_NAME}/{branch}"
     changed = run_git(["diff", "--name-only", "HEAD", reference]).stdout.decode("utf-8", errors="replace").splitlines()
@@ -624,30 +663,46 @@ def prepare_remote_fast_forward(branch: str) -> list[str]:
             package_relative = relative.removeprefix("packages/")
             _normalized, absolute = normalize_relative_path(package_relative)
             backup_relative = package_relative
+        elif safe_remote_auxiliary_path(relative):
+            validate_remote_auxiliary_file(reference, relative)
+            continue
         else:
             raise ApiError(HTTPStatus.CONFLICT, "Der Remote-Stand verändert Dateien außerhalb von configuration.yaml und packages.")
-        tree = run_git(["ls-tree", reference, "--", relative]).stdout.decode().strip()
-        if relative == "configuration.yaml" and not tree:
-            raise ApiError(HTTPStatus.CONFLICT, "Der Remote-Stand würde configuration.yaml löschen.")
-        if tree:
-            mode = tree.split(None, 1)[0]
-            if mode not in {"100644", "100755"}:
-                raise ApiError(HTTPStatus.CONFLICT, f"{relative} ist im Remote kein regulärer Dateieintrag.")
-            content = run_git(["show", f"{reference}:{relative}"]).stdout
-            try:
-                text = content.decode("utf-8")
-            except UnicodeDecodeError as exc:
-                raise ApiError(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, f"{relative} ist im Remote nicht UTF-8-kodiert.") from exc
-            validation = validate_yaml(text)
-            if not validation["valid"]:
-                raise ApiError(HTTPStatus.UNPROCESSABLE_ENTITY, f"{relative} ist im Remote kein gültiges YAML.", validation)
+        validate_remote_yaml(reference, relative)
         if absolute.is_file():
             create_backup(backup_relative, absolute)
     return changed
 
 
+def prepare_remote_history_merge(branch: str) -> list[str]:
+    reference = f"refs/remotes/{GIT_REMOTE_NAME}/{branch}"
+    output = run_git(["ls-tree", "-r", "--name-only", reference]).stdout.decode("utf-8", errors="replace")
+    paths = [path for path in output.splitlines() if path]
+    for relative in paths:
+        if relative == "configuration.yaml":
+            absolute = configuration_file()
+            backup_relative = "configuration/configuration.yaml"
+            validate_remote_yaml(reference, relative)
+        elif relative.startswith("packages/"):
+            package_relative = relative.removeprefix("packages/")
+            _normalized, absolute = normalize_relative_path(package_relative)
+            backup_relative = package_relative
+            validate_remote_yaml(reference, relative)
+        elif safe_remote_auxiliary_path(relative):
+            validate_remote_auxiliary_file(reference, relative)
+            continue
+        else:
+            raise ApiError(
+                HTTPStatus.CONFLICT,
+                f"Der Remote enthält den nicht verwalteten Pfad {relative}. Die Historien werden nicht automatisch verbunden.",
+            )
+        if absolute.is_file():
+            create_backup(backup_relative, absolute)
+    return paths
+
+
 def synchronize_git_remote(action: str) -> dict[str, Any]:
-    if action not in {"fetch", "pull", "push", "sync"}:
+    if action not in {"fetch", "pull", "push", "sync", "merge", "force-push"}:
         raise ApiError(HTTPStatus.BAD_REQUEST, "Unbekannte Git-Synchronisationsaktion.")
     config = load_git_remote_config()
     if not config.get("url"):
@@ -677,9 +732,58 @@ def synchronize_git_remote(action: str) -> dict[str, Any]:
                     config,
                 )
             ahead, behind = git_ahead_behind(branch)
+            if action == "merge":
+                if not remote_exists:
+                    raise ApiError(HTTPStatus.CONFLICT, "Der Remote-Branch existiert noch nicht und muss nur regulär gepusht werden.")
+                prepare_remote_history_merge(branch)
+                merge = run_git(
+                    [
+                        "-c", "user.name=YAML Script Manager",
+                        "-c", "user.email=yaml-script-manager@local",
+                        "merge", "--allow-unrelated-histories", "--no-edit", "--no-gpg-sign", reference,
+                    ],
+                    allowed_codes=(0, 1),
+                )
+                if merge.returncode != 0:
+                    run_git(["merge", "--abort"], allowed_codes=(0, 1, 128))
+                    raise ApiError(
+                        HTTPStatus.CONFLICT,
+                        "Die Historien konnten wegen Dateikonflikten nicht automatisch verbunden werden. Verwende einen externen Git-Client oder ersetze den Remote bewusst mit dem lokalen Stand.",
+                    )
+                configuration_check = check_home_assistant_configuration()
+                run_git_remote(
+                    ["push", "--set-upstream", GIT_REMOTE_NAME, f"HEAD:refs/heads/{branch}"],
+                    config,
+                )
+                run_git(["update-ref", reference, "HEAD"])
+                ahead, behind = git_ahead_behind(branch)
+            elif action == "force-push":
+                if not remote_exists:
+                    raise ApiError(HTTPStatus.CONFLICT, "Der Remote-Branch existiert noch nicht. Verwende einen regulären Push.")
+                remote_commit = remote_check.stdout.decode("ascii", errors="ignore").split(None, 1)[0]
+                run_git_remote(
+                    [
+                        "push",
+                        f"--force-with-lease=refs/heads/{branch}:{remote_commit}",
+                        "--set-upstream",
+                        GIT_REMOTE_NAME,
+                        f"HEAD:refs/heads/{branch}",
+                    ],
+                    config,
+                )
+                run_git(["update-ref", reference, "HEAD"])
+                ahead, behind = git_ahead_behind(branch)
             if action in {"pull", "sync"} and remote_exists:
                 if ahead and behind:
-                    raise ApiError(HTTPStatus.CONFLICT, "Lokaler und Remote-Stand sind auseinander gelaufen. Bitte extern zusammenführen.")
+                    raise ApiError(
+                        HTTPStatus.CONFLICT,
+                        "Lokaler und Remote-Stand sind auseinander gelaufen.",
+                        {
+                            "ahead": ahead,
+                            "behind": behind,
+                            "resolutionOptions": ["merge", "force-push"],
+                        },
+                    )
                 if behind:
                     prepare_remote_fast_forward(branch)
                     run_git(["merge", "--ff-only", reference])
@@ -692,6 +796,7 @@ def synchronize_git_remote(action: str) -> dict[str, Any]:
                     ["push", "--set-upstream", GIT_REMOTE_NAME, f"HEAD:refs/heads/{branch}"],
                     config,
                 )
+                run_git(["update-ref", reference, "HEAD"])
             config["lastSync"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
             save_git_remote_file(config)
         except GitOperationError as exc:
@@ -2502,7 +2607,7 @@ def helper_data() -> dict[str, Any]:
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "YamlScriptManager/0.7"
+    server_version = "YamlScriptManager/0.8"
 
     def log_message(self, format_string: str, *args: Any) -> None:
         print(f"{self.address_string()} - {format_string % args}", flush=True)

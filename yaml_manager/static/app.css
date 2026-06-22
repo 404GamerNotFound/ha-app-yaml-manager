@@ -324,9 +324,11 @@ dialog.history-dialog, dialog.conflict-dialog { width: min(920px, calc(100vw - 2
 .conflict-item small { color: var(--muted); font-size: 10px; }
 .conflict-files { color: var(--primary-dark) !important; font-family: var(--font-code); overflow-wrap: anywhere; }
 
-dialog.admin-dialog, dialog.transfer-dialog { width: min(1040px, calc(100vw - 28px)); height: min(820px, calc(100vh - 28px)); max-width: none; max-height: none; }
-.admin-dialog[open], .transfer-dialog[open] { display: block; }
-.admin-dialog-content, .transfer-dialog-content { height: 100%; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); }
+.dashboard-page { height: calc(100vh - 64px); min-height: 0; background: var(--surface-soft); }
+.dashboard-page-content { width: min(1120px, 100%); height: 100%; min-height: 0; margin: 0 auto; display: grid; grid-template-rows: auto minmax(0, 1fr); background: var(--surface); border-inline: 1px solid var(--border); }
+dialog.transfer-dialog { width: min(1040px, calc(100vw - 28px)); height: min(820px, calc(100vh - 28px)); max-width: none; max-height: none; }
+.transfer-dialog[open] { display: block; }
+.transfer-dialog-content { height: 100%; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); }
 .admin-dialog-header { margin: 0; padding: 16px 18px 12px; border-bottom: 1px solid var(--border); }
 .dashboard-body, .transfer-body { min-height: 0; padding: 16px; overflow-y: auto; display: grid; align-content: start; gap: 14px; background: var(--surface-soft); }
 .quality-overview { display: grid; grid-template-columns: 145px minmax(0, 1fr); gap: 14px; }
@@ -357,6 +359,10 @@ dialog.admin-dialog, dialog.transfer-dialog { width: min(1040px, calc(100vw - 28
 .remote-form input:focus, .transfer-controls input:focus, .transfer-controls select:focus { border-color: var(--primary); }
 .remote-clear { margin-top: 9px; display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 10px; }
 .security-notice { margin: 9px 0; padding: 8px 10px; color: #7a4b00; background: rgba(210, 138, 25, .08); border-radius: 7px; font-size: 10px; }
+.remote-resolution { margin: 10px 0; padding: 11px; color: var(--danger); background: rgba(217, 74, 74, .07); border: 1px solid rgba(217, 74, 74, .28); border-radius: 8px; }
+.remote-resolution > strong { font-size: 12px; }
+.remote-resolution p, .remote-resolution small { display: block; margin: 3px 0 8px; color: var(--muted); font-size: 10px; }
+.remote-resolution div { display: flex; flex-wrap: wrap; gap: 7px; }
 .remote-actions { display: flex; flex-wrap: wrap; gap: 7px; }
 .remote-actions .warning { margin-left: auto; }
 .transfer-body { grid-template-columns: 1fr; }
@@ -432,7 +438,9 @@ dialog.admin-dialog, dialog.transfer-dialog { width: min(1040px, calc(100vw - 28
   #editor, #highlighting { padding-left: 12px; }
   dialog.configuration-dialog { width: calc(100vw - 12px); height: calc(100vh - 12px); }
   dialog.history-dialog, dialog.conflict-dialog { width: calc(100vw - 12px); height: calc(100vh - 12px); }
-  dialog.admin-dialog, dialog.transfer-dialog { width: calc(100vw - 12px); height: calc(100vh - 12px); }
+  dialog.transfer-dialog { width: calc(100vw - 12px); height: calc(100vh - 12px); }
+  .dashboard-page { height: calc(100vh - 56px); }
+  .dashboard-page-content { border-inline: 0; }
   .configuration-toolbar { align-items: stretch; flex-wrap: wrap; padding: 8px; }
   .configuration-actions { width: 100%; flex-wrap: wrap; }
   .configuration-actions .button { flex: 1; }

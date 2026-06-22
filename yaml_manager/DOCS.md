@@ -157,14 +157,30 @@ Die Synchronisation erfolgt ausschließlich nach einer manuellen Aktion:
 - **Push** überträgt den lokalen `HEAD` auf den konfigurierten Remote-Branch.
 - **Sicher synchronisieren** führt Fetch, einen möglichen Fast-forward und Push aus.
 
-Sind lokale und entfernte Historie divergiert, bricht die App ab. Pull und Sync
-werden ebenfalls abgebrochen, wenn der Remote-Stand Dateien außerhalb von
-`configuration.yaml` und `packages/` verändern würde. Die App führt keine
-automatischen Rebases, Force-Pushes oder Merge-Commits aus.
+Sind lokale und entfernte Historie divergiert, zeigt das Dashboard zwei
+Auflösungswege:
+
+- **Historien verbinden** ist für ein neu angelegtes Remote mit eigenem README-
+  oder Lizenz-Commit vorgesehen. Die App prüft den Remote-Baum, sichert lokale
+  YAML-Dateien, führt einen Merge mit `--allow-unrelated-histories` aus und pusht
+  den gemeinsamen Stand. Bei Dateikonflikten wird der Merge vollständig
+  abgebrochen.
+- **Remote durch lokalen Stand ersetzen** verwendet `force-with-lease`. Dadurch
+  wird nur gepusht, wenn der Remote-Branch seit dem letzten Fetch unverändert
+  geblieben ist. Die bisherige Remote-Historie wird dabei bewusst verworfen.
+
+Automatisch übernommene Remote-Pfade bleiben auf `configuration.yaml`, gültige
+Package-YAML-Dateien sowie README, LICENSE, CHANGELOG, `.gitignore` und
+`.gitattributes` beschränkt. Andere Pfade, Symlinks, zu große Dateien und
+ungültiges YAML führen zum Abbruch. Automatische Rebases und ungeschützte
+Force-Pushes werden nicht ausgeführt.
 
 ## Qualitätsdashboard
 
-Das Dashboard kombiniert die globale Package-Konfliktprüfung mit Betriebs- und
+Das Dashboard ist die Startseite der App. Über **Scripts öffnen** gelangt man in
+den bisherigen Script-Arbeitsbereich; die Schaltfläche **Dashboard** führt zurück,
+ohne den geöffneten Editorstand zu verwerfen. Das Dashboard kombiniert die
+globale Package-Konfliktprüfung mit Betriebs- und
 Git-Daten. Angezeigt werden Package-Dateien, Script-Anzahl, Fehler, Warnungen,
 Backups, Git-Ahead/Behind und ein daraus berechneter Qualitätswert.
 

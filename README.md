@@ -124,12 +124,19 @@ bleiben unangetastet. Die Git-Historie in beiden Editoren bietet Commit-Metadate
 Unified Diffs und eine konfliktgeschützte Wiederherstellung. Das bestehende
 Datei-Backup wird dabei weiterhin zusätzlich angelegt.
 
-Das Qualitätsdashboard fasst Package-Konflikte, mögliche ungenutzte Scripts,
-Backup-Anzahl und Git-Remote-Status zusammen. Ein optionaler HTTPS-Remote für
-GitHub.com oder GitLab.com kann manuell per Fetch, Pull, Push oder sicherer
+Das Qualitätsdashboard ist die Startseite der App und fasst Package-Konflikte,
+mögliche ungenutzte Scripts, Backup-Anzahl und Git-Remote-Status zusammen. Ein
+optionaler HTTPS-Remote für GitHub.com oder GitLab.com kann manuell per Fetch,
+Pull, Push oder sicherer
 Synchronisation bedient werden. Das Token wird mit Dateimodus `0600` unter
 `/data` gespeichert, nie an das Frontend zurückgesendet und nicht in
 `.git/config` geschrieben.
+
+Bei einer divergierten Historie bietet das Dashboard zwei bewusste Lösungen:
+**Historien verbinden** übernimmt einen typischen initialen README-/Lizenz-Commit
+und erzeugt einen gemeinsamen Merge. **Remote durch lokalen Stand ersetzen**
+verwendet `force-with-lease` und verwirft die bisherige Remote-Historie nur,
+solange sie seit dem letzten Fetch nicht erneut geändert wurde.
 
 Package-Dateien lassen sich einzeln, kategorieweise oder vollständig als ZIP
 exportieren. Der Import prüft Archivpfade, Größenlimits, UTF-8, YAML und die

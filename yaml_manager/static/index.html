@@ -27,7 +27,7 @@
       </div>
     </header>
 
-    <main class="workspace">
+    <main class="workspace hidden" id="workspace">
       <aside class="sidebar" id="sidebar">
         <div class="sidebar-header">
           <label class="search-field">
@@ -298,14 +298,14 @@
       </div>
     </dialog>
 
-    <dialog class="admin-dialog" id="dashboard-dialog">
-      <div class="admin-dialog-content">
+    <section class="dashboard-page" id="dashboard-dialog">
+      <div class="dashboard-page-content">
         <div class="dialog-header admin-dialog-header">
           <div>
             <h2>Konfigurationsqualität</h2>
             <p>Konflikte, Script-Nutzung, Sicherungen und Git-Status auf einen Blick.</p>
           </div>
-          <button class="icon-button" id="dashboard-close" type="button" aria-label="Dashboard schließen">×</button>
+          <button class="button primary" id="dashboard-close" type="button">Scripts öffnen</button>
         </div>
         <div class="dashboard-body">
           <section class="quality-overview">
@@ -332,6 +332,15 @@
             </div>
             <label class="remote-clear"><input id="remote-clear-token" type="checkbox"> Gespeichertes Token entfernen</label>
             <p class="security-notice">Tokens werden mit Dateirechten 0600 unter /data gespeichert und weder angezeigt noch in die Remote-URL geschrieben. Ein Push kann sensible Konfigurationsdaten übertragen; verwende ein privates Repository.</p>
+            <div class="remote-resolution hidden" id="remote-resolution">
+              <strong>Lokaler und Remote-Stand sind auseinander gelaufen</strong>
+              <p>Das passiert häufig, wenn das neue Remote bereits einen README-Commit enthält.</p>
+              <div>
+                <button class="button primary" id="remote-merge" type="button">Historien verbinden</button>
+                <button class="button warning" id="remote-force-push" type="button">Remote durch lokalen Stand ersetzen</button>
+              </div>
+              <small><b>Historien verbinden</b> übernimmt harmlose README-/Lizenzdateien und erzeugt einen Merge. <b>Ersetzen</b> verwirft die bisherige Remote-Historie mit einem geschützten Force-Push.</small>
+            </div>
             <div class="remote-actions">
               <button class="button primary" id="remote-save" type="button">Remote speichern</button>
               <button class="button secondary" id="remote-fetch" type="button">Fetch</button>
@@ -343,7 +352,7 @@
           </section>
         </div>
       </div>
-    </dialog>
+    </section>
 
     <dialog class="transfer-dialog" id="transfer-dialog">
       <div class="transfer-dialog-content">
