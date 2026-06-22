@@ -20,7 +20,7 @@ def create_handler(backend: Any) -> type[BaseHTTPRequestHandler]:
     """Bind the transport layer to a backend module with the service functions."""
 
     class Handler(BaseHTTPRequestHandler):
-        server_version = "YamlScriptManager/0.10"
+        server_version = "YamlScriptManager/0.11"
 
         def log_message(self, format_string: str, *args: Any) -> None:
             print(f"{self.address_string()} - {format_string % args}", flush=True)
@@ -117,12 +117,21 @@ def create_handler(backend: Any) -> type[BaseHTTPRequestHandler]:
                             query.get("commit", [""])[0],
                         ),
                     )
+                elif path == "/api/git/branches":
+                    self.send_json(HTTPStatus.OK, backend.git_branches())
                 elif path == "/api/package-conflicts":
                     self.send_json(HTTPStatus.OK, backend.package_conflict_analysis())
                 elif path == "/api/dependencies":
                     self.send_json(
                         HTTPStatus.OK,
                         backend.script_dependency_analysis(query.get("path", [""])[0]),
+                    )
+                elif path == "/api/ha-objects":
+                    self.send_json(HTTPStatus.OK, backend.home_assistant_objects())
+                elif path == "/api/resource":
+                    self.send_json(
+                        HTTPStatus.OK,
+                        backend.read_resource(query.get("path", [""])[0]),
                     )
                 elif path == "/api/dashboard":
                     self.send_json(HTTPStatus.OK, backend.configuration_quality_dashboard())
@@ -205,6 +214,25 @@ def create_handler(backend: Any) -> type[BaseHTTPRequestHandler]:
                             body.get("stateVersion", ""),
                         ),
                     )
+                elif path == "/api/search-replace/preview":
+                    self.send_json(
+                        HTTPStatus.OK,
+                        backend.search_replace_preview(
+                            body.get("search"),
+                            body.get("replacement"),
+                            body.get("caseSensitive", True),
+                        ),
+                    )
+                elif path == "/api/search-replace/apply":
+                    self.send_json(
+                        HTTPStatus.OK,
+                        backend.apply_search_replace(
+                            body.get("search"),
+                            body.get("replacement"),
+                            body.get("caseSensitive", True),
+                            body.get("stateVersion"),
+                        ),
+                    )
                 elif path == "/api/configuration/enable-packages":
                     self.send_json(
                         HTTPStatus.OK,
@@ -247,6 +275,28 @@ def create_handler(backend: Any) -> type[BaseHTTPRequestHandler]:
                             body.get("path", ""),
                             body.get("commit", ""),
                             body.get("version"),
+                        ),
+                    )
+                elif path == "/api/git/branches/create":
+                    self.send_json(
+                        HTTPStatus.OK,
+                        backend.create_git_branch(body.get("branch", "")),
+                    )
+                elif path == "/api/git/branches/switch":
+                    self.send_json(
+                        HTTPStatus.OK,
+                        backend.switch_git_branch(body.get("branch", "")),
+                    )
+                elif path == "/api/git/branches/compare":
+                    self.send_json(
+                        HTTPStatus.OK,
+                        backend.branch_merge_preview(body.get("branch", "")),
+                    )
+                elif path == "/api/git/branches/merge":
+                    self.send_json(
+                        HTTPStatus.OK,
+                        backend.merge_git_branch(
+                            body.get("branch", ""), body.get("stateVersion")
                         ),
                     )
                 elif path == "/api/git/remote/sync":
@@ -293,6 +343,12 @@ def create_handler(backend: Any) -> type[BaseHTTPRequestHandler]:
                 elif path == "/api/configuration":
                     result = backend.write_configuration(
                         body.get("content", ""), body.get("version")
+                    )
+                elif path == "/api/resource":
+                    result = backend.write_resource(
+                        body.get("path", ""),
+                        body.get("content", ""),
+                        body.get("version"),
                     )
                 elif path == "/api/git/remote":
                     result = backend.update_git_remote(body)

@@ -1,7 +1,7 @@
 # Home Assistant YAML Script Manager
 
-Eine Home-Assistant-App zum Kategorisieren und Bearbeiten von YAML-Skripten im
-Verzeichnis `/config/packages`.
+Eine Home-Assistant-App zum Kategorisieren und Bearbeiten von YAML-Skripten,
+Automationen, Szenen und zugehörigen YAML-Ressourcen.
 
 ## Funktionen
 
@@ -10,6 +10,9 @@ Verzeichnis `/config/packages`.
 - Kontextbezogene Script-Prüfung für doppelte Schlüssel, Script-IDs und Entitäten
 - Script-Abhängigkeitsansicht mit Sprung zu Verwendung und Definition
 - Vorschau-basierte Script-ID-Umbenennung einschließlich erkannter Referenzen
+- Objektbrowser für Automationen, Scripts und Szenen aus Packages und Includes
+- Geschützter Editor für `automations.yaml`, `scripts.yaml`, `scenes.yaml` und Include-Verzeichnisse
+- Multi-Datei-Suche und Ersetzung mit Vorschau, Backups und gemeinsamem Git-Commit
 - Schutz vor dem Überschreiben parallel geänderter Dateien
 - Vorlagen für Aktionen, Bedingungen, Verzögerungen, Auswahl und Wiederholungen
 - Suche nach Home-Assistant-Entitäten und -Diensten
@@ -22,6 +25,7 @@ Verzeichnis `/config/packages`.
 - Automatische Home-Assistant-Konfigurationsprüfung nach Konfigurationsänderungen
 - Versionsverlauf mit Diff und Wiederherstellung für Konfiguration und Packages
 - Automatische lokale Git-Commits mit Historie, Diff und Wiederherstellung
+- Git-Branches anzeigen, erstellen, wechseln, vergleichen und konfliktgeprüft zusammenführen
 - Optionaler manueller GitHub-/GitLab-Remote-Sync mit geschützter Token-Ablage
 - Globale Package-Konfliktprüfung nach den Home-Assistant-Merge-Regeln
 - Qualitätsdashboard für Konflikte, Warnungen, Script-Nutzung, Backups und Git
@@ -95,6 +99,28 @@ Package-Bestand verhindert die Anwendung einer veralteten Vorschau. Alle
 Ergebnisse werden vorab als YAML und gegen neu entstehende Package-Konflikte
 geprüft, gesichert, atomar geschrieben und gemeinsam in Git versioniert. Bei
 einem Schreibfehler werden bereits ausgetauschte Dateien zurückgerollt.
+
+Der HA-Objektindex liest zusätzlich die Top-Level-Bereiche `automation`,
+`script` und `scene` aus `configuration.yaml`. Scalar-Includes über `!include`
+sowie die vier `!include_dir_*`-Varianten werden innerhalb des
+Konfigurationsverzeichnisses verfolgt. Gemeinsam mit den Packages entsteht so
+eine durchsuchbare Liste aus Automationen, Scripts und Szenen. Ausgelagerte
+Dateien werden nur bearbeitet, wenn sie über einen dieser Bereiche tatsächlich
+eingebunden sind. Schreibvorgänge verwenden SHA-256-Konfliktschutz, YAML-Prüfung,
+Backups, atomaren Austausch, Git und die Home-Assistant-Konfigurationsprüfung.
+
+Die Multi-Datei-Ersetzung arbeitet auf `configuration.yaml`, allen Packages und
+den erkannten HA-Includes. Die Vorschau enthält Trefferzahl, Dateien und Zeilen.
+Ein Hash über den vollständigen verwalteten Dateibestand macht die Vorschau bei
+Paralleländerungen ungültig. Vor dem gemeinsamen Schreibvorgang werden alle
+Ergebnisse als YAML validiert und neue Package-Konflikte ausgeschlossen.
+
+Die Branch-Verwaltung arbeitet ausschließlich mit lokalen Git-Branches. Vor
+einem Wechsel oder Merge wird der aktuelle verwaltete Stand eingecheckt. Ein
+Vergleich bindet Branch-Kopf und Ziel-Commit kryptografisch an die anschließende
+Merge-Aktion. Ziel-YAML wird vorab geprüft; der Merge bleibt zunächst ohne
+Commit, wird erneut validiert und bei Konflikten oder ungültigem YAML über
+`git merge --abort` vollständig abgebrochen.
 
 Das Frontend ist ohne externe Laufzeitabhängigkeiten umgesetzt. HTML, CSS und
 JavaScript werden direkt von der App ausgeliefert und funktionieren unter dem von

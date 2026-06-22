@@ -1,7 +1,7 @@
 name: YAML Script Manager
-version: "0.10.0"
+version: "0.11.0"
 slug: yaml_script_manager
-description: Verwalten und bearbeiten von Home-Assistant-Skripten in packages
+description: YAML-Skripte, Automationen, Szenen und Packages verwalten
 url: https://github.com/tonybruser/ha-app-yaml-manager
 arch:
   - aarch64

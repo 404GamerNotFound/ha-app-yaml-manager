@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.11.0 - 2026-06-22
+
+- Lokale Git-Branches anzeigen, erstellen und sicher wechseln
+- Branch-Vergleich mit Ahead/Behind, Dateiliste, Unified Diff und gebundener Merge-Vorschau
+- Merge-Abbruch bei Konflikten oder ungültigem YAML vor dem Commit
+- Multi-Datei-Suche und Ersetzung über Konfiguration, Packages und HA-Includes
+- Transaktionale Ersetzung mit Zustandshash, YAML-/Konfliktprüfung, Backups, Rollback und Git
+- Objektbrowser für Automationen, Scripts und Szenen inklusive Referenzen
+- Erkennung von `!include` und allen `!include_dir_*`-Varianten
+- Geschützter Ressourceneditor für ausgelagerte Home-Assistant-YAML-Dateien
+- Sechs neue Tests für Branches, Objektindex, Ressourceneditor und globale Ersetzung
+
 ## 0.10.0 - 2026-06-22
 
 - Script-Abhängigkeitsansicht mit Definitionen sowie ein- und ausgehenden Bezügen

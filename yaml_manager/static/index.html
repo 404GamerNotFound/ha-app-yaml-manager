@@ -18,6 +18,8 @@
         </div>
       </div>
       <div class="topbar-actions">
+        <button class="button secondary" id="objects-button" aria-label="Home-Assistant-Objekte">HA-Objekte</button>
+        <button class="button secondary" id="search-replace-button" aria-label="Mehrere Dateien durchsuchen">Suchen/Ersetzen</button>
         <button class="button secondary" id="transfer-button" aria-label="Import und Export">Import/Export</button>
         <button class="button secondary" id="configuration-button"><span class="desktop-label">configuration.yaml</span><span class="mobile-label">Config</span></button>
         <button class="button secondary" id="reload-button" title="script.reload ausführen">Skripte neu laden</button>
@@ -331,6 +333,22 @@
             </div>
             <div class="dashboard-findings" id="dashboard-findings"></div>
           </section>
+          <section class="admin-section git-branch-section">
+            <div class="admin-section-heading">
+              <div><h3>Git Branches</h3><p id="branch-status">Branches werden geladen.</p></div>
+              <span class="remote-badge" id="branch-current">–</span>
+            </div>
+            <div class="branch-controls">
+              <label><span>Neuer Branch</span><input id="branch-new-name" placeholder="feature/meine-aenderung"></label>
+              <button class="button primary" id="branch-create" type="button">Erstellen</button>
+              <label><span>Vorhandener Branch</span><select id="branch-select"></select></label>
+              <button class="button secondary" id="branch-switch" type="button">Wechseln</button>
+              <button class="button secondary" id="branch-compare" type="button">Vergleichen</button>
+              <button class="button warning" id="branch-merge" type="button" disabled>Geprüft zusammenführen</button>
+            </div>
+            <div class="branch-summary" id="branch-summary">Noch kein Branch-Vergleich ausgeführt.</div>
+            <pre class="branch-diff hidden" id="branch-diff"></pre>
+          </section>
           <section class="admin-section git-remote-section">
             <div class="admin-section-heading">
               <div><h3>Git Remote</h3><p id="remote-status">Noch nicht konfiguriert</p></div>
@@ -395,6 +413,72 @@
             <div class="import-summary" id="import-summary">Noch kein Archiv geprüft.</div>
             <div class="import-preview-list" id="import-preview-list"></div>
           </section>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog class="transfer-dialog" id="objects-dialog">
+      <div class="transfer-dialog-content">
+        <div class="dialog-header admin-dialog-header">
+          <div>
+            <h2>Home-Assistant-Objekte</h2>
+            <p>Automationen, Scripts, Szenen und ihre Referenzen direkt finden.</p>
+          </div>
+          <button class="icon-button" id="objects-close" type="button" aria-label="Objektübersicht schließen">×</button>
+        </div>
+        <div class="object-browser-body">
+          <div class="object-toolbar">
+            <label class="search-field"><span aria-hidden="true">⌕</span><input id="object-search" type="search" placeholder="Alias, ID oder Datei suchen"></label>
+            <select id="object-domain"><option value="">Alle Typen</option><option value="automation">Automationen</option><option value="script">Scripts</option><option value="scene">Szenen</option></select>
+            <button class="button secondary" id="objects-refresh" type="button">Aktualisieren</button>
+          </div>
+          <div class="import-summary" id="objects-summary">Objekte werden geladen.</div>
+          <div class="object-list" id="object-list"></div>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog class="configuration-dialog" id="resource-dialog">
+      <div class="configuration-dialog-content resource-dialog-content">
+        <div class="dialog-header configuration-dialog-header">
+          <div><h2 id="resource-title">HA-Ressource</h2><p id="resource-path"></p></div>
+          <button class="icon-button" id="resource-close" type="button" aria-label="Ressourceneditor schließen">×</button>
+        </div>
+        <div class="configuration-toolbar">
+          <span>Direkt eingebundene Home-Assistant-YAML-Datei</span>
+          <button class="button primary" id="resource-save" type="button" disabled>Speichern</button>
+        </div>
+        <div class="configuration-editor-shell resource-editor-shell">
+          <div class="line-numbers" id="resource-line-numbers" aria-hidden="true">1</div>
+          <div class="code-layer">
+            <pre id="resource-highlighting" aria-hidden="true"><code></code></pre>
+            <textarea id="resource-editor" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="HA-Ressourcen-Editor"></textarea>
+          </div>
+        </div>
+        <footer class="configuration-statusbar">
+          <button class="validation-status neutral" id="resource-validation" type="button">Bereit</button>
+          <span id="resource-cursor">Zeile 1, Spalte 1</span>
+          <span>UTF-8 · YAML</span>
+        </footer>
+      </div>
+    </dialog>
+
+    <dialog id="search-replace-dialog" class="transfer-dialog">
+      <div class="transfer-dialog-content search-replace-content">
+        <div class="dialog-header admin-dialog-header">
+          <div><h2>Multi-Datei-Suche und Ersetzen</h2><p>Packages, configuration.yaml und eingebundene HA-Ressourcen gemeinsam ändern.</p></div>
+          <button class="icon-button" id="search-replace-close" type="button" aria-label="Suchen und Ersetzen schließen">×</button>
+        </div>
+        <div class="search-replace-body">
+          <div class="search-replace-controls">
+            <label><span>Suchen nach</span><input id="replace-search" autocomplete="off"></label>
+            <label><span>Ersetzen durch</span><input id="replace-value" autocomplete="off"></label>
+            <label class="remote-clear"><input id="replace-case-sensitive" type="checkbox" checked> Groß-/Kleinschreibung beachten</label>
+            <button class="button secondary" id="replace-preview" type="button">Vorschau</button>
+            <button class="button warning" id="replace-apply" type="button" disabled>Geprüfte Ersetzung anwenden</button>
+          </div>
+          <div class="import-summary" id="replace-summary">Noch keine Vorschau erstellt.</div>
+          <div class="import-preview-list" id="replace-file-list"></div>
         </div>
       </div>
     </dialog>

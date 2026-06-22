@@ -67,6 +67,19 @@ def _walk_references(
     if isinstance(node, yaml.MappingNode):
         for key_node, value_node in node.value:
             key = key_node.value if isinstance(key_node, yaml.ScalarNode) else None
+            if parent_key == "entities" and isinstance(key_node, yaml.ScalarNode):
+                for match in ENTITY_ID_PATTERN.finditer(key_node.value):
+                    entity_id = match.group(1)
+                    domain = entity_id.split(".", 1)[0]
+                    result.append(
+                        {
+                            "source": source,
+                            "target": entity_id,
+                            "type": domain if domain in {"script", "scene"} else "entity",
+                            "path": path,
+                            "line": key_node.start_mark.line + 1,
+                        }
+                    )
             _walk_references(value_node, source, path, result, key)
     elif isinstance(node, yaml.SequenceNode):
         for child in node.value:

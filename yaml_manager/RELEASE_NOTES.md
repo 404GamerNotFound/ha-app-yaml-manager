@@ -1,6 +1,28 @@
-# Release Notes 0.10.0
+# Release Notes 0.11.0
 
 Veröffentlicht am 22. Juni 2026.
+
+## Git-Branch-Verwaltung
+
+Lokale Branches können im Dashboard angezeigt, erstellt und gewechselt werden.
+Vor einem Merge zeigt die App Ahead/Behind, betroffene Dateien und einen Unified
+Diff. Konflikte und ungültiges YAML brechen den noch nicht eingecheckten Merge
+automatisch ab.
+
+## Multi-Datei-Suche und Ersetzen
+
+`configuration.yaml`, Packages und erkannte HA-Includes können gemeinsam
+durchsucht und nach einer Vorschau geändert werden. Zustandshash, YAML- und
+Konfliktprüfung, Backups, Rollback und ein gemeinsamer Git-Commit schützen den
+Vorgang.
+
+## Automationen, Scripts und Szenen
+
+Der neue HA-Objektbrowser folgt den entsprechenden Bereichen aus
+`configuration.yaml`, `!include`, Include-Verzeichnissen und Packages. Objekte
+und Referenzen sind durchsuchbar und öffnen direkt den passenden Editor. Für
+`automations.yaml`, `scripts.yaml`, `scenes.yaml` und weitere eingebundene
+Dateien steht ein geschützter YAML-Ressourceneditor bereit.
 
 ## Script-Abhängigkeiten
 
@@ -41,6 +63,11 @@ Qualitätsprüfung, Git-Divergenzauflösung, Git-Historie sowie ZIP-Import und
 
 ## Technische API-Erweiterungen
 
+- `GET /api/git/branches`
+- `POST /api/git/branches/create|switch|compare|merge`
+- `POST /api/search-replace/preview|apply`
+- `GET /api/ha-objects`
+- `GET|PUT /api/resource`
 - `GET /api/dependencies`
 - `POST /api/script/rename-preview`
 - `POST /api/script/rename`

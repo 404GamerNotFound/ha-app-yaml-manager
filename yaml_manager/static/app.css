@@ -237,6 +237,26 @@ button.analysis-finding:hover { border-color: var(--primary); }
 .dependency-actions { display: flex; gap: 4px; flex: none; }
 .dependency-action { padding: 4px 6px; color: var(--primary-dark); background: var(--primary-soft); border: 0; border-radius: 5px; cursor: pointer; font-size: 9px; font-weight: 700; }
 .dependency-empty { padding: 9px; color: var(--muted); background: var(--surface-soft); border-radius: 8px; font-size: 10px; }
+.branch-controls { display: grid; grid-template-columns: minmax(180px, 1fr) auto minmax(180px, 1fr) repeat(3, auto); gap: 8px; align-items: end; }
+.branch-controls label, .search-replace-controls label { display: grid; gap: 5px; color: var(--muted); font-size: 10px; }
+.branch-controls input, .branch-controls select, .search-replace-controls input, .object-toolbar select { height: 34px; padding: 0 9px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 7px; }
+.branch-summary { margin-top: 12px; padding: 9px 10px; color: var(--muted); background: var(--surface-soft); border-radius: 7px; font-size: 11px; }
+.branch-diff { max-height: 280px; margin: 10px 0 0; padding: 12px; overflow: auto; color: var(--text); background: var(--editor-bg); border: 1px solid var(--border); border-radius: 8px; font: 11px/1.45 var(--font-code); white-space: pre; }
+.object-browser-body, .search-replace-body { min-height: 0; padding: 16px 18px; overflow: auto; }
+.object-toolbar { display: grid; grid-template-columns: minmax(220px, 1fr) 180px auto; gap: 8px; margin-bottom: 10px; }
+.object-toolbar .search-field { height: 34px; }
+.object-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; margin-top: 12px; }
+.object-item { padding: 11px; display: grid; gap: 5px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 9px; cursor: pointer; text-align: left; }
+.object-item:hover { border-color: var(--primary); background: var(--primary-soft); }
+.object-item-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.object-item strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.object-item small { color: var(--muted); font-size: 10px; }
+.object-kind { padding: 2px 6px; color: var(--primary-dark); background: var(--primary-soft); border-radius: 999px; font-size: 9px; font-weight: 700; text-transform: uppercase; }
+.object-references { overflow: hidden; color: var(--muted); font: 10px var(--font-code); text-overflow: ellipsis; white-space: nowrap; }
+.resource-dialog-content { grid-template-rows: auto auto minmax(0, 1fr) 32px; }
+.resource-editor-shell { min-height: 0; }
+.search-replace-content { grid-template-rows: auto minmax(0, 1fr); }
+.search-replace-controls { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) auto auto auto; gap: 8px; align-items: end; }
 .snippet-list { display: grid; gap: 7px; }
 .snippet {
   width: 100%; display: grid; grid-template-columns: 34px 1fr; gap: 9px; align-items: center; padding: 9px;
@@ -295,14 +315,14 @@ dialog.configuration-dialog { width: min(1080px, calc(100vw - 28px)); height: mi
 .home-assistant-check.invalid[data-line]:not([data-line=""]) { cursor: pointer; }
 .home-assistant-check.invalid[data-line]:not([data-line=""]):hover strong { text-decoration: underline; }
 .configuration-editor-shell { min-height: 0; display: grid; grid-template-columns: 52px minmax(0, 1fr); overflow: hidden; background: #fbfcfd; }
-#configuration-editor, #configuration-highlighting {
+#configuration-editor, #configuration-highlighting, #resource-editor, #resource-highlighting {
   position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 18px 20px 70px;
   overflow: auto; border: 0; outline: 0; white-space: pre; tab-size: 2; font: 13px/1.65 var(--font-code); letter-spacing: 0;
 }
-#configuration-highlighting { z-index: 1; pointer-events: none; color: #23313a; background: transparent; }
-#configuration-highlighting code { font: inherit; }
-#configuration-editor { z-index: 2; resize: none; color: transparent; caret-color: #17252d; background: transparent; -webkit-text-fill-color: transparent; }
-#configuration-editor::selection { background: rgba(3, 169, 244, .25); -webkit-text-fill-color: #17252d; }
+#configuration-highlighting, #resource-highlighting { z-index: 1; pointer-events: none; color: #23313a; background: transparent; }
+#configuration-highlighting code, #resource-highlighting code { font: inherit; }
+#configuration-editor, #resource-editor { z-index: 2; resize: none; color: transparent; caret-color: #17252d; background: transparent; -webkit-text-fill-color: transparent; }
+#configuration-editor::selection, #resource-editor::selection { background: rgba(3, 169, 244, .25); -webkit-text-fill-color: #17252d; }
 .configuration-statusbar { display: flex; align-items: center; justify-content: flex-end; gap: 14px; padding: 0 12px; color: var(--muted); background: var(--surface); border-top: 1px solid var(--border); font-size: 10px; }
 .configuration-statusbar .validation-status { margin-right: auto; }
 
@@ -406,12 +426,12 @@ dialog.transfer-dialog { width: min(1040px, calc(100vw - 28px)); height: min(820
     --text: #e6eef1; --muted: #98aab2; --primary-soft: #143848; --shadow: 0 8px 30px rgba(0, 0, 0, .35);
   }
   .editor-shell { background: #131c20; }
-  .configuration-editor-shell { background: #131c20; }
+  .configuration-editor-shell, .resource-editor-shell { background: #131c20; }
   .line-numbers { color: #65767e; background: #11191d; border-color: #29373d; }
   #highlighting { color: #d9e4e8; }
-  #configuration-highlighting { color: #d9e4e8; }
+  #configuration-highlighting, #resource-highlighting { color: #d9e4e8; }
   #editor { caret-color: #fff; }
-  #configuration-editor { caret-color: #fff; }
+  #configuration-editor, #resource-editor { caret-color: #fff; }
   #editor::selection { -webkit-text-fill-color: #fff; }
   .yaml-key { color: #6ab7e8; } .yaml-string { color: #76c89e; } .yaml-number { color: #e78db6; }
   .yaml-boolean { color: #c49aee; } .yaml-comment { color: #75878f; } .yaml-template { color: #f0a858; }
@@ -454,6 +474,7 @@ dialog.transfer-dialog { width: min(1040px, calc(100vw - 28px)); height: min(820
   dialog.configuration-dialog { width: calc(100vw - 12px); height: calc(100vh - 12px); }
   dialog.history-dialog, dialog.conflict-dialog { width: calc(100vw - 12px); height: calc(100vh - 12px); }
   dialog.transfer-dialog { width: calc(100vw - 12px); height: calc(100vh - 12px); }
+  .branch-controls, .search-replace-controls, .object-toolbar { grid-template-columns: 1fr; }
   .dashboard-page { top: 56px; left: 0; }
   .dashboard-page-content { border-inline: 0; }
   .configuration-toolbar { align-items: stretch; flex-wrap: wrap; padding: 8px; }
@@ -469,7 +490,7 @@ dialog.transfer-dialog { width: min(1040px, calc(100vw - 28px)); height: min(820
   .remote-form { grid-template-columns: 1fr; }
   .remote-actions .warning { margin-left: 0; }
   .configuration-editor-shell { grid-template-columns: 42px minmax(0, 1fr); }
-  #configuration-editor, #configuration-highlighting { padding-left: 12px; }
+  #configuration-editor, #configuration-highlighting, #resource-editor, #resource-highlighting { padding-left: 12px; }
   .configuration-statusbar span:last-child { display: none; }
   .history-body { grid-template-columns: 1fr; grid-template-rows: 180px minmax(0, 1fr); }
   .history-list { border-right: 0; border-bottom: 1px solid var(--border); }

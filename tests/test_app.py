@@ -311,6 +311,146 @@ class FileApiTests(unittest.TestCase):
         self.assertEqual(raised.exception.status, 409)
         self.assertIn("alt:", app.read_file("ziel.yaml")["content"])
 
+    def test_ha_objects_follow_includes_and_resolve_script_references(self):
+        configuration = app.PACKAGES_ROOT.parent / "configuration.yaml"
+        automations = app.PACKAGES_ROOT.parent / "automations.yaml"
+        scripts = app.PACKAGES_ROOT.parent / "scripts.yaml"
+        configuration.write_text(
+            "automation: !include automations.yaml\nscript: !include scripts.yaml\n",
+            encoding="utf-8",
+        )
+        automations.write_text(
+            "- id: abend_automation\n"
+            "  alias: Abendautomatik\n"
+            "  actions:\n"
+            "    - action: script.abend\n",
+            encoding="utf-8",
+        )
+        scripts.write_text(
+            "abend:\n  alias: Abend\n  sequence:\n    - action: light.turn_on\n      target:\n        entity_id: light.flur\n",
+            encoding="utf-8",
+        )
+        app.write_file(
+            "scene.yaml",
+            "scene:\n  abend_scene:\n    name: Abendszene\n    entities:\n      light.wohnzimmer: 'on'\n",
+            None,
+            "Tests",
+            create=True,
+        )
+
+        result = app.home_assistant_objects()
+
+        self.assertEqual(result["summary"]["automation"], 1)
+        self.assertEqual(result["summary"]["script"], 1)
+        self.assertEqual(result["summary"]["scene"], 1)
+        automation = next(item for item in result["objects"] if item["domain"] == "automation")
+        script = next(item for item in result["objects"] if item["domain"] == "script")
+        reference = next(item for item in result["references"] if item["target"] == "script.abend")
+        self.assertEqual(automation["editor"], "resource")
+        self.assertEqual(reference["targetObject"], script["key"])
+        self.assertTrue(any(item["target"] == "light.wohnzimmer" for item in result["references"]))
+
+    def test_external_ha_resource_can_be_edited_with_version_protection(self):
+        configuration = app.PACKAGES_ROOT.parent / "configuration.yaml"
+        automations = app.PACKAGES_ROOT.parent / "automations.yaml"
+        configuration.write_text("automation: !include automations.yaml\n", encoding="utf-8")
+        automations.write_text("- id: test\n  alias: Alt\n  actions: []\n", encoding="utf-8")
+        opened = app.read_resource("automations.yaml")
+
+        saved = app.write_resource(
+            "automations.yaml",
+            opened["content"].replace("alias: Alt", "alias: Neu"),
+            opened["version"],
+        )
+
+        self.assertIn("alias: Neu", saved["content"])
+        with self.assertRaises(app.ApiError) as raised:
+            app.write_resource("automations.yaml", opened["content"], opened["version"])
+        self.assertEqual(raised.exception.status, 409)
+
+    def test_ha_objects_support_named_script_and_list_automation_directories(self):
+        configuration = app.PACKAGES_ROOT.parent / "configuration.yaml"
+        script_directory = app.PACKAGES_ROOT.parent / "included_scripts"
+        automation_directory = app.PACKAGES_ROOT.parent / "included_automations"
+        script_directory.mkdir()
+        automation_directory.mkdir()
+        configuration.write_text(
+            "script: !include_dir_named included_scripts\n"
+            "automation: !include_dir_list included_automations\n",
+            encoding="utf-8",
+        )
+        (script_directory / "abend.yaml").write_text(
+            "alias: Abend\nsequence: []\n",
+            encoding="utf-8",
+        )
+        (automation_directory / "morgen.yaml").write_text(
+            "id: morgen\nalias: Morgen\nactions:\n  - action: script.abend\n",
+            encoding="utf-8",
+        )
+
+        result = app.home_assistant_objects()
+
+        script = next(item for item in result["objects"] if item["domain"] == "script")
+        automation = next(item for item in result["objects"] if item["domain"] == "automation")
+        self.assertEqual(script["entityId"], "script.abend")
+        self.assertEqual(automation["id"], "morgen")
+        self.assertTrue(any(item.get("targetObject") == script["key"] for item in result["references"]))
+
+    def test_multi_file_search_replace_updates_packages_and_ha_resources(self):
+        configuration = app.PACKAGES_ROOT.parent / "configuration.yaml"
+        automations = app.PACKAGES_ROOT.parent / "automations.yaml"
+        configuration.write_text("automation: !include automations.yaml\n", encoding="utf-8")
+        automations.write_text(
+            "- id: test\n  alias: Test\n  actions:\n    - action: script.alt\n",
+            encoding="utf-8",
+        )
+        app.write_file(
+            "suche.yaml",
+            "script:\n  aufruf:\n    sequence:\n      - action: script.alt\n",
+            None,
+            "Tests",
+            create=True,
+        )
+        preview = app.search_replace_preview("script.alt", "script.neu")
+
+        result = app.apply_search_replace(
+            "script.alt",
+            "script.neu",
+            True,
+            preview["stateVersion"],
+        )
+
+        self.assertEqual(result["matches"], 2)
+        self.assertIn("script.neu", automations.read_text(encoding="utf-8"))
+        self.assertIn("script.neu", app.read_file("suche.yaml")["content"])
+
+    def test_multi_file_search_replace_rejects_stale_preview(self):
+        created = app.write_file(
+            "stale_search.yaml",
+            "script:\n  alt:\n    alias: Alt\n    sequence: []\n",
+            None,
+            "Tests",
+            create=True,
+        )
+        preview = app.search_replace_preview("alias: Alt", "alias: Neu")
+        app.write_file(
+            created["path"],
+            created["content"].replace("sequence: []", "mode: single\n    sequence: []"),
+            created["version"],
+            "Tests",
+            create=False,
+        )
+
+        with self.assertRaises(app.ApiError) as raised:
+            app.apply_search_replace(
+                "alias: Alt",
+                "alias: Neu",
+                True,
+                preview["stateVersion"],
+            )
+
+        self.assertEqual(raised.exception.status, 409)
+
     def test_configuration_editor_reads_writes_and_backs_up(self):
         configuration = app.PACKAGES_ROOT.parent / "configuration.yaml"
         configuration.write_text("default_config:\n", encoding="utf-8")
@@ -565,6 +705,36 @@ class FileApiTests(unittest.TestCase):
         self.assertIn("packages/isoliert.yaml", committed)
         self.assertNotIn("unrelated.txt", committed)
         self.assertIn("unrelated.txt", staged)
+
+    def test_git_branch_create_switch_compare_and_merge(self):
+        created = app.write_file(
+            "branch.yaml",
+            "script:\n  branch:\n    alias: Hauptstand\n    sequence: []\n",
+            None,
+            "Tests",
+            create=True,
+        )
+        base = app.git_branches()["current"]
+        app.create_git_branch("feature/test")
+        updated = app.write_file(
+            created["path"],
+            created["content"].replace("Hauptstand", "Featurestand"),
+            created["version"],
+            "Tests",
+            create=False,
+        )
+
+        switched = app.switch_git_branch(base)
+        self.assertEqual(switched["current"], base)
+        self.assertIn("Hauptstand", app.read_file(created["path"])["content"])
+
+        preview = app.branch_merge_preview("feature/test")
+        self.assertGreaterEqual(preview["behind"], 1)
+        self.assertIn("Featurestand", preview["diff"])
+        merged = app.merge_git_branch("feature/test", preview["stateVersion"])
+
+        self.assertEqual(merged["current"], base)
+        self.assertIn("Featurestand", app.read_file(updated["path"])["content"])
 
     def test_git_remote_configuration_redacts_token_and_uses_private_file(self):
         status = app.update_git_remote(

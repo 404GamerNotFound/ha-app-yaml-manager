@@ -32,6 +32,7 @@ try:
     from . import backup as backup_service
     from . import configuration as configuration_service
     from . import git as git_service
+    from . import resources as resource_service
     from .dependencies import (
         analyze_dependencies,
         focus_dependencies,
@@ -45,6 +46,7 @@ except ImportError:  # pragma: no cover - direct execution in the app container
     import backup as backup_service
     import configuration as configuration_service
     import git as git_service
+    import resources as resource_service
     from dependencies import (
         analyze_dependencies,
         focus_dependencies,
@@ -273,6 +275,26 @@ def validate_git_remote_url(raw_url: Any) -> tuple[str, str]:
 
 def validate_git_branch(raw_branch: Any) -> str:
     return _git_call("validate_git_branch", raw_branch)
+
+
+def git_branches() -> dict[str, Any]:
+    return _git_call("git_branches")
+
+
+def create_git_branch(raw_branch: Any) -> dict[str, Any]:
+    return _git_call("create_git_branch", raw_branch)
+
+
+def switch_git_branch(raw_branch: Any) -> dict[str, Any]:
+    return _git_call("switch_git_branch", raw_branch)
+
+
+def branch_merge_preview(raw_branch: Any) -> dict[str, Any]:
+    return _git_call("branch_merge_preview", raw_branch)
+
+
+def merge_git_branch(raw_branch: Any, state_version: Any) -> dict[str, Any]:
+    return _git_call("merge_git_branch", raw_branch, state_version)
 
 
 def save_git_remote_file(config: dict[str, Any]) -> None:
@@ -910,6 +932,45 @@ def package_contents() -> dict[str, str]:
         except (OSError, UnicodeDecodeError):
             continue
     return result
+
+
+def home_assistant_objects() -> dict[str, Any]:
+    return resource_service.home_assistant_objects(sys.modules[__name__])
+
+
+def read_resource(raw_path: str) -> dict[str, Any]:
+    return resource_service.read_resource(sys.modules[__name__], raw_path)
+
+
+def write_resource(raw_path: str, content: str, expected_version: Any) -> dict[str, Any]:
+    return resource_service.write_resource(
+        sys.modules[__name__], raw_path, content, expected_version
+    )
+
+
+def search_replace_preview(
+    search: Any,
+    replacement: Any,
+    case_sensitive: Any = True,
+) -> dict[str, Any]:
+    return resource_service.search_replace_preview(
+        sys.modules[__name__], search, replacement, case_sensitive
+    )
+
+
+def apply_search_replace(
+    search: Any,
+    replacement: Any,
+    case_sensitive: Any,
+    state_version: Any,
+) -> dict[str, Any]:
+    return resource_service.apply_search_replace(
+        sys.modules[__name__],
+        search,
+        replacement,
+        case_sensitive,
+        state_version,
+    )
 
 
 def script_dependency_analysis(raw_path: str = "") -> dict[str, Any]:

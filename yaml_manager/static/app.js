@@ -32,6 +32,11 @@ const state = {
   gitHistory: { scope: "", path: "", currentVersion: "", selectedCommit: "" },
   dashboard: null,
   dependencies: null,
+  branches: null,
+  branchPreview: null,
+  haObjects: null,
+  resource: { path: "", content: "", version: "", dirty: false },
+  searchPreview: null,
   importArchive: "",
   importPreview: null,
 };
@@ -54,10 +59,15 @@ const elements = Object.fromEntries([
   "dashboard-button", "dashboard-dialog", "dashboard-close", "dashboard-refresh", "quality-score", "quality-stats", "dashboard-findings",
   "remote-status", "remote-badge", "remote-url", "remote-branch", "remote-username", "remote-token", "remote-clear-token", "remote-save", "remote-fetch", "remote-pull", "remote-push", "remote-sync", "remote-remove", "remote-resolution", "remote-merge", "remote-force-push",
   "transfer-button", "transfer-dialog", "transfer-close", "export-scope", "export-category", "export-start", "import-file", "import-strategy", "import-preview", "import-apply", "import-summary", "import-preview-list",
+  "objects-button", "objects-dialog", "objects-close", "objects-refresh", "object-search", "object-domain", "objects-summary", "object-list",
+  "resource-dialog", "resource-close", "resource-title", "resource-path", "resource-save", "resource-editor", "resource-highlighting", "resource-line-numbers", "resource-validation", "resource-cursor",
+  "search-replace-button", "search-replace-dialog", "search-replace-close", "replace-search", "replace-value", "replace-case-sensitive", "replace-preview", "replace-apply", "replace-summary", "replace-file-list",
+  "branch-status", "branch-current", "branch-new-name", "branch-create", "branch-select", "branch-switch", "branch-compare", "branch-merge", "branch-summary", "branch-diff",
 ].map((id) => [id, document.getElementById(id)]));
 
 let validationTimer;
 let configurationValidationTimer;
+let resourceValidationTimer;
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -803,12 +813,121 @@ async function loadDashboard() {
 async function openDashboard() {
   elements["dashboard-dialog"].classList.remove("hidden");
   elements["dashboard-button"].classList.add("active");
-  await loadDashboard();
+  await Promise.all([loadDashboard(), loadBranches()]);
 }
 
 function openScriptManager() {
   elements["dashboard-dialog"].classList.add("hidden");
   elements["dashboard-button"].classList.remove("active");
+}
+
+function renderBranches(result) {
+  state.branches = result;
+  elements["branch-current"].textContent = result.current || "Nicht verfügbar";
+  elements["branch-status"].textContent = result.available
+    ? `${result.branches.length} lokale Branches · aktiv: ${result.current}`
+    : result.message || "Git ist nicht verfügbar.";
+  const previous = elements["branch-select"].value;
+  const selectable = (result.branches || []).filter((branch) => !branch.current);
+  elements["branch-select"].replaceChildren(...selectable.map((branch) => {
+    const option = document.createElement("option");
+    option.value = branch.name;
+    option.textContent = `${branch.name} · ${branch.shortCommit}`;
+    return option;
+  }));
+  if (selectable.some((branch) => branch.name === previous)) elements["branch-select"].value = previous;
+  const disabled = !result.available || !selectable.length;
+  elements["branch-select"].disabled = disabled;
+  elements["branch-switch"].disabled = disabled;
+  elements["branch-compare"].disabled = disabled;
+}
+
+async function loadBranches() {
+  const result = await api("api/git/branches");
+  renderBranches(result);
+  return result;
+}
+
+async function createBranch() {
+  if (state.dirty || state.configurationDirty || state.resource.dirty) {
+    toast("Speichere zuerst alle geöffneten Änderungen.", "error");
+    return;
+  }
+  const branch = elements["branch-new-name"].value.trim();
+  if (!branch) return;
+  try {
+    const result = await api("api/git/branches/create", {
+      method: "POST", body: JSON.stringify({ branch }),
+    });
+    elements["branch-new-name"].value = "";
+    state.branchPreview = null;
+    elements["branch-merge"].disabled = true;
+    renderBranches(result);
+    await refreshFiles();
+    toast(result.message, "success");
+  } catch (error) { toast(error.message, "error"); }
+}
+
+async function switchBranch() {
+  if (state.dirty || state.configurationDirty || state.resource.dirty) {
+    toast("Speichere zuerst alle geöffneten Änderungen.", "error");
+    return;
+  }
+  const branch = elements["branch-select"].value;
+  if (!branch || !confirm(`Zum Branch ${branch} wechseln?`)) return;
+  try {
+    const result = await api("api/git/branches/switch", {
+      method: "POST", body: JSON.stringify({ branch }),
+    });
+    state.branchPreview = null;
+    elements["branch-merge"].disabled = true;
+    elements["branch-diff"].classList.add("hidden");
+    renderBranches(result);
+    await refreshFiles();
+    if (state.selected) await openFile(state.selected.path, true);
+    toast(result.message, "success");
+  } catch (error) { toast(error.message, "error"); }
+}
+
+async function compareBranch() {
+  const branch = elements["branch-select"].value;
+  if (!branch) return;
+  try {
+    const preview = await api("api/git/branches/compare", {
+      method: "POST", body: JSON.stringify({ branch }),
+    });
+    state.branchPreview = preview;
+    elements["branch-summary"].textContent = `${preview.files.length} Dateien · ${preview.ahead} nur lokal · ${preview.behind} nur in ${branch}${preview.truncated ? " · Diff gekürzt" : ""}`;
+    elements["branch-diff"].textContent = preview.diff || preview.stat || "Keine verwalteten YAML-Unterschiede.";
+    elements["branch-diff"].classList.remove("hidden");
+    elements["branch-merge"].disabled = preview.behind === 0;
+  } catch (error) { toast(error.message, "error"); }
+}
+
+async function mergeBranch() {
+  if (state.dirty || state.configurationDirty || state.resource.dirty) {
+    toast("Speichere zuerst alle geöffneten Änderungen.", "error");
+    return;
+  }
+  const preview = state.branchPreview;
+  if (!preview || !confirm(`Branch ${preview.branch} in ${preview.current} zusammenführen?`)) return;
+  elements["branch-merge"].disabled = true;
+  try {
+    const result = await api("api/git/branches/merge", {
+      method: "POST",
+      body: JSON.stringify({ branch: preview.branch, stateVersion: preview.stateVersion }),
+    });
+    state.branchPreview = null;
+    renderBranches(result);
+    elements["branch-summary"].textContent = result.message;
+    elements["branch-diff"].classList.add("hidden");
+    await refreshFiles();
+    if (state.selected) await openFile(state.selected.path, true);
+    toast(result.message, "success");
+  } catch (error) {
+    elements["branch-merge"].disabled = false;
+    toast(error.message, "error");
+  }
 }
 
 async function saveRemoteConfiguration() {
@@ -996,6 +1115,210 @@ async function applyPackageImport() {
     toast(result.message, "success");
   } catch (error) {
     elements["import-apply"].disabled = false;
+    toast(error.message, "error");
+  }
+}
+
+function renderHaObjects() {
+  const result = state.haObjects;
+  if (!result) return;
+  const term = elements["object-search"].value.trim().toLocaleLowerCase("de");
+  const domain = elements["object-domain"].value;
+  const visible = result.objects.filter((item) => {
+    const haystack = `${item.alias} ${item.id} ${item.entityId} ${item.path}`.toLocaleLowerCase("de");
+    return (!domain || item.domain === domain) && (!term || haystack.includes(term));
+  });
+  const labels = { automation: "Automation", script: "Script", scene: "Szene" };
+  elements["objects-summary"].className = `import-summary ${result.invalidFiles.length ? "invalid" : "valid"}`;
+  elements["objects-summary"].textContent = `${result.summary.automation} Automationen · ${result.summary.script} Scripts · ${result.summary.scene} Szenen · ${result.summary.references} Bezüge`;
+  elements["object-list"].replaceChildren(...visible.map((item) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "object-item";
+    const outgoing = result.references.filter((reference) => reference.sourceObject === item.key);
+    const targets = outgoing.slice(0, 4).map((reference) => reference.target).join(" · ");
+    button.innerHTML = `<span class="object-item-header"><strong>${escapeHtml(item.alias)}</strong><span class="object-kind">${labels[item.domain]}</span></span><small>${escapeHtml(item.entityId)} · ${escapeHtml(item.path)}:${item.line}</small><span class="object-references">${targets ? escapeHtml(targets) : "Keine erkannten Bezüge"}</span><small>${item.incoming} eingehend · ${item.outgoing} ausgehend</small>`;
+    button.addEventListener("click", () => openHaObject(item));
+    return button;
+  }));
+}
+
+async function loadHaObjects() {
+  elements["objects-summary"].className = "import-summary";
+  elements["objects-summary"].textContent = "Home-Assistant-Objekte werden analysiert …";
+  state.haObjects = await api("api/ha-objects");
+  renderHaObjects();
+}
+
+async function openObjectsDialog() {
+  elements["objects-dialog"].showModal();
+  try { await loadHaObjects(); } catch (error) { toast(error.message, "error"); }
+}
+
+async function openHaObject(item) {
+  elements["objects-dialog"].close();
+  if (item.editor === "package") {
+    const path = item.path.replace(/^packages\//, "");
+    await openFile(path);
+    if (state.selected?.path === path) jumpToLine(item.line);
+  } else if (item.editor === "configuration") {
+    await openConfigurationEditor();
+    jumpToConfigurationLine(item.line);
+  } else {
+    await openResourceEditor(item.path, item.line);
+  }
+}
+
+function syncResourceScroll() {
+  elements["resource-highlighting"].scrollTop = elements["resource-editor"].scrollTop;
+  elements["resource-highlighting"].scrollLeft = elements["resource-editor"].scrollLeft;
+  elements["resource-line-numbers"].scrollTop = elements["resource-editor"].scrollTop;
+}
+
+function updateResourceRendering() {
+  const value = elements["resource-editor"].value;
+  elements["resource-highlighting"].firstElementChild.innerHTML = value.split("\n").map(highlightLine).join("\n") + "\n";
+  elements["resource-line-numbers"].textContent = Array.from({ length: Math.max(1, value.split("\n").length) }, (_, index) => index + 1).join("\n");
+  const before = value.slice(0, elements["resource-editor"].selectionStart).split("\n");
+  elements["resource-cursor"].textContent = `Zeile ${before.length}, Spalte ${before.at(-1).length + 1}`;
+  syncResourceScroll();
+}
+
+function setResourceDirty() {
+  state.resource.dirty = elements["resource-editor"].value !== state.resource.content;
+  elements["resource-save"].disabled = !state.resource.dirty;
+}
+
+function jumpToResourceLine(line) {
+  const target = Number(line);
+  if (!target) return;
+  const lines = elements["resource-editor"].value.split("\n");
+  const offset = lines.slice(0, target - 1).reduce((sum, value) => sum + value.length + 1, 0);
+  elements["resource-editor"].focus();
+  elements["resource-editor"].setSelectionRange(offset, offset + (lines[target - 1]?.length || 0));
+  elements["resource-editor"].scrollTop = Math.max(0, (target - 4) * 21.45);
+  syncResourceScroll();
+}
+
+function scheduleResourceValidation() {
+  clearTimeout(resourceValidationTimer);
+  resourceValidationTimer = setTimeout(async () => {
+    try {
+      const result = await api("api/validate", {
+        method: "POST", body: JSON.stringify({ content: elements["resource-editor"].value }),
+      });
+      elements["resource-validation"].className = `validation-status ${result.valid ? "valid" : "invalid"}`;
+      elements["resource-validation"].textContent = result.valid ? "✓ YAML gültig" : `Fehler: ${result.message}`;
+      elements["resource-validation"].dataset.line = result.line || "";
+    } catch (error) { toast(error.message, "error"); }
+  }, 400);
+}
+
+async function openResourceEditor(path, line = 0) {
+  try {
+    const resource = await api(`api/resource?path=${encodeURIComponent(path)}`);
+    state.resource = { ...resource, dirty: false };
+    elements["resource-title"].textContent = path.split("/").at(-1);
+    elements["resource-path"].textContent = path;
+    elements["resource-editor"].value = resource.content;
+    elements["resource-save"].disabled = true;
+    elements["resource-dialog"].showModal();
+    updateResourceRendering();
+    scheduleResourceValidation();
+    if (line) jumpToResourceLine(line);
+  } catch (error) { toast(error.message, "error"); }
+}
+
+function closeResourceEditor() {
+  if (state.resource.dirty && !confirm("Ungespeicherte Änderungen verwerfen?")) return;
+  state.resource.dirty = false;
+  elements["resource-dialog"].close();
+}
+
+async function saveResource() {
+  if (!state.resource.dirty) return;
+  elements["resource-save"].disabled = true;
+  try {
+    const result = await api("api/resource", {
+      method: "PUT",
+      body: JSON.stringify({
+        path: state.resource.path,
+        content: elements["resource-editor"].value,
+        version: state.resource.version,
+      }),
+    });
+    state.resource = { ...result, dirty: false };
+    elements["resource-save"].disabled = true;
+    await loadHaObjects();
+    toast("HA-Ressource gespeichert", "success");
+  } catch (error) {
+    elements["resource-save"].disabled = false;
+    toast(error.message, "error");
+  }
+}
+
+function resetSearchPreview() {
+  state.searchPreview = null;
+  elements["replace-apply"].disabled = true;
+  elements["replace-summary"].className = "import-summary";
+  elements["replace-summary"].textContent = "Die Eingaben wurden noch nicht geprüft.";
+  elements["replace-file-list"].replaceChildren();
+}
+
+function openSearchReplaceDialog() {
+  resetSearchPreview();
+  elements["search-replace-dialog"].showModal();
+}
+
+async function previewSearchReplace() {
+  try {
+    const preview = await api("api/search-replace/preview", {
+      method: "POST",
+      body: JSON.stringify({
+        search: elements["replace-search"].value,
+        replacement: elements["replace-value"].value,
+        caseSensitive: elements["replace-case-sensitive"].checked,
+      }),
+    });
+    state.searchPreview = preview;
+    elements["replace-summary"].className = `import-summary ${preview.matches ? "valid" : "invalid"}`;
+    elements["replace-summary"].textContent = `${preview.matches} Treffer in ${preview.files.length} Dateien.`;
+    elements["replace-file-list"].replaceChildren(...preview.files.map((file) => {
+      const item = document.createElement("div");
+      item.className = "import-preview-item";
+      item.innerHTML = `<strong>${escapeHtml(file.path)}</strong><span>${file.matches} Treffer · Zeilen ${file.lines.join(", ")}</span>`;
+      return item;
+    }));
+    elements["replace-apply"].disabled = preview.matches === 0;
+  } catch (error) { toast(error.message, "error"); }
+}
+
+async function applySearchReplace() {
+  if (state.dirty || state.configurationDirty || state.resource.dirty) {
+    toast("Speichere zuerst alle geöffneten Änderungen.", "error");
+    return;
+  }
+  const preview = state.searchPreview;
+  if (!preview || !confirm(`${preview.matches} Ersetzungen in ${preview.files.length} Dateien anwenden?`)) return;
+  elements["replace-apply"].disabled = true;
+  try {
+    const result = await api("api/search-replace/apply", {
+      method: "POST",
+      body: JSON.stringify({
+        search: preview.search,
+        replacement: preview.replacement,
+        caseSensitive: preview.caseSensitive,
+        stateVersion: preview.stateVersion,
+      }),
+    });
+    state.searchPreview = null;
+    elements["replace-summary"].className = "import-summary valid";
+    elements["replace-summary"].textContent = result.message;
+    await refreshFiles();
+    if (state.selected) await openFile(state.selected.path, true);
+    toast(result.message, "success");
+  } catch (error) {
+    elements["replace-apply"].disabled = false;
     toast(error.message, "error");
   }
 }
@@ -1464,6 +1787,16 @@ elements["file-search"].addEventListener("input", renderFiles);
 elements["dashboard-button"].addEventListener("click", openDashboard);
 elements["dashboard-close"].addEventListener("click", openScriptManager);
 elements["dashboard-refresh"].addEventListener("click", loadDashboard);
+elements["branch-create"].addEventListener("click", createBranch);
+elements["branch-switch"].addEventListener("click", switchBranch);
+elements["branch-compare"].addEventListener("click", compareBranch);
+elements["branch-merge"].addEventListener("click", mergeBranch);
+elements["branch-select"].addEventListener("change", () => {
+  state.branchPreview = null;
+  elements["branch-merge"].disabled = true;
+  elements["branch-diff"].classList.add("hidden");
+  elements["branch-summary"].textContent = "Noch kein Branch-Vergleich ausgeführt.";
+});
 elements["remote-save"].addEventListener("click", saveRemoteConfiguration);
 elements["remote-fetch"].addEventListener("click", () => synchronizeRemote("fetch"));
 elements["remote-pull"].addEventListener("click", () => synchronizeRemote("pull"));
@@ -1475,6 +1808,46 @@ elements["remote-remove"].addEventListener("click", removeRemoteConfiguration);
 elements["transfer-button"].addEventListener("click", openTransferDialog);
 elements["transfer-close"].addEventListener("click", () => elements["transfer-dialog"].close());
 elements["transfer-dialog"].addEventListener("cancel", () => elements["transfer-dialog"].close());
+elements["objects-button"].addEventListener("click", openObjectsDialog);
+elements["objects-close"].addEventListener("click", () => elements["objects-dialog"].close());
+elements["objects-refresh"].addEventListener("click", loadHaObjects);
+elements["object-search"].addEventListener("input", renderHaObjects);
+elements["object-domain"].addEventListener("change", renderHaObjects);
+elements["objects-dialog"].addEventListener("cancel", () => elements["objects-dialog"].close());
+elements["resource-close"].addEventListener("click", closeResourceEditor);
+elements["resource-save"].addEventListener("click", saveResource);
+elements["resource-dialog"].addEventListener("cancel", (event) => {
+  event.preventDefault();
+  closeResourceEditor();
+});
+elements["resource-editor"].addEventListener("input", () => {
+  updateResourceRendering();
+  setResourceDirty();
+  scheduleResourceValidation();
+});
+elements["resource-editor"].addEventListener("scroll", syncResourceScroll);
+elements["resource-editor"].addEventListener("click", updateResourceRendering);
+elements["resource-editor"].addEventListener("keyup", updateResourceRendering);
+elements["resource-editor"].addEventListener("keydown", (event) => {
+  if (event.key === "Tab") {
+    event.preventDefault();
+    elements["resource-editor"].setRangeText("  ", elements["resource-editor"].selectionStart, elements["resource-editor"].selectionEnd, "end");
+    elements["resource-editor"].dispatchEvent(new Event("input"));
+  }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+    event.preventDefault();
+    saveResource();
+  }
+});
+elements["resource-validation"].addEventListener("click", () => jumpToResourceLine(elements["resource-validation"].dataset.line));
+elements["search-replace-button"].addEventListener("click", openSearchReplaceDialog);
+elements["search-replace-close"].addEventListener("click", () => elements["search-replace-dialog"].close());
+elements["search-replace-dialog"].addEventListener("cancel", () => elements["search-replace-dialog"].close());
+elements["replace-search"].addEventListener("input", resetSearchPreview);
+elements["replace-value"].addEventListener("input", resetSearchPreview);
+elements["replace-case-sensitive"].addEventListener("change", resetSearchPreview);
+elements["replace-preview"].addEventListener("click", previewSearchReplace);
+elements["replace-apply"].addEventListener("click", applySearchReplace);
 elements["export-scope"].addEventListener("change", fillExportCategories);
 elements["export-start"].addEventListener("click", startPackageExport);
 elements["import-file"].addEventListener("change", resetImportPreview);
@@ -1557,8 +1930,8 @@ document.querySelectorAll(".helper-tab").forEach((tab) => tab.addEventListener("
   document.getElementById(`tab-${tab.dataset.tab}`).classList.remove("hidden");
 }));
 window.addEventListener("beforeunload", (event) => {
-  if (state.dirty || state.configurationDirty) event.preventDefault();
+  if (state.dirty || state.configurationDirty || state.resource.dirty) event.preventDefault();
 });
 
 renderSnippets();
-Promise.all([refreshFiles(), loadHelpers(), loadDashboard()]).catch((error) => toast(error.message, "error"));
+Promise.all([refreshFiles(), loadHelpers(), loadDashboard(), loadBranches()]).catch((error) => toast(error.message, "error"));

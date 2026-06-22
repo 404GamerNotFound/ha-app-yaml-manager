@@ -60,6 +60,75 @@ Die Backend-Verantwortlichkeiten sind getrennt aufgebaut:
 - `dependencies.py`: Script-Graph und quellpositionsbasierte Umbenennung
 - `errors.py`: gemeinsamer erwarteter API-Fehlertyp
 
+## Home-Assistant-Objektbrowser
+
+**HA-Objekte** öffnet eine durchsuchbare Übersicht über Automationen, Scripts
+und Szenen. Berücksichtigt werden Definitionen in Packages sowie die
+Top-Level-Bereiche `automation`, `script` und `scene` aus `configuration.yaml`.
+Folgende ausgelagerte Varianten werden verfolgt:
+
+- `!include`
+- `!include_dir_list`
+- `!include_dir_named`
+- `!include_dir_merge_list`
+- `!include_dir_merge_named`
+
+Package-Treffer öffnen den normalen Package-Editor, direkte Definitionen öffnen
+den `configuration.yaml`-Editor und ausgelagerte Dateien den neuen
+Ressourceneditor. Der Index zeigt außerdem erkannte Script-, Szenen- und
+Entitätsreferenzen sowie ein- und ausgehende Bezüge.
+
+Der Ressourceneditor akzeptiert nur tatsächlich eingebundene YAML-Dateien
+innerhalb des Home-Assistant-Konfigurationsverzeichnisses. Symlinks und Pfade
+außerhalb dieses Verzeichnisses werden abgewiesen. Speichern verwendet
+Versionsvergleich, YAML-Prüfung, Backup, atomaren Austausch, Git-Commit und
+Home-Assistant-Prüfung.
+
+API-Endpunkte:
+
+- `GET /api/ha-objects`
+- `GET /api/resource`
+- `PUT /api/resource`
+
+## Multi-Datei-Suche und Ersetzen
+
+**Suchen/Ersetzen** durchsucht `configuration.yaml`, alle Packages und die vom
+Objektindex erkannten Includes. Die Ersetzung ist literal; optional wird die
+Groß-/Kleinschreibung ignoriert. Die Vorschau nennt Treffer, Dateien und Zeilen.
+Sie ist auf 5000 Treffer begrenzt.
+
+Vor der Anwendung werden sämtliche erzeugten Inhalte als YAML validiert. Neue
+Package-Konflikte führen zum Abbruch. Ein SHA-256-Hash über den vollständigen
+verwalteten Dateibestand schützt vor parallelen Änderungen. Danach werden alle
+Originale gesichert, atomar ausgetauscht und in einem gemeinsamen Git-Commit
+festgehalten. Ein Schreibfehler löst ein Rollback aller bereits geschriebenen
+Dateien aus.
+
+API-Endpunkte:
+
+- `POST /api/search-replace/preview`
+- `POST /api/search-replace/apply`
+
+## Git-Branch-Verwaltung
+
+Das Dashboard zeigt alle lokalen Branches und den aktiven Branch. Neue Branches
+werden vom aktuellen `HEAD` erstellt und sofort ausgecheckt. Vor Branch-Wechseln
+und Merges legt die App einen Git-Zwischenstand der verwalteten Konfiguration an.
+
+**Vergleichen** zeigt Ahead/Behind-Werte, betroffene Dateien und einen gekürzten
+Unified Diff für `configuration.yaml` und Packages. Erst diese Vorschau schaltet
+**Geprüft zusammenführen** frei. Ändert sich einer der beiden Commits, muss der
+Vergleich wiederholt werden. Merge-Konflikte oder ungültiges Ergebnis-YAML
+führen zu `git merge --abort`; ein fehlerhafter Merge-Commit bleibt nicht zurück.
+
+API-Endpunkte:
+
+- `GET /api/git/branches`
+- `POST /api/git/branches/create`
+- `POST /api/git/branches/switch`
+- `POST /api/git/branches/compare`
+- `POST /api/git/branches/merge`
+
 ## configuration.yaml-Editor
 
 Die Schaltfläche **configuration.yaml** öffnet einen eigenen Editor mit

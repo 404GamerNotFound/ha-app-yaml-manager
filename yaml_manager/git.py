@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import difflib
+import hashlib
 import json
 import os
 import re
@@ -37,6 +38,7 @@ def bind(backend: Any) -> None:
         "file_version",
         "git_lock",
         "normalize_relative_path",
+        "package_contents",
         "read_configuration",
         "read_file",
         "validate_yaml",
@@ -197,6 +199,233 @@ def validate_git_branch(raw_branch: Any) -> str:
     if any(value in branch for value in ("..", "//", "@{")) or branch.endswith(("/", ".", ".lock")):
         raise ApiError(HTTPStatus.BAD_REQUEST, "Der Git-Branch ist ungültig.")
     return branch
+
+
+def current_git_branch() -> str:
+    result = run_git(["symbolic-ref", "--quiet", "--short", "HEAD"], allowed_codes=(0, 1))
+    return result.stdout.decode("utf-8", errors="replace").strip() if result.returncode == 0 else "detached"
+
+
+def resolve_local_branch(raw_branch: Any) -> tuple[str, str]:
+    branch = validate_git_branch(raw_branch)
+    result = run_git(
+        ["rev-parse", "--verify", f"refs/heads/{branch}"],
+        allowed_codes=(0, 128),
+    )
+    if result.returncode != 0:
+        raise ApiError(HTTPStatus.NOT_FOUND, f"Der lokale Branch {branch} wurde nicht gefunden.")
+    return branch, result.stdout.decode("ascii").split()[0]
+
+
+def git_branches() -> dict[str, Any]:
+    with git_lock:
+        try:
+            ensure_git_repository()
+            output = run_git(
+                [
+                    "for-each-ref",
+                    "--sort=refname",
+                    "--format=%(refname:short)%00%(objectname)%00%(upstream:short)%00%(HEAD)",
+                    "refs/heads",
+                ]
+            ).stdout.decode("utf-8", errors="replace")
+            branches: list[dict[str, Any]] = []
+            for line in output.splitlines():
+                fields = line.split("\0")
+                if len(fields) != 4:
+                    continue
+                name, commit, upstream, head = fields
+                branches.append(
+                    {
+                        "name": name,
+                        "commit": commit,
+                        "shortCommit": commit[:8],
+                        "upstream": upstream,
+                        "current": head == "*",
+                    }
+                )
+            return {
+                "available": True,
+                "current": current_git_branch(),
+                "branches": branches,
+            }
+        except GitOperationError as exc:
+            return {"available": False, "current": "", "branches": [], "message": str(exc)}
+
+
+def create_git_branch(raw_branch: Any) -> dict[str, Any]:
+    branch = validate_git_branch(raw_branch)
+    with file_lock, git_lock:
+        try:
+            ensure_git_repository()
+            exists = run_git(
+                ["rev-parse", "--verify", f"refs/heads/{branch}"],
+                allowed_codes=(0, 128),
+            ).returncode == 0
+            if exists:
+                raise ApiError(HTTPStatus.CONFLICT, f"Der Branch {branch} existiert bereits.")
+            git_commit_paths(
+                [configuration_file(), PACKAGES_ROOT],
+                "Stand vor dem Erstellen eines Git-Branches",
+            )
+            run_git(["switch", "-c", branch])
+        except GitOperationError as exc:
+            raise ApiError(HTTPStatus.CONFLICT, str(exc)) from exc
+    return {**git_branches(), "message": f"Branch {branch} wurde erstellt und ausgecheckt."}
+
+
+def branch_changed_paths(reference: str) -> list[str]:
+    output = run_git(["diff", "--name-only", "HEAD", reference]).stdout.decode(
+        "utf-8", errors="replace"
+    )
+    return [path for path in output.splitlines() if path]
+
+
+def validate_branch_yaml(reference: str, changed: list[str]) -> None:
+    for relative in changed:
+        if relative == "configuration.yaml" or relative.startswith("packages/"):
+            if relative != "configuration.yaml" and Path(relative).suffix.lower() not in {".yaml", ".yml"}:
+                continue
+            validate_remote_yaml(reference, relative)
+
+
+def backup_changed_yaml(changed: list[str]) -> None:
+    for relative in changed:
+        if relative == "configuration.yaml":
+            path = configuration_file()
+            backup_relative = "configuration/configuration.yaml"
+        elif relative.startswith("packages/"):
+            package_relative = relative.removeprefix("packages/")
+            if Path(package_relative).suffix.lower() not in {".yaml", ".yml"}:
+                continue
+            _normalized, path = normalize_relative_path(package_relative)
+            backup_relative = package_relative
+        else:
+            continue
+        if path.is_file():
+            create_backup(backup_relative, path)
+
+
+def switch_git_branch(raw_branch: Any) -> dict[str, Any]:
+    branch, commit = resolve_local_branch(raw_branch)
+    current = current_git_branch()
+    if branch == current:
+        return {**git_branches(), "message": f"Branch {branch} ist bereits aktiv."}
+    configuration_check: dict[str, Any] | None = None
+    with file_lock, git_lock:
+        try:
+            git_commit_paths(
+                [configuration_file(), PACKAGES_ROOT],
+                "Stand vor dem Wechsel des Git-Branches",
+            )
+            changed = branch_changed_paths(commit)
+            validate_branch_yaml(commit, changed)
+            backup_changed_yaml(changed)
+            run_git(["switch", branch])
+            configuration_check = check_home_assistant_configuration()
+        except GitOperationError as exc:
+            raise ApiError(HTTPStatus.CONFLICT, str(exc)) from exc
+    return {
+        **git_branches(),
+        "message": f"Branch {branch} wurde ausgecheckt.",
+        "configurationCheck": configuration_check,
+    }
+
+
+def branch_merge_preview(raw_branch: Any) -> dict[str, Any]:
+    branch, target = resolve_local_branch(raw_branch)
+    current = current_git_branch()
+    if branch == current:
+        raise ApiError(HTTPStatus.CONFLICT, "Der aktive Branch kann nicht mit sich selbst verglichen werden.")
+    head = run_git(["rev-parse", "HEAD"]).stdout.decode("ascii").strip()
+    counts = run_git(["rev-list", "--left-right", "--count", f"HEAD...{target}"]).stdout.decode().split()
+    ahead, behind = (int(value) for value in counts)
+    changed = branch_changed_paths(target)
+    stat = run_git(["diff", "--stat", "HEAD..." + target]).stdout.decode("utf-8", errors="replace")
+    difference = run_git(
+        ["diff", "--no-ext-diff", "--unified=3", "HEAD..." + target, "--", "configuration.yaml", "packages"]
+    ).stdout.decode("utf-8", errors="replace")
+    lines = difference.splitlines()
+    token = hashlib.sha256(f"{head}\0{target}\0{branch}".encode("utf-8")).hexdigest()
+    return {
+        "branch": branch,
+        "current": current,
+        "head": head,
+        "target": target,
+        "stateVersion": token,
+        "ahead": ahead,
+        "behind": behind,
+        "files": changed,
+        "stat": stat,
+        "diff": "\n".join(lines[:2000]),
+        "truncated": len(lines) > 2000,
+    }
+
+
+def merge_git_branch(raw_branch: Any, state_version: Any) -> dict[str, Any]:
+    configuration_check: dict[str, Any] | None = None
+    with file_lock, git_lock:
+        try:
+            git_commit_paths(
+                [configuration_file(), PACKAGES_ROOT],
+                "Stand vor dem Zusammenführen eines Git-Branches",
+            )
+            preview = branch_merge_preview(raw_branch)
+            if not isinstance(state_version, str) or state_version != preview["stateVersion"]:
+                raise ApiError(
+                    HTTPStatus.CONFLICT,
+                    "Die Branch-Stände haben sich seit dem Vergleich geändert. Bitte erneut vergleichen.",
+                )
+            if preview["behind"] == 0:
+                raise ApiError(
+                    HTTPStatus.CONFLICT,
+                    "Der ausgewählte Branch enthält keine neuen Commits für den aktiven Branch.",
+                )
+            validate_branch_yaml(preview["target"], preview["files"])
+            backup_changed_yaml(preview["files"])
+            merge = run_git(
+                ["merge", "--no-commit", "--no-ff", preview["branch"]],
+                allowed_codes=(0, 1),
+            )
+            if merge.returncode != 0:
+                run_git(["merge", "--abort"], allowed_codes=(0, 1, 128))
+                raise ApiError(
+                    HTTPStatus.CONFLICT,
+                    "Der Branch konnte wegen Dateikonflikten nicht zusammengeführt werden.",
+                )
+            invalid: list[str] = []
+            configuration = configuration_file()
+            if configuration.is_file():
+                validation = validate_yaml(configuration.read_text(encoding="utf-8"))
+                if not validation["valid"]:
+                    invalid.append("configuration.yaml")
+            for path, content in package_contents().items():
+                if not validate_yaml(content)["valid"]:
+                    invalid.append(f"packages/{path}")
+            if invalid:
+                run_git(["merge", "--abort"], allowed_codes=(0, 1, 128))
+                raise ApiError(
+                    HTTPStatus.UNPROCESSABLE_ENTITY,
+                    "Der Merge würde ungültiges YAML erzeugen und wurde abgebrochen.",
+                    {"files": invalid},
+                )
+            run_git(
+                [
+                    "-c", "user.name=YAML Script Manager",
+                    "-c", "user.email=yaml-script-manager@local",
+                    "commit", "--no-gpg-sign", "--no-verify", "-m",
+                    f"Git-Branch zusammengeführt: {preview['branch']}",
+                ]
+            )
+            configuration_check = check_home_assistant_configuration()
+        except GitOperationError as exc:
+            run_git(["merge", "--abort"], allowed_codes=(0, 1, 128))
+            raise ApiError(HTTPStatus.CONFLICT, str(exc)) from exc
+    return {
+        **git_branches(),
+        "message": f"Branch {preview['branch']} wurde zusammengeführt.",
+        "configurationCheck": configuration_check,
+    }
 
 
 def save_git_remote_file(config: dict[str, Any]) -> None:
@@ -676,5 +905,3 @@ def restore_git_version(
         }
     )
     return result
-
-

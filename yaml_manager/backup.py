@@ -17,12 +17,20 @@ except ImportError:  # pragma: no cover - direct execution in the app container
 
 
 def create_backup(backend: Any, relative: str, source: Path) -> None:
-    stamp = time.strftime("%Y%m%d-%H%M%S") + f"-{time.time_ns() % 1_000_000:06d}"
-    destination = backend.DATA_ROOT / "backups" / stamp / relative
+    prefix = time.strftime("%Y%m%d-%H%M%S")
+    suffix = time.time_ns() % 1_000_000
+    backups_root = backend.DATA_ROOT / "backups"
+    for offset in range(1_000_000):
+        stamp = f"{prefix}-{(suffix + offset) % 1_000_000:06d}"
+        destination = backups_root / stamp / relative
+        if not destination.exists():
+            break
+    else:  # pragma: no cover - impossible without exhausting every microsecond ID
+        raise OSError("Für diese Sekunde ist keine freie Backup-ID verfügbar.")
     destination.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source, destination)
     backups = sorted(
-        (backend.DATA_ROOT / "backups").iterdir(),
+        backups_root.iterdir(),
         key=lambda item: item.name,
         reverse=True,
     )
