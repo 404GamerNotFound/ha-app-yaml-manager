@@ -15,6 +15,12 @@ Verzeichnis `/config/packages`.
 - Umbenennen und Verschieben von Dateien innerhalb des Package-Ordners
 - Direkter Aufruf von `script.reload`
 - Prüfung, ob `/config/packages` über `homeassistant.packages` eingebunden ist
+- Editor für `configuration.yaml` mit Ein-Klick-Package-Import
+- Vorschau-basierte Auslagerung der Top-Level-Konfiguration in ein Package
+- Automatische Home-Assistant-Konfigurationsprüfung nach Konfigurationsänderungen
+- Versionsverlauf mit Diff und Wiederherstellung für Konfiguration und Packages
+- Automatische lokale Git-Commits mit Historie, Diff und Wiederherstellung
+- Globale Package-Konfliktprüfung nach den Home-Assistant-Merge-Regeln
 - Responsive Ingress-Oberfläche mit Hell- und Dunkelmodus
 
 ## Installation
@@ -34,8 +40,9 @@ ein und verwaltet ausschließlich `.yaml`- und `.yml`-Dateien im Unterverzeichni
 python3 -m venv .venv
 . .venv/bin/activate
 pip install -r yaml_manager/requirements.txt
-PACKAGES_PATH=/tmp/ha-packages DATA_PATH=/tmp/yaml-manager-data \
-  python yaml_manager/app.py
+python yaml_manager/app.py \
+  --packages-path /tmp/ha-packages \
+  --data-path /tmp/yaml-manager-data
 ```
 
 Danach ist die Oberfläche unter `http://localhost:8099` erreichbar. Die
@@ -77,4 +84,43 @@ Beim Laden der Dateiliste analysiert das Backend zusätzlich die
 Bedarf einer ausgelagerten `homeassistant: !include ...`-Konfiguration. Die App
 verändert `configuration.yaml` dabei nicht automatisch.
 
+Über den separaten Konfigurationseditor kann `configuration.yaml` nun bewusst
+bearbeitet und gespeichert werden. Die Aktion **Packages einbinden** ergänzt
+`homeassistant.packages`, ohne eine bereits abweichend konfigurierte Definition
+zu überschreiben. **Alles in Package auslagern** zeigt zuerst die betroffenen
+Top-Level-Bereiche und verschiebt sie anschließend nach
+`/config/packages/configuration_import.yaml`. Relative `!include`-Pfade werden
+an den neuen Standort angepasst. Der komplette `homeassistant:`-Block bleibt in
+der Hauptdatei, damit frühe Core-Optionen wie `auth_providers` dort verbleiben.
+
+Vor Konfigurationsänderungen legt die App Sicherungen unter `/data/backups` an.
+YAML-Syntax und parallele Dateiänderungen werden geprüft. Nach Speichern,
+Package-Einbindung, Migration und Wiederherstellung sowie nach dem Speichern oder
+Erstellen einer Package-Datei ruft das Backend zusätzlich Home Assistants
+`POST /api/config/core/check_config` über die Supervisor-API auf.
+Das Ergebnis erscheint direkt oberhalb des Editors; enthält die Fehlermeldung
+eine Zeilennummer, springt ein Klick zur betroffenen Stelle.
+
+Der Versionsdialog ermittelt pro Datei alle Sicherungen, zeigt Additionen und
+Löschungen sowie einen serverseitig erzeugten Unified Diff und stellt einen
+ausgewählten Stand wieder her. Vor der Wiederherstellung wird die aktuelle
+Fassung erneut gesichert. Ein SHA-256-Versionsvergleich verhindert, dass dabei
+eine extern geänderte Datei überschrieben wird.
+
+Die globale Konfliktanalyse liest alle Package-Dateien als YAML-Knotenbaum. Sie
+erkennt doppelte Package-Dateinamen über Unterordner hinweg, kollidierende
+Entity- und Integrationsschlüssel sowie doppelte `unique_id`- und Automation-ID-
+Werte. Listenbasierte Plattformintegrationen werden entsprechend den
+Home-Assistant-Package-Regeln als zusammenführbar behandelt.
+
+Zusätzlich initialisiert die App bei Bedarf ein lokales Git-Repository im
+Home-Assistant-Konfigurationsverzeichnis. Vor und nach jeder von der App
+ausgeführten Dateiänderung werden ausschließlich die betroffenen Pfade
+versioniert. Bereits vom Nutzer vorgemerkte Änderungen an anderen Dateien
+bleiben unangetastet. Die Git-Historie in beiden Editoren bietet Commit-Metadaten,
+Unified Diffs und eine konfliktgeschützte Wiederherstellung. Das bestehende
+Datei-Backup wird dabei weiterhin zusätzlich angelegt.
+
 Weitere Betriebsinformationen stehen in [yaml_manager/DOCS.md](yaml_manager/DOCS.md).
+Die ausführlichen Hinweise zur aktuellen Version stehen in
+[yaml_manager/RELEASE_NOTES.md](yaml_manager/RELEASE_NOTES.md).

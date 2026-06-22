@@ -26,18 +26,30 @@ const snippets = [
 const state = {
   files: [], categories: [], tags: [], selectedCategory: "Alle", selectedTag: "", selected: null,
   originalContent: "", originalCategory: "", originalTags: [], dirty: false, helpers: null,
+  configuration: null, configurationOriginal: "", configurationDirty: false,
+  packageConflicts: null,
+  history: { scope: "", path: "", currentVersion: "", selectedId: "" },
+  gitHistory: { scope: "", path: "", currentVersion: "", selectedCommit: "" },
 };
 
 const elements = Object.fromEntries([
   "sidebar", "sidebar-toggle", "sidebar-close", "file-search", "configuration-status", "categories", "tags", "file-list", "file-count", "root-path",
   "empty-state", "empty-new-button", "editor-content", "document-name", "document-path", "dirty-dot", "category-select", "tag-input",
-  "rename-button", "duplicate-button", "delete-button", "editor", "highlighting", "line-numbers", "validation-status", "cursor-status",
+  "rename-button", "duplicate-button", "delete-button", "editor", "highlighting", "line-numbers", "validation-status", "file-ha-check", "cursor-status",
   "save-button", "new-button", "reload-button", "helpers", "helpers-toggle", "helpers-close", "snippet-list", "analysis-summary", "analysis-list", "api-notice",
   "entity-search", "entity-list", "service-search", "service-list", "new-dialog", "new-form", "new-path", "new-script-id",
   "new-category", "new-tags", "category-options", "create-button", "toast-region",
+  "configuration-button", "configuration-dialog", "configuration-close", "configuration-editor", "configuration-highlighting",
+  "configuration-line-numbers", "configuration-validation", "configuration-cursor", "configuration-save",
+  "configuration-enable-packages", "configuration-migrate", "migration-package-name", "configuration-notice",
+  "configuration-check", "configuration-history", "configuration-git-history", "home-assistant-check", "history-button", "git-history-button",
+  "history-dialog", "history-close", "history-path", "history-list", "diff-placeholder", "diff-view", "history-summary", "history-restore",
+  "git-dialog", "git-history-close", "git-history-path", "git-history-list", "git-diff-placeholder", "git-diff-view", "git-history-summary", "git-history-restore",
+  "package-conflicts-button", "conflict-dialog", "conflict-close", "conflict-summary", "conflict-list",
 ].map((id) => [id, document.getElementById(id)]));
 
 let validationTimer;
+let configurationValidationTimer;
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -230,6 +242,493 @@ function renderConfigurationStatus(configuration) {
   elements["configuration-status"].title = status.message || label;
 }
 
+function syncConfigurationScroll() {
+  elements["configuration-highlighting"].scrollTop = elements["configuration-editor"].scrollTop;
+  elements["configuration-highlighting"].scrollLeft = elements["configuration-editor"].scrollLeft;
+  elements["configuration-line-numbers"].scrollTop = elements["configuration-editor"].scrollTop;
+}
+
+function updateConfigurationCursor() {
+  const before = elements["configuration-editor"].value.slice(0, elements["configuration-editor"].selectionStart);
+  const lines = before.split("\n");
+  elements["configuration-cursor"].textContent = `Zeile ${lines.length}, Spalte ${lines.at(-1).length + 1}`;
+}
+
+function updateConfigurationRendering() {
+  const value = elements["configuration-editor"].value;
+  elements["configuration-highlighting"].firstElementChild.innerHTML = value.split("\n").map(highlightLine).join("\n") + "\n";
+  const lines = Math.max(1, value.split("\n").length);
+  elements["configuration-line-numbers"].textContent = Array.from({ length: lines }, (_, index) => index + 1).join("\n");
+  syncConfigurationScroll();
+  updateConfigurationCursor();
+}
+
+function setConfigurationNotice(message, type = "") {
+  elements["configuration-notice"].className = `configuration-notice ${type}`;
+  elements["configuration-notice"].textContent = message;
+}
+
+function setConfigurationDirty() {
+  state.configurationDirty = elements["configuration-editor"].value !== state.configurationOriginal;
+  elements["configuration-save"].disabled = !state.configurationDirty;
+}
+
+function renderHomeAssistantCheck(check = null) {
+  const result = check || {
+    status: "unavailable", message: "Noch nicht ausgeführt", valid: null,
+  };
+  const css = result.status === "valid" ? "valid" : result.status === "invalid" ? "invalid" : "unavailable";
+  const icon = css === "valid" ? "✓" : css === "invalid" ? "×" : "?";
+  elements["home-assistant-check"].className = `home-assistant-check ${css}`;
+  elements["home-assistant-check"].innerHTML = `<span class="check-indicator" aria-hidden="true">${icon}</span><span><strong>Home-Assistant-Prüfung</strong><small>${escapeHtml(result.message || "Kein Ergebnis")}</small></span>`;
+  const source = result.source || "";
+  const canJump = !source || source === "/config/configuration.yaml";
+  elements["home-assistant-check"].dataset.line = canJump ? result.line || "" : "";
+  elements["home-assistant-check"].dataset.source = source;
+  elements["home-assistant-check"].title = result.message || "";
+}
+
+function renderFileHomeAssistantCheck(check = null) {
+  const button = elements["file-ha-check"];
+  if (!check) {
+    button.className = "file-ha-check hidden";
+    button.dataset.line = "";
+    button.dataset.source = "";
+    return;
+  }
+  const css = check.valid === true ? "valid" : check.valid === false ? "invalid" : "unavailable";
+  const label = check.valid === true ? "✓ HA-Konfiguration gültig" : check.valid === false ? `HA-Fehler: ${check.message}` : "HA-Prüfung nicht verfügbar";
+  const currentSource = state.selected ? `/config/packages/${state.selected.path}` : "";
+  button.className = `file-ha-check ${css}`;
+  button.textContent = label;
+  button.title = check.message || label;
+  button.dataset.source = check.source || "";
+  button.dataset.line = check.source === currentSource ? check.line || "" : "";
+}
+
+function showConfigurationActionResult(result, successMessage) {
+  const check = result.configurationCheck;
+  if (check?.valid === false) {
+    setConfigurationNotice(`${successMessage} Home Assistant meldet: ${check.message}`, "error");
+    return;
+  }
+  if (check?.valid === true) {
+    setConfigurationNotice(`${successMessage} Home Assistant bestätigt die Konfiguration.`, "success");
+    return;
+  }
+  setConfigurationNotice(`${successMessage} Die Home-Assistant-Prüfung war nicht verfügbar.`, "warning");
+}
+
+function applyConfigurationResult(result) {
+  state.configuration = result;
+  state.configurationOriginal = result.content;
+  state.configurationDirty = false;
+  elements["configuration-editor"].value = result.content;
+  elements["configuration-save"].disabled = true;
+  updateConfigurationRendering();
+  if (result.packages) renderConfigurationStatus(result.packages);
+  scheduleConfigurationValidation();
+  renderHomeAssistantCheck(result.configurationCheck || null);
+}
+
+async function openConfigurationEditor() {
+  try {
+    const result = await api("api/configuration");
+    applyConfigurationResult(result);
+    setConfigurationNotice("Der Bereich homeassistant: bleibt aus Sicherheitsgründen in der Hauptdatei.");
+    elements["configuration-dialog"].showModal();
+    setTimeout(() => elements["configuration-editor"].focus(), 0);
+  } catch (error) { toast(error.message, "error"); }
+}
+
+function closeConfigurationEditor() {
+  if (state.configurationDirty && !confirm("Ungespeicherte Änderungen an configuration.yaml verwerfen?")) return;
+  elements["configuration-dialog"].close();
+}
+
+function showConfigurationValidation(result) {
+  const button = elements["configuration-validation"];
+  button.className = `validation-status ${result.valid ? "valid" : "invalid"}`;
+  button.textContent = result.valid ? "✓ YAML gültig" : `Fehler: ${result.message}${result.line ? ` (${result.line}:${result.column})` : ""}`;
+  button.dataset.line = result.line || "";
+  button.title = button.textContent;
+}
+
+function jumpToConfigurationLine(rawLine) {
+  const target = Number(rawLine);
+  if (!target) return;
+  const editor = elements["configuration-editor"];
+  const lines = editor.value.split("\n");
+  const offset = lines.slice(0, target - 1).reduce((sum, line) => sum + line.length + 1, 0);
+  editor.focus();
+  editor.setSelectionRange(offset, offset + (lines[target - 1]?.length || 0));
+  editor.scrollTop = Math.max(0, (target - 4) * 21.45);
+  syncConfigurationScroll();
+}
+
+function jumpToConfigurationError() {
+  jumpToConfigurationLine(elements["configuration-validation"].dataset.line);
+}
+
+function scheduleConfigurationValidation() {
+  clearTimeout(configurationValidationTimer);
+  elements["configuration-validation"].className = "validation-status neutral";
+  elements["configuration-validation"].textContent = "Prüfe …";
+  configurationValidationTimer = setTimeout(async () => {
+    try {
+      const result = await api("api/validate", {
+        method: "POST",
+        body: JSON.stringify({ content: elements["configuration-editor"].value }),
+      });
+      showConfigurationValidation(result);
+    } catch (error) { toast(error.message, "error"); }
+  }, 350);
+}
+
+async function saveConfiguration() {
+  if (!state.configuration || !state.configurationDirty) return;
+  elements["configuration-save"].disabled = true;
+  try {
+    const result = await api("api/configuration", {
+      method: "PUT",
+      body: JSON.stringify({
+        content: elements["configuration-editor"].value,
+        version: state.configuration.version,
+      }),
+    });
+    applyConfigurationResult(result);
+    await refreshFiles();
+    showConfigurationActionResult(result, "configuration.yaml wurde gespeichert und gesichert.");
+    toast("configuration.yaml gespeichert", "success");
+  } catch (error) {
+    elements["configuration-save"].disabled = false;
+    if (error.details?.line) showConfigurationValidation(error.details);
+    setConfigurationNotice(error.message, "error");
+    toast(error.message, "error");
+  }
+}
+
+async function runHomeAssistantCheck() {
+  elements["configuration-check"].disabled = true;
+  try {
+    const result = await api("api/configuration/check", { method: "POST", body: "{}" });
+    renderHomeAssistantCheck(result);
+    setConfigurationNotice(
+      result.valid === true ? "Home Assistant bestätigt die Konfiguration." : result.message,
+      result.valid === true ? "success" : result.valid === false ? "error" : "warning",
+    );
+  } catch (error) {
+    setConfigurationNotice(error.message, "error");
+    toast(error.message, "error");
+  } finally {
+    elements["configuration-check"].disabled = false;
+  }
+}
+
+async function enablePackagesInConfiguration() {
+  if (!state.configuration) return null;
+  try {
+    const result = await api("api/configuration/enable-packages", {
+      method: "POST",
+      body: JSON.stringify({
+        content: elements["configuration-editor"].value,
+        version: state.configuration.version,
+      }),
+    });
+    applyConfigurationResult(result);
+    await refreshFiles();
+    showConfigurationActionResult(result, result.message);
+    toast(result.message, "success");
+    return result;
+  } catch (error) {
+    setConfigurationNotice(error.message, "error");
+    toast(error.message, "error");
+    return null;
+  }
+}
+
+async function migrateConfiguration() {
+  if (!state.configuration) return;
+  const packageName = elements["migration-package-name"].value.trim();
+  if (!/^[a-z0-9_]+$/.test(packageName)) {
+    setConfigurationNotice("Der Package-Name darf nur Kleinbuchstaben, Ziffern und Unterstriche enthalten.", "error");
+    return;
+  }
+  try {
+    const preview = await api("api/configuration/migration-preview", {
+      method: "POST",
+      body: JSON.stringify({
+        content: elements["configuration-editor"].value,
+        packageName,
+      }),
+    });
+    if (preview.targetExists) {
+      throw new Error(`${preview.target} existiert bereits. Es wurde nichts verändert.`);
+    }
+    const componentList = preview.components.join(", ");
+    const confirmed = confirm(
+      `${preview.componentCount} Bereiche werden nach ${preview.target} verschoben:\n\n${componentList}\n\nDer homeassistant:-Block bleibt erhalten. Fortfahren?`,
+    );
+    if (!confirmed) return;
+
+    const enabled = await enablePackagesInConfiguration();
+    if (!enabled) return;
+    const result = await api("api/configuration/migrate", {
+      method: "POST",
+      body: JSON.stringify({
+        content: enabled.content,
+        version: enabled.version,
+        packageName,
+      }),
+    });
+    applyConfigurationResult(result);
+    await refreshFiles();
+    showConfigurationActionResult(result, result.message);
+    toast(result.message, "success");
+  } catch (error) {
+    setConfigurationNotice(error.message, "error");
+    toast(error.message, "error");
+  }
+}
+
+function historyQuery(path, extra = {}) {
+  const params = new URLSearchParams({ scope: state.history.scope, path: path || "", ...extra });
+  return params.toString();
+}
+
+async function selectHistoryEntry(entry, button) {
+  document.querySelectorAll(".history-entry").forEach((item) => item.classList.toggle("active", item === button));
+  state.history.selectedId = entry.id;
+  elements["history-restore"].disabled = false;
+  elements["history-summary"].textContent = `${entry.created.replace("T", " ")} · +${entry.additions} / -${entry.deletions}`;
+  try {
+    const result = await api(`api/backup/diff?${historyQuery(state.history.path, { id: entry.id })}`);
+    const lines = result.diff ? result.diff.split("\n") : ["Keine Unterschiede zur aktuellen Fassung."];
+    elements["diff-view"].innerHTML = lines.map((line) => {
+      let css = "";
+      if (line.startsWith("+++") || line.startsWith("---") || line.startsWith("@@")) css = "header";
+      else if (line.startsWith("+")) css = "added";
+      else if (line.startsWith("-")) css = "removed";
+      return `<span class="diff-line ${css}">${escapeHtml(line)}</span>`;
+    }).join("");
+    elements["diff-placeholder"].classList.add("hidden");
+    elements["diff-view"].classList.remove("hidden");
+    if (result.truncated) toast("Der Diff wurde nach 1.200 Zeilen gekürzt.");
+  } catch (error) { toast(error.message, "error"); }
+}
+
+function renderHistory(history) {
+  elements["history-path"].textContent = history.path;
+  state.history.currentVersion = history.currentVersion;
+  state.history.selectedId = "";
+  elements["history-restore"].disabled = true;
+  elements["history-summary"].textContent = `${history.entries.length} gespeicherte Versionen`;
+  elements["diff-view"].classList.add("hidden");
+  elements["diff-placeholder"].classList.remove("hidden");
+  elements["diff-placeholder"].textContent = "Wähle links eine Version für den Vergleich.";
+  if (!history.entries.length) {
+    const empty = document.createElement("div");
+    empty.className = "history-empty";
+    empty.textContent = "Noch keine Sicherungen für diese Datei.";
+    elements["history-list"].replaceChildren(empty);
+    return;
+  }
+  elements["history-list"].replaceChildren(...history.entries.map((entry) => {
+    const button = document.createElement("button");
+    button.className = "history-entry";
+    button.innerHTML = `<strong>${escapeHtml(entry.created.replace("T", " "))}</strong><small>+${entry.additions} / -${entry.deletions} · ${entry.size} Bytes</small>`;
+    button.addEventListener("click", () => selectHistoryEntry(entry, button));
+    return button;
+  }));
+}
+
+async function openHistory(scope) {
+  if (scope === "package" && !state.selected) return;
+  state.history.scope = scope;
+  state.history.path = scope === "package" ? state.selected.path : "";
+  try {
+    const history = await api(`api/backups?${historyQuery(state.history.path)}`);
+    renderHistory(history);
+    elements["history-dialog"].showModal();
+  } catch (error) { toast(error.message, "error"); }
+}
+
+async function restoreSelectedBackup() {
+  if (!state.history.selectedId) return;
+  if ((state.history.scope === "configuration" && state.configurationDirty) || (state.history.scope === "package" && state.dirty)) {
+    toast("Speichere oder verwirf zuerst die aktuellen Änderungen.", "error");
+    return;
+  }
+  if (!confirm(`Backup ${state.history.selectedId} wirklich wiederherstellen? Die aktuelle Fassung wird zuvor gesichert.`)) return;
+  try {
+    const result = await api("api/backup/restore", {
+      method: "POST",
+      body: JSON.stringify({
+        scope: state.history.scope,
+        path: state.history.path,
+        id: state.history.selectedId,
+        version: state.history.currentVersion,
+      }),
+    });
+    elements["history-dialog"].close();
+    if (state.history.scope === "configuration") {
+      applyConfigurationResult(result);
+      await refreshFiles();
+      showConfigurationActionResult(result, result.message);
+    } else {
+      await refreshFiles();
+      await openFile(result.path, true);
+      renderFileHomeAssistantCheck(result.configurationCheck);
+    }
+    toast(result.message, "success");
+  } catch (error) { toast(error.message, "error"); }
+}
+
+function gitHistoryQuery(extra = {}) {
+  const params = new URLSearchParams({
+    scope: state.gitHistory.scope,
+    path: state.gitHistory.path || "",
+    ...extra,
+  });
+  return params.toString();
+}
+
+function renderGitDiff(result) {
+  const lines = result.diff ? result.diff.split("\n") : ["Keine Unterschiede zur aktuellen Fassung."];
+  elements["git-diff-view"].innerHTML = lines.map((line) => {
+    let css = "";
+    if (line.startsWith("+++") || line.startsWith("---") || line.startsWith("@@")) css = "header";
+    else if (line.startsWith("+")) css = "added";
+    else if (line.startsWith("-")) css = "removed";
+    return `<span class="diff-line ${css}">${escapeHtml(line)}</span>`;
+  }).join("");
+  elements["git-diff-placeholder"].classList.add("hidden");
+  elements["git-diff-view"].classList.remove("hidden");
+  if (result.truncated) toast("Der Git-Diff wurde nach 1.200 Zeilen gekürzt.");
+}
+
+async function selectGitHistoryEntry(entry, button) {
+  elements["git-history-list"].querySelectorAll(".history-entry").forEach((item) => {
+    item.classList.toggle("active", item === button);
+  });
+  state.gitHistory.selectedCommit = entry.id;
+  elements["git-history-restore"].disabled = false;
+  elements["git-history-summary"].textContent = `${entry.shortId} · ${entry.subject}`;
+  try {
+    const result = await api(`api/git/diff?${gitHistoryQuery({ commit: entry.id })}`);
+    renderGitDiff(result);
+  } catch (error) { toast(error.message, "error"); }
+}
+
+function renderGitHistory(history) {
+  elements["git-history-path"].textContent = history.path;
+  state.gitHistory.currentVersion = history.currentVersion;
+  state.gitHistory.selectedCommit = "";
+  elements["git-history-restore"].disabled = true;
+  elements["git-diff-view"].classList.add("hidden");
+  elements["git-diff-placeholder"].classList.remove("hidden");
+  elements["git-diff-placeholder"].textContent = "Wähle links einen Commit für den Vergleich.";
+  elements["git-history-summary"].textContent = history.available
+    ? `${history.entries.length} Git-Commits`
+    : history.message || "Git ist nicht verfügbar.";
+  if (!history.entries.length) {
+    const empty = document.createElement("div");
+    empty.className = "history-empty";
+    empty.textContent = history.available ? "Noch keine Git-Commits für diese Datei." : history.message;
+    elements["git-history-list"].replaceChildren(empty);
+    return;
+  }
+  elements["git-history-list"].replaceChildren(...history.entries.map((entry) => {
+    const button = document.createElement("button");
+    button.className = "history-entry";
+    const created = entry.created.replace("T", " ").slice(0, 19);
+    button.innerHTML = `<strong>${escapeHtml(entry.subject)}</strong><small>${escapeHtml(created)} · ${escapeHtml(entry.shortId)} · ${escapeHtml(entry.author)}</small>`;
+    button.addEventListener("click", () => selectGitHistoryEntry(entry, button));
+    return button;
+  }));
+}
+
+async function openGitHistory(scope) {
+  if (scope === "package" && !state.selected) return;
+  state.gitHistory.scope = scope;
+  state.gitHistory.path = scope === "package" ? state.selected.path : "";
+  try {
+    const history = await api(`api/git/history?${gitHistoryQuery()}`);
+    renderGitHistory(history);
+    elements["git-dialog"].showModal();
+  } catch (error) { toast(error.message, "error"); }
+}
+
+async function restoreSelectedGitCommit() {
+  if (!state.gitHistory.selectedCommit) return;
+  if ((state.gitHistory.scope === "configuration" && state.configurationDirty) || (state.gitHistory.scope === "package" && state.dirty)) {
+    toast("Speichere oder verwirf zuerst die aktuellen Änderungen.", "error");
+    return;
+  }
+  const shortCommit = state.gitHistory.selectedCommit.slice(0, 8);
+  if (!confirm(`Auf Git-Stand ${shortCommit} zurückgehen? Die aktuelle Fassung wird vorher als Backup und Git-Commit gesichert.`)) return;
+  try {
+    const result = await api("api/git/restore", {
+      method: "POST",
+      body: JSON.stringify({
+        scope: state.gitHistory.scope,
+        path: state.gitHistory.path,
+        commit: state.gitHistory.selectedCommit,
+        version: state.gitHistory.currentVersion,
+      }),
+    });
+    elements["git-dialog"].close();
+    if (state.gitHistory.scope === "configuration") {
+      applyConfigurationResult(result);
+      await refreshFiles();
+      showConfigurationActionResult(result, result.message);
+    } else {
+      await refreshFiles();
+      await openFile(result.path, true);
+      renderFileHomeAssistantCheck(result.configurationCheck);
+    }
+    toast(result.message, "success");
+  } catch (error) { toast(error.message, "error"); }
+}
+
+function renderPackageConflicts(result) {
+  state.packageConflicts = result;
+  const errors = result.counts?.error || 0;
+  const warnings = result.counts?.warning || 0;
+  const css = errors ? "invalid" : warnings ? "missing" : "configured";
+  const icon = errors ? "×" : warnings ? "!" : "✓";
+  const label = errors ? `${errors} Konflikte` : warnings ? `${warnings} Warnungen` : "Keine Konflikte";
+  elements["package-conflicts-button"].className = `configuration-status ${css}`;
+  elements["package-conflicts-button"].innerHTML = `<span class="configuration-status-icon" aria-hidden="true">${icon}</span><span><strong>Package-Konflikte</strong><small>${label}</small></span>`;
+  elements["conflict-summary"].textContent = `${result.fileCount} Dateien geprüft · ${errors} Fehler · ${warnings} Warnungen · Modus: ${result.mode}`;
+  if (!result.findings.length) {
+    const empty = document.createElement("div");
+    empty.className = "history-empty";
+    empty.textContent = "Keine Konflikte nach den geprüften Package-Merge-Regeln gefunden.";
+    elements["conflict-list"].replaceChildren(empty);
+    return;
+  }
+  elements["conflict-list"].replaceChildren(...result.findings.map((finding) => {
+    const item = document.createElement("div");
+    item.className = `conflict-item ${finding.severity}`;
+    item.innerHTML = `<span class="finding-dot"></span><div><strong>${escapeHtml(finding.title)}</strong><small>${escapeHtml(finding.message)}</small><small class="conflict-files">${escapeHtml((finding.files || []).join(" · "))}</small></div>`;
+    return item;
+  }));
+}
+
+async function loadPackageConflicts() {
+  const result = await api("api/package-conflicts");
+  renderPackageConflicts(result);
+  return result;
+}
+
+async function openPackageConflicts() {
+  try {
+    await loadPackageConflicts();
+    elements["conflict-dialog"].showModal();
+  } catch (error) { toast(error.message, "error"); }
+}
+
 async function refreshFiles() {
   const data = await api("api/files");
   state.files = data.files;
@@ -241,6 +740,7 @@ async function refreshFiles() {
   renderCategories();
   renderTags();
   renderFiles();
+  loadPackageConflicts().catch((error) => toast(error.message, "error"));
 }
 
 async function openFile(path, force = false) {
@@ -256,6 +756,7 @@ async function openFile(path, force = false) {
     elements["document-path"].textContent = path;
     fillCategories(file.category);
     elements["tag-input"].value = state.originalTags.join(", ");
+    renderFileHomeAssistantCheck(null);
     elements["empty-state"].classList.add("hidden");
     elements["editor-content"].classList.remove("hidden");
     setDirty();
@@ -283,6 +784,7 @@ async function saveCurrent() {
     state.originalCategory = file.category;
     state.originalTags = parseTags(file.tags);
     setDirty();
+    renderFileHomeAssistantCheck(file.configurationCheck);
     await refreshFiles();
     toast("Datei gespeichert", "success");
   } catch (error) {
@@ -354,6 +856,10 @@ function jumpToLine(line) {
 
 function jumpToValidationError() {
   jumpToLine(elements["validation-status"].dataset.line);
+}
+
+function jumpToFileHomeAssistantError() {
+  jumpToLine(elements["file-ha-check"].dataset.line);
 }
 
 function currentIndent() {
@@ -440,6 +946,7 @@ async function createFile(event) {
     elements["new-dialog"].close();
     await refreshFiles();
     await openFile(file.path, true);
+    renderFileHomeAssistantCheck(file.configurationCheck);
     toast("Skriptdatei angelegt", "success");
   } catch (error) { toast(error.message, "error"); }
 }
@@ -462,6 +969,7 @@ async function duplicateCurrent() {
     });
     await refreshFiles();
     await openFile(file.path, true);
+    renderFileHomeAssistantCheck(file.configurationCheck);
     toast("Datei dupliziert", "success");
   } catch (error) { toast(error.message, "error"); }
 }
@@ -531,11 +1039,54 @@ elements["category-select"].addEventListener("change", () => {
 });
 elements["tag-input"].addEventListener("input", setDirty);
 elements["file-search"].addEventListener("input", renderFiles);
-elements["configuration-status"].addEventListener("click", () => {
-  const status = elements["configuration-status"];
-  const suffix = status.dataset.expected ? ` Erwarteter Eintrag: ${status.dataset.expected.replaceAll("\n", " ")}` : "";
-  toast(`${status.dataset.message}${suffix}`, status.classList.contains("configured") ? "success" : "error");
+elements["configuration-status"].addEventListener("click", openConfigurationEditor);
+elements["configuration-button"].addEventListener("click", openConfigurationEditor);
+elements["configuration-close"].addEventListener("click", closeConfigurationEditor);
+elements["configuration-save"].addEventListener("click", saveConfiguration);
+elements["configuration-enable-packages"].addEventListener("click", enablePackagesInConfiguration);
+elements["configuration-migrate"].addEventListener("click", migrateConfiguration);
+elements["configuration-check"].addEventListener("click", runHomeAssistantCheck);
+elements["configuration-history"].addEventListener("click", () => openHistory("configuration"));
+elements["configuration-git-history"].addEventListener("click", () => openGitHistory("configuration"));
+elements["configuration-validation"].addEventListener("click", jumpToConfigurationError);
+elements["home-assistant-check"].addEventListener("click", () => {
+  jumpToConfigurationLine(elements["home-assistant-check"].dataset.line);
 });
+elements["configuration-editor"].addEventListener("input", () => {
+  updateConfigurationRendering();
+  setConfigurationDirty();
+  scheduleConfigurationValidation();
+});
+elements["configuration-editor"].addEventListener("scroll", syncConfigurationScroll);
+elements["configuration-editor"].addEventListener("click", updateConfigurationCursor);
+elements["configuration-editor"].addEventListener("keyup", updateConfigurationCursor);
+elements["configuration-editor"].addEventListener("keydown", (event) => {
+  if (event.key === "Tab") {
+    event.preventDefault();
+    const editor = elements["configuration-editor"];
+    editor.setRangeText("  ", editor.selectionStart, editor.selectionEnd, "end");
+    editor.dispatchEvent(new Event("input"));
+  }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+    event.preventDefault();
+    saveConfiguration();
+  }
+});
+elements["configuration-dialog"].addEventListener("cancel", (event) => {
+  event.preventDefault();
+  closeConfigurationEditor();
+});
+elements["history-button"].addEventListener("click", () => openHistory("package"));
+elements["history-close"].addEventListener("click", () => elements["history-dialog"].close());
+elements["history-restore"].addEventListener("click", restoreSelectedBackup);
+elements["history-dialog"].addEventListener("cancel", () => elements["history-dialog"].close());
+elements["git-history-button"].addEventListener("click", () => openGitHistory("package"));
+elements["git-history-close"].addEventListener("click", () => elements["git-dialog"].close());
+elements["git-history-restore"].addEventListener("click", restoreSelectedGitCommit);
+elements["git-dialog"].addEventListener("cancel", () => elements["git-dialog"].close());
+elements["package-conflicts-button"].addEventListener("click", openPackageConflicts);
+elements["conflict-close"].addEventListener("click", () => elements["conflict-dialog"].close());
+elements["conflict-dialog"].addEventListener("cancel", () => elements["conflict-dialog"].close());
 elements["entity-search"].addEventListener("input", () => renderHelperResults("entity"));
 elements["service-search"].addEventListener("input", () => renderHelperResults("service"));
 elements["save-button"].addEventListener("click", saveCurrent);
@@ -551,6 +1102,7 @@ elements["rename-button"].addEventListener("click", renameCurrent);
 elements["delete-button"].addEventListener("click", deleteCurrent);
 elements["reload-button"].addEventListener("click", reloadScripts);
 elements["validation-status"].addEventListener("click", jumpToValidationError);
+elements["file-ha-check"].addEventListener("click", jumpToFileHomeAssistantError);
 elements["sidebar-toggle"].addEventListener("click", () => elements.sidebar.classList.add("open"));
 elements["sidebar-close"].addEventListener("click", () => elements.sidebar.classList.remove("open"));
 elements["helpers-toggle"].addEventListener("click", () => elements.helpers.classList.add("open"));
@@ -563,7 +1115,9 @@ document.querySelectorAll(".helper-tab").forEach((tab) => tab.addEventListener("
   document.querySelectorAll(".helper-view").forEach((view) => view.classList.add("hidden"));
   document.getElementById(`tab-${tab.dataset.tab}`).classList.remove("hidden");
 }));
-window.addEventListener("beforeunload", (event) => { if (state.dirty) event.preventDefault(); });
+window.addEventListener("beforeunload", (event) => {
+  if (state.dirty || state.configurationDirty) event.preventDefault();
+});
 
 renderSnippets();
 Promise.all([refreshFiles(), loadHelpers()]).catch((error) => toast(error.message, "error"));

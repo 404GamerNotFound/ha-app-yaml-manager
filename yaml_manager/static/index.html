@@ -18,6 +18,7 @@
         </div>
       </div>
       <div class="topbar-actions">
+        <button class="button secondary" id="configuration-button"><span class="desktop-label">configuration.yaml</span><span class="mobile-label">Config</span></button>
         <button class="button secondary" id="reload-button" title="script.reload ausführen">Skripte neu laden</button>
         <button class="button secondary" id="new-button">Neue Datei</button>
         <button class="button primary" id="save-button" disabled>Speichern</button>
@@ -38,6 +39,13 @@
           <span>
             <strong>Packages-Einbindung</strong>
             <small>configuration.yaml wird geprüft</small>
+          </span>
+        </button>
+        <button class="configuration-status checking" id="package-conflicts-button" type="button">
+          <span class="configuration-status-icon" aria-hidden="true">…</span>
+          <span>
+            <strong>Package-Konflikte</strong>
+            <small>Konfiguration wird analysiert</small>
           </span>
         </button>
         <div class="sidebar-filters">
@@ -81,6 +89,8 @@
                 <input id="tag-input" type="text" placeholder="licht, abend" autocomplete="off">
               </label>
               <button class="icon-button" id="rename-button" title="Datei umbenennen oder verschieben" aria-label="Datei umbenennen">✎</button>
+              <button class="icon-button" id="history-button" title="Versionsverlauf anzeigen" aria-label="Versionsverlauf anzeigen">↶</button>
+              <button class="icon-button git-button" id="git-history-button" title="Git-Historie anzeigen" aria-label="Git-Historie anzeigen">G</button>
               <button class="icon-button" id="duplicate-button" title="Datei duplizieren" aria-label="Datei duplizieren">⧉</button>
               <button class="icon-button danger" id="delete-button" title="Datei löschen" aria-label="Datei löschen">⌫</button>
               <button class="icon-button mobile-only" id="helpers-toggle" title="Hilfen öffnen" aria-label="Hilfen öffnen">?</button>
@@ -97,6 +107,7 @@
 
           <footer class="statusbar">
             <button class="validation-status neutral" id="validation-status" type="button">Bereit</button>
+            <button class="file-ha-check hidden" id="file-ha-check" type="button">HA-Prüfung</button>
             <span id="cursor-status">Zeile 1, Spalte 1</span>
             <span>UTF-8</span>
             <span>YAML</span>
@@ -188,6 +199,115 @@
           <button class="button primary" id="create-button" value="default">Anlegen</button>
         </div>
       </form>
+    </dialog>
+
+    <dialog class="configuration-dialog" id="configuration-dialog">
+      <div class="configuration-dialog-content">
+        <div class="dialog-header configuration-dialog-header">
+          <div>
+            <h2>configuration.yaml</h2>
+            <p>Home-Assistant-Hauptkonfiguration bearbeiten und in Packages aufteilen.</p>
+          </div>
+          <button class="icon-button" id="configuration-close" type="button" aria-label="Konfigurationseditor schließen">×</button>
+        </div>
+
+        <div class="configuration-toolbar">
+          <div class="configuration-actions">
+            <button class="button secondary" id="configuration-check" type="button">Home Assistant prüfen</button>
+            <button class="button secondary" id="configuration-history" type="button">Versionen</button>
+            <button class="button secondary" id="configuration-git-history" type="button">Git-Historie</button>
+            <button class="button secondary" id="configuration-enable-packages" type="button">Packages einbinden</button>
+            <label class="package-name-field">
+              <span>Package</span>
+              <input id="migration-package-name" value="configuration_import" pattern="[a-z0-9_]+">
+            </label>
+            <button class="button warning" id="configuration-migrate" type="button">Alles in Package auslagern</button>
+          </div>
+          <button class="button primary" id="configuration-save" type="button" disabled>configuration.yaml speichern</button>
+        </div>
+
+        <div class="configuration-notice" id="configuration-notice">
+          Der Bereich <code>homeassistant:</code> bleibt aus Sicherheitsgründen in der Hauptdatei.
+        </div>
+        <button class="home-assistant-check unavailable" id="home-assistant-check" type="button">
+          <span class="check-indicator" aria-hidden="true">?</span>
+          <span><strong>Home-Assistant-Prüfung</strong><small>Noch nicht ausgeführt</small></span>
+        </button>
+
+        <div class="configuration-editor-shell">
+          <div class="line-numbers" id="configuration-line-numbers" aria-hidden="true">1</div>
+          <div class="code-layer">
+            <pre id="configuration-highlighting" aria-hidden="true"><code></code></pre>
+            <textarea id="configuration-editor" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="configuration.yaml-Editor"></textarea>
+          </div>
+        </div>
+
+        <footer class="configuration-statusbar">
+          <button class="validation-status neutral" id="configuration-validation" type="button">Bereit</button>
+          <span id="configuration-cursor">Zeile 1, Spalte 1</span>
+          <span>UTF-8 · YAML</span>
+        </footer>
+      </div>
+    </dialog>
+
+    <dialog class="history-dialog" id="history-dialog">
+      <div class="history-dialog-content">
+        <div class="dialog-header history-dialog-header">
+          <div>
+            <h2>Versionsverlauf</h2>
+            <p id="history-path"></p>
+          </div>
+          <button class="icon-button" id="history-close" type="button" aria-label="Versionsverlauf schließen">×</button>
+        </div>
+        <div class="history-body">
+          <aside class="history-list" id="history-list"></aside>
+          <section class="diff-panel">
+            <div class="diff-placeholder" id="diff-placeholder">Wähle links eine Version für den Vergleich.</div>
+            <pre class="diff-view hidden" id="diff-view"></pre>
+          </section>
+        </div>
+        <div class="dialog-actions history-actions">
+          <span id="history-summary">Keine Version ausgewählt</span>
+          <button class="button warning" id="history-restore" type="button" disabled>Diese Version wiederherstellen</button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog class="history-dialog" id="git-dialog">
+      <div class="history-dialog-content">
+        <div class="dialog-header history-dialog-header">
+          <div>
+            <h2>Git-Historie</h2>
+            <p id="git-history-path"></p>
+          </div>
+          <button class="icon-button" id="git-history-close" type="button" aria-label="Git-Historie schließen">×</button>
+        </div>
+        <div class="history-body">
+          <aside class="history-list" id="git-history-list"></aside>
+          <section class="diff-panel">
+            <div class="diff-placeholder" id="git-diff-placeholder">Wähle links einen Commit für den Vergleich.</div>
+            <pre class="diff-view hidden" id="git-diff-view"></pre>
+          </section>
+        </div>
+        <div class="dialog-actions history-actions">
+          <span id="git-history-summary">Kein Commit ausgewählt</span>
+          <button class="button warning" id="git-history-restore" type="button" disabled>Auf diesen Stand zurückgehen</button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog class="conflict-dialog" id="conflict-dialog">
+      <div class="conflict-dialog-content">
+        <div class="dialog-header conflict-dialog-header">
+          <div>
+            <h2>Package-Konfliktprüfung</h2>
+            <p>Doppelte Namen, Entity-IDs und nicht zusammenführbare Schlüssel.</p>
+          </div>
+          <button class="icon-button" id="conflict-close" type="button" aria-label="Konfliktübersicht schließen">×</button>
+        </div>
+        <div class="conflict-summary" id="conflict-summary"></div>
+        <div class="conflict-list" id="conflict-list"></div>
+      </div>
     </dialog>
 
     <div class="toast-region" id="toast-region" aria-live="polite"></div>
