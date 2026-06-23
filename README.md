@@ -7,6 +7,7 @@ Automationen, Szenen und zugehörigen YAML-Ressourcen.
 
 - Scrollbare Dateiliste mit Suche, Kategorien und Tags
 - YAML-Editor mit Syntaxhervorhebung, Zeilennummern und Live-Validierung
+- YAML-Strukturansicht, Editor-Autocomplete und Shortcuts für häufige Aktionen
 - Kontextbezogene Script-Prüfung für doppelte Schlüssel, Script-IDs und Entitäten
 - Script-Abhängigkeitsansicht mit Sprung zu Verwendung und Definition
 - Vorschau-basierte Script-ID-Umbenennung einschließlich erkannter Referenzen
@@ -18,6 +19,7 @@ Automationen, Szenen und zugehörigen YAML-Ressourcen.
 - Vorlagen für Aktionen, Bedingungen, Verzögerungen, Auswahl und Wiederholungen
 - Suche nach Home-Assistant-Entitäten und -Diensten
 - Sicheres Speichern mit Sicherungskopien und Papierkorb
+- Papierkorb-Dialog zum Wiederherstellen oder endgültigen Entfernen gelöschter Dateien
 - Umbenennen und Verschieben von Dateien innerhalb des Package-Ordners
 - Direkter Aufruf von `script.reload`
 - Prüfung, ob `/config/packages` über `homeassistant.packages` eingebunden ist
@@ -31,6 +33,8 @@ Automationen, Szenen und zugehörigen YAML-Ressourcen.
 - Optionaler automatischer Remote-Push nach jedem erfolgreichen Speichern
 - Globale Package-Konfliktprüfung nach den Home-Assistant-Merge-Regeln
 - Qualitätsdashboard für Konflikte, Warnungen, Script-Nutzung, Backups und Git
+- Systemstatus im Dashboard für Git, Remote, Home Assistant, Backups, Papierkorb und Importlimits
+- Einstellungsdialog für Aufbewahrung, Importlimits, Dashboard-Regeln, Theme und Speicherverhalten
 - Konfliktgeprüfter ZIP-Import und Export nach Datei, Kategorie oder Gesamtbestand
 - Responsive Ingress-Oberfläche mit Hell- und Dunkelmodus
 
@@ -66,11 +70,27 @@ Die Implementierung ist in [yaml_manager](yaml_manager) gekapselt. `app.py`
 stellt die kompatible Service-Fassade und Orchestrierung bereit. HTTP-Transport,
 Konfigurationsbearbeitung, Git, Backups, YAML-Validierung und
 Script-Abhängigkeiten sind in `api.py`, `configuration.py`, `git.py`, `backup.py`,
-`validation.py` und `dependencies.py` getrennt. Das Backend verwendet
-ausschließlich die Python-Standardbibliothek für HTTP und Dateizugriffe;
+`validation.py` und `dependencies.py` getrennt. Metadatenverwaltung und
+wiederholte YAML-Dateiscans sind zusätzlich in `metadata.py` und `file_cache.py`
+ausgelagert, damit `app.py` weniger persistente Nebenlogik enthält. Das Backend
+verwendet ausschließlich die Python-Standardbibliothek für HTTP und Dateizugriffe;
 PyYAML übernimmt die Syntaxprüfung. Home-Assistant-spezifische YAML-Tags wie
 `!secret` und `!include` werden bei der Prüfung akzeptiert, doppelte Schlüssel
 werden dagegen als Fehler gemeldet.
+
+Die Projektkonfiguration liegt in `pyproject.toml`. Die Test-Suite ist als
+importierbares `tests`-Paket angelegt, sodass sowohl `python -m unittest` als
+auch `python -m unittest discover -s tests` alle Tests finden. Der CI-Workflow
+unter `.github/workflows/ci.yml` kompiliert die Python-Dateien, führt die
+Unit-Tests unter Python 3.10, 3.11 und 3.13 aus und prüft den Docker-Build der
+Home-Assistant-App.
+
+Benutzerkonfigurationen werden als `/data/settings.json` gespeichert. Die App
+normalisiert alle Werte serverseitig und begrenzt Backup-Aufbewahrung,
+Importanzahl sowie ZIP- und Entpackgröße auf feste sichere Bereiche. Die
+Einstellungen steuern unter anderem die Papierkorb-/Backup-Aufbewahrung, die
+Anzeige möglicherweise ungenutzter Scripts im Dashboard, das bevorzugte
+Branch-Präfix, das Theme und das Verhalten nach erfolgreichem Speichern.
 
 Schreibzugriffe erfolgen atomar über eine temporäre Datei im Zielverzeichnis.
 Ein SHA-256-Hash dient als Versionskennung und verhindert, dass eine zwischenzeitlich
@@ -166,6 +186,13 @@ Erstellen einer Package-Datei ruft das Backend zusätzlich Home Assistants
 Das Ergebnis erscheint direkt oberhalb des Editors; enthält die Fehlermeldung
 eine Zeilennummer, springt ein Klick zur betroffenen Stelle.
 
+Gelöschte Package-Dateien werden mit Metadatenmanifest nach `/data/trash`
+verschoben. Der Papierkorb-Dialog listet gelöschte Dateien mit ursprünglichem
+Pfad, Kategorie, Tags, Version und Belegungsstatus des Zielpfads. Beim
+Wiederherstellen validiert das Backend das YAML erneut, schützt vorhandene
+Zieldateien über SHA-256-Versionsvergleich, legt bei Überschreibungen ein Backup
+an und erzeugt wie bei normalen Schreibvorgängen einen Git-Commit.
+
 Der Versionsdialog ermittelt pro Datei alle Sicherungen, zeigt Additionen und
 Löschungen sowie einen serverseitig erzeugten Unified Diff und stellt einen
 ausgewählten Stand wieder her. Vor der Wiederherstellung wird die aktuelle
@@ -177,6 +204,13 @@ erkennt doppelte Package-Dateinamen über Unterordner hinweg, kollidierende
 Entity- und Integrationsschlüssel sowie doppelte `unique_id`- und Automation-ID-
 Werte. Listenbasierte Plattformintegrationen werden entsprechend den
 Home-Assistant-Package-Regeln als zusammenführbar behandelt.
+
+Wiederholte Lesevorgänge für Dashboard, Konfliktanalyse, Objektindex,
+Abhängigkeitsanalyse und Include-Prüfungen verwenden einen gemeinsamen
+UTF-8-Textcache. Der Cache ist pro absolutem Pfad, Dateigröße und `mtime_ns`
+adressiert. Externe Änderungen werden dadurch beim nächsten Zugriff automatisch
+sichtbar, während mehrere Analysen innerhalb eines Requests nicht dieselben
+Dateien mehrfach von der Platte lesen müssen.
 
 Zusätzlich initialisiert die App bei Bedarf ein lokales Git-Repository im
 Home-Assistant-Konfigurationsverzeichnis. Vor und nach jeder von der App
@@ -193,6 +227,18 @@ Pull, Push oder sicherer
 Synchronisation bedient werden. Das Token wird mit Dateimodus `0600` unter
 `/data` gespeichert, nie an das Frontend zurückgesendet und nicht in
 `.git/config` geschrieben.
+
+Der Systemstatus im Dashboard ergänzt diese Qualitätswerte um konkrete
+Betriebsinformationen: Git-Verfügbarkeit, Remote-Zustand, Home-Assistant-Token
+und letzte Konfigurationsprüfung, Backup- und Papierkorbgröße sowie aktive
+Importlimits. Die Daten kommen aus `/api/system/health` und werden zusätzlich in
+der Dashboard-Antwort mitgeliefert.
+
+Der Editor bleibt ein nativer Textbereich mit synchronisierter Highlighting-
+Ebene. Ergänzend gibt es eine YAML-Strukturansicht aus erkannten Mapping-
+Schlüsseln, eine Completion-Palette über `Strg`/`Cmd` + Leertaste für Entitäten,
+Dienste, erkannte Scripts und Bausteine sowie Shortcuts für Speichern und
+globale Suche/Ersetzung.
 
 Bei einer divergierten Historie bietet das Dashboard zwei bewusste Lösungen:
 **Historien verbinden** übernimmt einen typischen initialen README-/Lizenz-Commit

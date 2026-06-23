@@ -135,6 +135,12 @@ def create_handler(backend: Any) -> type[BaseHTTPRequestHandler]:
                     )
                 elif path == "/api/dashboard":
                     self.send_json(HTTPStatus.OK, backend.configuration_quality_dashboard())
+                elif path == "/api/system/health":
+                    self.send_json(HTTPStatus.OK, backend.system_health())
+                elif path == "/api/settings":
+                    self.send_json(HTTPStatus.OK, backend.load_settings())
+                elif path == "/api/trash":
+                    self.send_json(HTTPStatus.OK, backend.trash_history())
                 elif path == "/api/git/remote":
                     self.send_json(HTTPStatus.OK, backend.git_remote_status())
                 elif path == "/api/export":
@@ -167,7 +173,7 @@ def create_handler(backend: Any) -> type[BaseHTTPRequestHandler]:
             try:
                 path, _ = self.route()
                 body = self.read_json(
-                    backend.MAX_IMPORT_SIZE * 2 if path.startswith("/api/import/") else None
+                    backend.import_request_size_limit() if path.startswith("/api/import/") else None
                 )
                 if path == "/api/files":
                     result = backend.write_file(
@@ -267,6 +273,16 @@ def create_handler(backend: Any) -> type[BaseHTTPRequestHandler]:
                             body.get("version"),
                         ),
                     )
+                elif path == "/api/trash/restore":
+                    self.send_json(
+                        HTTPStatus.OK,
+                        backend.restore_trash_file(
+                            body.get("id", ""),
+                            body.get("path", ""),
+                            body.get("overwrite", False),
+                            body.get("version"),
+                        ),
+                    )
                 elif path == "/api/git/restore":
                     self.send_json(
                         HTTPStatus.OK,
@@ -352,6 +368,8 @@ def create_handler(backend: Any) -> type[BaseHTTPRequestHandler]:
                     )
                 elif path == "/api/git/remote":
                     result = backend.update_git_remote(body)
+                elif path == "/api/settings":
+                    result = backend.update_settings(body)
                 else:
                     raise ApiError(HTTPStatus.NOT_FOUND, "Unbekannter Endpunkt.")
                 self.send_json(HTTPStatus.OK, result)
@@ -363,6 +381,13 @@ def create_handler(backend: Any) -> type[BaseHTTPRequestHandler]:
                 path, _ = self.route()
                 if path == "/api/git/remote":
                     self.send_json(HTTPStatus.OK, backend.remove_git_remote())
+                    return
+                if path == "/api/trash":
+                    body = self.read_json()
+                    self.send_json(
+                        HTTPStatus.OK,
+                        backend.purge_trash(body.get("id", ""), body.get("path", "")),
+                    )
                     return
                 if path != "/api/file":
                     raise ApiError(HTTPStatus.NOT_FOUND, "Unbekannter Endpunkt.")

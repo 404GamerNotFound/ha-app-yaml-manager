@@ -25,6 +25,14 @@
               <span class="menu-icon" aria-hidden="true">⇄</span>
               <span><strong>Import/Export</strong><small>Package-Archive übertragen</small></span>
             </button>
+            <button class="action-menu-item" id="settings-button" type="button" role="menuitem">
+              <span class="menu-icon" aria-hidden="true">⚙</span>
+              <span><strong>Einstellungen</strong><small>Grenzen und Verhalten anpassen</small></span>
+            </button>
+            <button class="action-menu-item" id="trash-button" type="button" role="menuitem">
+              <span class="menu-icon" aria-hidden="true">⌫</span>
+              <span><strong>Papierkorb</strong><small>Gelöschte Dateien verwalten</small></span>
+            </button>
             <button class="action-menu-item" id="configuration-button" type="button" role="menuitem">
               <span class="menu-icon" aria-hidden="true">CFG</span>
               <span><strong>configuration.yaml</strong><small>Hauptkonfiguration bearbeiten</small></span>
@@ -160,6 +168,7 @@
             <div class="code-layer">
               <pre id="highlighting" aria-hidden="true"><code></code></pre>
               <textarea id="editor" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="YAML-Editor"></textarea>
+              <div class="completion-popover hidden" id="completion-popover"></div>
             </div>
           </div>
 
@@ -185,6 +194,7 @@
         <div class="helper-tabs" role="tablist">
           <button class="helper-tab active" data-tab="analysis" role="tab" aria-selected="true">Prüfung</button>
           <button class="helper-tab" data-tab="dependencies" role="tab" aria-selected="false">Bezüge</button>
+          <button class="helper-tab" data-tab="outline" role="tab" aria-selected="false">Struktur</button>
           <button class="helper-tab" data-tab="blocks" role="tab" aria-selected="false">Bausteine</button>
           <button class="helper-tab" data-tab="entities" role="tab" aria-selected="false">Entitäten</button>
           <button class="helper-tab" data-tab="services" role="tab" aria-selected="false">Dienste</button>
@@ -209,6 +219,14 @@
         <div class="helper-view hidden" id="tab-blocks">
           <p class="helper-intro">Der Baustein wird an der Cursorposition mit der aktuellen Einrückung eingefügt.</p>
           <div class="snippet-list" id="snippet-list"></div>
+        </div>
+
+        <div class="helper-view hidden" id="tab-outline">
+          <div class="analysis-summary checking" id="outline-summary">
+            <strong>YAML-Struktur</strong>
+            <span>Öffne eine Datei, um Blöcke zu sehen.</span>
+          </div>
+          <div class="outline-list" id="outline-list"></div>
         </div>
 
         <div class="helper-view hidden" id="tab-entities">
@@ -377,6 +395,13 @@
             <div class="quality-score" id="quality-score"><strong>–</strong><span>Qualität</span></div>
             <div class="quality-stats" id="quality-stats"></div>
           </section>
+          <section class="admin-section health-section">
+            <div class="admin-section-heading">
+              <div><h3>Systemstatus</h3><p>Git, Home Assistant, Speicher und letzte Prüfung.</p></div>
+              <span class="remote-badge" id="health-badge">–</span>
+            </div>
+            <div class="health-grid" id="health-grid"></div>
+          </section>
           <section class="admin-section">
             <div class="admin-section-heading">
               <div><h3>Hinweise</h3><p>Globale Package-Prüfung und möglicherweise ungenutzte Scripts.</p></div>
@@ -468,6 +493,60 @@
             <div class="import-preview-list" id="import-preview-list"></div>
           </section>
         </div>
+      </div>
+    </dialog>
+
+    <dialog class="transfer-dialog" id="settings-dialog">
+      <div class="transfer-dialog-content settings-dialog-content">
+        <div class="dialog-header admin-dialog-header">
+          <div>
+            <h2>Einstellungen</h2>
+            <p>Aufbewahrung, Importgrenzen, Dashboard-Regeln und Editor-Verhalten.</p>
+          </div>
+          <button class="icon-button" id="settings-close" type="button" aria-label="Einstellungen schließen">×</button>
+        </div>
+        <div class="settings-body">
+          <section class="admin-section settings-section">
+            <h3>Dateien und Backups</h3>
+            <div class="settings-grid">
+              <label><span>Backup-Aufbewahrung</span><input id="settings-backup-retention" type="number" min="5" max="500" step="1"></label>
+              <label><span>Max. ZIP-Größe MiB</span><input id="settings-import-size" type="number" min="1" max="100" step="1"></label>
+              <label><span>Max. entpackt MiB</span><input id="settings-expanded-size" type="number" min="1" max="500" step="1"></label>
+              <label><span>Max. Importdateien</span><input id="settings-import-files" type="number" min="1" max="2000" step="1"></label>
+            </div>
+          </section>
+          <section class="admin-section settings-section">
+            <h3>Oberfläche und Verhalten</h3>
+            <div class="settings-grid">
+              <label><span>Theme</span><select id="settings-theme"><option value="system">System</option><option value="light">Hell</option><option value="dark">Dunkel</option></select></label>
+              <label><span>Nach dem Speichern</span><select id="settings-after-save"><option value="stay">Im Editor bleiben</option><option value="dashboard">Dashboard öffnen</option></select></label>
+              <label><span>Branch-Präfix</span><input id="settings-branch-prefix" placeholder="feature/"></label>
+              <label class="settings-check"><input id="settings-unused-scripts" type="checkbox"> Möglicherweise ungenutzte Scripts anzeigen</label>
+            </div>
+          </section>
+          <div class="dialog-actions settings-actions">
+            <button class="button secondary" id="settings-reload" type="button">Zurücksetzen</button>
+            <button class="button primary" id="settings-save" type="button">Einstellungen speichern</button>
+          </div>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog class="history-dialog" id="trash-dialog">
+      <div class="history-dialog-content trash-dialog-content">
+        <div class="dialog-header history-dialog-header">
+          <div>
+            <h2>Papierkorb</h2>
+            <p>Gelöschte Package-Dateien wiederherstellen oder endgültig entfernen.</p>
+          </div>
+          <button class="icon-button" id="trash-close" type="button" aria-label="Papierkorb schließen">×</button>
+        </div>
+        <div class="trash-toolbar">
+          <span id="trash-summary">Papierkorb wird geladen.</span>
+          <button class="button secondary" id="trash-refresh" type="button">Aktualisieren</button>
+          <button class="button warning" id="trash-purge-all" type="button">Papierkorb leeren</button>
+        </div>
+        <div class="trash-list" id="trash-list"></div>
       </div>
     </dialog>
 

@@ -1,0 +1,27 @@
+[project]
+name = "ha-app-yaml-manager"
+version = "0.13.0"
+description = "Home Assistant app for managing YAML scripts, automations, scenes, and packages."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "PyYAML==6.0.3",
+]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+src = ["yaml_manager", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = [
+  "E501",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["yaml_manager"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]

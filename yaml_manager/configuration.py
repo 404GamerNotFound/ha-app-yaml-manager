@@ -36,6 +36,7 @@ def bind(backend: Any) -> None:
         "file_version",
         "git_checkpoint",
         "git_commit_paths",
+        "read_yaml_text",
         "update_file_metadata",
         "validate_yaml",
     )
@@ -61,7 +62,7 @@ def mapping_value(node: yaml.Node | None, key: str) -> yaml.Node | None:
 def compose_yaml(path: Path) -> yaml.Node | None:
     if path.stat().st_size > MAX_FILE_SIZE:
         raise ApiError(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "Die Konfigurationsdatei ist groesser als 2 MiB.")
-    return yaml.compose(path.read_text(encoding="utf-8"), Loader=HomeAssistantLoader)
+    return yaml.compose(read_yaml_text(path), Loader=HomeAssistantLoader)
 
 
 def resolve_include(value: str, base_directory: Path) -> Path:
@@ -592,4 +593,3 @@ def migrate_configuration(
         }
     )
     return result
-

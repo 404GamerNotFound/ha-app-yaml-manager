@@ -41,6 +41,7 @@ def bind(backend: Any) -> None:
         "package_contents",
         "read_configuration",
         "read_file",
+        "read_yaml_text",
         "validate_yaml",
     )
     globals().update({name: getattr(backend, name) for name in names})
@@ -397,7 +398,7 @@ def merge_git_branch(raw_branch: Any, state_version: Any) -> dict[str, Any]:
             invalid: list[str] = []
             configuration = configuration_file()
             if configuration.is_file():
-                validation = validate_yaml(configuration.read_text(encoding="utf-8"))
+                validation = validate_yaml(read_yaml_text(configuration))
                 if not validation["valid"]:
                     invalid.append("configuration.yaml")
             for path, content in package_contents().items():

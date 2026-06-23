@@ -71,7 +71,7 @@ def _safe_config_path(backend: Any, raw_path: str) -> tuple[str, Path]:
 def _included_paths(backend: Any) -> dict[str, dict[str, str]]:
     configuration = backend.configuration_file()
     try:
-        content = configuration.read_text(encoding="utf-8")
+        content = backend.read_yaml_text(configuration)
         root = yaml.compose(content, Loader=HomeAssistantLoader)
     except (OSError, UnicodeDecodeError, yaml.YAMLError):
         return {}
@@ -110,7 +110,7 @@ def managed_yaml_files(backend: Any) -> dict[str, str]:
     configuration = backend.configuration_file()
     try:
         if configuration.is_file() and configuration.stat().st_size <= backend.MAX_FILE_SIZE:
-            result["configuration.yaml"] = configuration.read_text(encoding="utf-8")
+            result["configuration.yaml"] = backend.read_yaml_text(configuration)
     except (OSError, UnicodeDecodeError):
         pass
     for path, content in backend.package_contents().items():
@@ -118,7 +118,7 @@ def managed_yaml_files(backend: Any) -> dict[str, str]:
     for relative in _included_paths(backend):
         try:
             _normalized, absolute = _safe_config_path(backend, relative)
-            result[relative] = absolute.read_text(encoding="utf-8")
+            result[relative] = backend.read_yaml_text(absolute)
         except (ApiError, OSError, UnicodeDecodeError):
             continue
     return result

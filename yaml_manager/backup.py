@@ -34,7 +34,7 @@ def create_backup(backend: Any, relative: str, source: Path) -> None:
         key=lambda item: item.name,
         reverse=True,
     )
-    for old in backups[30:]:
+    for old in backups[backend.backup_retention_count():]:
         shutil.rmtree(old, ignore_errors=True)
 
 

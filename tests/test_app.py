@@ -17,6 +17,7 @@ class FileApiTests(unittest.TestCase):
         app.DATA_ROOT = root / "data"
         app.METADATA_FILE = app.DATA_ROOT / "metadata.json"
         app.GIT_REMOTE_FILE = app.DATA_ROOT / "git_remote.json"
+        app.SETTINGS_FILE = app.DATA_ROOT / "settings.json"
         app.ensure_directories()
 
     def tearDown(self):
@@ -46,6 +47,58 @@ class FileApiTests(unittest.TestCase):
         app.delete_file(updated["path"], updated["version"])
         self.assertFalse((app.PACKAGES_ROOT / updated["path"]).exists())
         self.assertTrue(any((app.DATA_ROOT / "trash").iterdir()))
+
+    def test_settings_are_sanitized_and_affect_dashboard_rules(self):
+        settings = app.update_settings(
+            {
+                "backupRetention": 3,
+                "maxImportFiles": 12,
+                "maxImportSizeMiB": 4,
+                "maxExpandedImportSizeMiB": 8,
+                "showUnusedScripts": False,
+                "defaultBranchPrefix": "feature/",
+                "theme": "dark",
+                "afterSave": "dashboard",
+            }
+        )
+        app.write_file(
+            "unused.yaml",
+            "script:\n  unused:\n    sequence: []\n",
+            None,
+            "Tests",
+            create=True,
+        )
+
+        dashboard = app.configuration_quality_dashboard()
+
+        self.assertEqual(settings["backupRetention"], 5)
+        self.assertEqual(settings["theme"], "dark")
+        self.assertEqual(app.load_settings()["afterSave"], "dashboard")
+        self.assertFalse(any(item["code"] == "possibly-unused-script" for item in dashboard["findings"]))
+
+    def test_trash_history_restore_and_purge_preserve_metadata(self):
+        created = app.write_file(
+            "trash/test.yaml",
+            "script:\n  trash_test:\n    sequence: []\n",
+            None,
+            "Papierkorb",
+            create=True,
+            tags=["restore"],
+        )
+        app.delete_file(created["path"], created["version"])
+        history = app.trash_history()
+
+        self.assertEqual(history["count"], 1)
+        self.assertEqual(history["entries"][0]["path"], created["path"])
+        restored = app.restore_trash_file(history["entries"][0]["id"], created["path"])
+        self.assertEqual(restored["category"], "Papierkorb")
+        self.assertEqual(restored["tags"], ["restore"])
+        self.assertTrue((app.PACKAGES_ROOT / created["path"]).is_file())
+        self.assertEqual(app.trash_history()["count"], 0)
+
+        app.delete_file(restored["path"], restored["version"])
+        self.assertEqual(app.trash_history()["count"], 1)
+        self.assertEqual(app.purge_trash()["count"], 0)
 
     def test_rejects_stale_version(self):
         created = app.write_file("test.yaml", "script: {}\n", None, "Test", create=True)

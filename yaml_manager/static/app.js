@@ -34,6 +34,9 @@ const state = {
   dependencies: null,
   branches: null,
   branchPreview: null,
+  settings: null,
+  trash: null,
+  completion: { open: false, items: [], index: 0, start: 0, end: 0 },
   haObjects: null,
   resource: { path: "", content: "", version: "", dirty: false },
   searchPreview: null,
@@ -44,9 +47,9 @@ const state = {
 const elements = Object.fromEntries([
   "workspace", "sidebar", "sidebar-toggle", "sidebar-close", "file-search", "configuration-status", "configuration-status-dot", "package-conflicts-status-dot", "filter-summary", "categories", "tags", "file-list", "file-count", "root-path",
   "empty-state", "empty-new-button", "editor-content", "document-name", "document-path", "dirty-dot", "category-select", "tag-input",
-  "rename-button", "duplicate-button", "delete-button", "editor", "highlighting", "line-numbers", "validation-status", "file-ha-check", "cursor-status",
+  "rename-button", "duplicate-button", "delete-button", "editor", "highlighting", "line-numbers", "completion-popover", "validation-status", "file-ha-check", "cursor-status",
   "save-button", "new-button", "reload-button", "helpers", "helpers-toggle", "helpers-close", "snippet-list", "analysis-summary", "analysis-list", "api-notice",
-  "dependency-summary", "dependency-list",
+  "dependency-summary", "dependency-list", "outline-summary", "outline-list",
   "entity-search", "entity-list", "service-search", "service-list", "new-dialog", "new-form", "new-path", "new-script-id",
   "new-category", "new-tags", "category-options", "create-button", "toast-region",
   "configuration-button", "configuration-dialog", "configuration-close", "configuration-editor", "configuration-highlighting",
@@ -57,8 +60,11 @@ const elements = Object.fromEntries([
   "git-dialog", "git-history-close", "git-history-path", "git-history-list", "git-diff-placeholder", "git-diff-view", "git-history-summary", "git-history-restore",
   "package-conflicts-button", "conflict-dialog", "conflict-close", "conflict-summary", "conflict-list",
   "dashboard-button", "dashboard-dialog", "dashboard-close", "dashboard-refresh", "quality-score", "quality-stats", "dashboard-findings",
+  "health-badge", "health-grid",
   "remote-status", "remote-badge", "remote-url", "remote-branch", "remote-username", "remote-token", "remote-auto-push", "remote-clear-token", "remote-save", "remote-fetch", "remote-pull", "remote-push", "remote-sync", "remote-remove", "remote-resolution", "remote-merge", "remote-force-push",
   "transfer-button", "transfer-dialog", "transfer-close", "export-scope", "export-category", "export-start", "import-file", "import-strategy", "import-preview", "import-apply", "import-summary", "import-preview-list",
+  "settings-button", "settings-dialog", "settings-close", "settings-save", "settings-reload", "settings-backup-retention", "settings-import-size", "settings-expanded-size", "settings-import-files", "settings-theme", "settings-after-save", "settings-branch-prefix", "settings-unused-scripts",
+  "trash-button", "trash-dialog", "trash-close", "trash-refresh", "trash-purge-all", "trash-summary", "trash-list",
   "objects-button", "objects-dialog", "objects-close", "objects-refresh", "object-search", "object-domain", "objects-summary", "object-list",
   "resource-dialog", "resource-close", "resource-title", "resource-path", "resource-save", "resource-editor", "resource-highlighting", "resource-line-numbers", "resource-validation", "resource-cursor",
   "search-replace-button", "search-replace-dialog", "search-replace-close", "replace-search", "replace-value", "replace-case-sensitive", "replace-preview", "replace-apply", "replace-summary", "replace-file-list",
@@ -132,6 +138,7 @@ function updateEditorRendering() {
   elements["line-numbers"].textContent = Array.from({ length: lines }, (_, index) => index + 1).join("\n");
   syncScroll();
   updateCursor();
+  renderYamlOutline();
 }
 
 function syncScroll() {
@@ -144,6 +151,38 @@ function updateCursor() {
   const before = elements.editor.value.slice(0, elements.editor.selectionStart);
   const lines = before.split("\n");
   elements["cursor-status"].textContent = `Zeile ${lines.length}, Spalte ${lines.at(-1).length + 1}`;
+}
+
+function yamlOutline(content) {
+  return content.split("\n").flatMap((line, index) => {
+    const match = line.match(/^(\s*)([A-Za-z0-9_.-]+|"[^"]+"|'[^']+')\s*:/);
+    if (!match || line.trimStart().startsWith("#")) return [];
+    const depth = Math.min(5, Math.floor(match[1].replace(/\t/g, "  ").length / 2));
+    return [{ label: match[2].replace(/^["']|["']$/g, ""), line: index + 1, depth }];
+  });
+}
+
+function renderYamlOutline() {
+  if (!state.selected) return;
+  const outline = yamlOutline(elements.editor.value).slice(0, 200);
+  elements["outline-summary"].className = `analysis-summary ${outline.length ? "clean" : "checking"}`;
+  elements["outline-summary"].innerHTML = `<strong>YAML-Struktur</strong><span>${outline.length ? `${outline.length} Blöcke erkannt` : "Keine YAML-Schlüssel erkannt"}</span>`;
+  if (!outline.length) {
+    const empty = document.createElement("div");
+    empty.className = "dependency-empty";
+    empty.textContent = "Keine anspringbaren YAML-Blöcke gefunden.";
+    elements["outline-list"].replaceChildren(empty);
+    return;
+  }
+  elements["outline-list"].replaceChildren(...outline.map((item) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "outline-item";
+    button.style.setProperty("--depth", item.depth);
+    button.innerHTML = `<span class="outline-indent"></span><span class="outline-label">${escapeHtml(item.label)}</span><span class="outline-line">${item.line}</span>`;
+    button.addEventListener("click", () => jumpToLine(item.line));
+    return button;
+  }));
 }
 
 function setDirty() {
@@ -171,6 +210,97 @@ function toastSaveResult(result, successMessage) {
   } else {
     toast(successMessage, "success");
   }
+}
+
+function applyTheme(theme = "system") {
+  if (theme === "light" || theme === "dark") {
+    document.documentElement.dataset.theme = theme;
+  } else {
+    delete document.documentElement.dataset.theme;
+  }
+}
+
+function applySettings(settings) {
+  state.settings = settings;
+  applyTheme(settings.theme);
+  if (!elements["branch-new-name"].value && settings.defaultBranchPrefix) {
+    elements["branch-new-name"].placeholder = `${settings.defaultBranchPrefix}meine-aenderung`;
+  }
+}
+
+async function loadSettings() {
+  const settings = await api("api/settings");
+  applySettings(settings);
+  return settings;
+}
+
+function bytesLabel(value) {
+  const size = Number(value || 0);
+  if (size >= 1024 * 1024) return `${(size / 1024 / 1024).toFixed(1)} MiB`;
+  if (size >= 1024) return `${(size / 1024).toFixed(1)} KiB`;
+  return `${size} B`;
+}
+
+function renderHealth(health) {
+  if (!health) return;
+  const checks = [
+    {
+      title: "Git",
+      detail: health.git.available ? health.git.message : health.git.message || "Nicht verfügbar",
+      status: health.git.available ? "ok" : "error",
+    },
+    {
+      title: "Git Remote",
+      detail: health.git.remote.configured
+        ? `${health.git.remote.branch} · ${health.git.remote.ahead || 0} voraus · ${health.git.remote.behind || 0} zurück`
+        : "Nicht konfiguriert",
+      status: health.git.remote.configured ? (health.git.remote.available ? "ok" : "error") : "warn",
+    },
+    {
+      title: "Home Assistant",
+      detail: health.homeAssistant.lastCheck
+        ? `${health.homeAssistant.lastCheck.status} · ${health.homeAssistant.lastCheck.checkedAt || ""}`
+        : health.homeAssistant.tokenConfigured ? "Noch keine Prüfung ausgeführt" : "Lokal ohne Supervisor-Token",
+      status: health.homeAssistant.lastCheck?.valid === false ? "error" : health.homeAssistant.tokenConfigured ? "ok" : "warn",
+    },
+    {
+      title: "Backups",
+      detail: `${health.storage.backups.directories} Stände · ${bytesLabel(health.storage.backups.size)}`,
+      status: "ok",
+    },
+    {
+      title: "Papierkorb",
+      detail: `${health.storage.trash.entries} Dateien · ${bytesLabel(health.storage.trash.size)}`,
+      status: health.storage.trash.entries ? "warn" : "ok",
+    },
+    {
+      title: "Importlimits",
+      detail: `${health.settings.maxImportFiles} Dateien · ZIP ${health.settings.maxImportSizeMiB} MiB`,
+      status: "ok",
+    },
+    {
+      title: "Packages",
+      detail: health.paths.packages,
+      status: "ok",
+    },
+    {
+      title: "Daten",
+      detail: health.paths.data,
+      status: "ok",
+    },
+  ];
+  elements["health-badge"].textContent = checks.some((item) => item.status === "error")
+    ? "Prüfen"
+    : checks.some((item) => item.status === "warn")
+      ? "Hinweise"
+      : "OK";
+  elements["health-grid"].replaceChildren(...checks.map((check) => {
+    const card = document.createElement("div");
+    card.className = `health-card ${check.status}`;
+    card.innerHTML = `<strong>${escapeHtml(check.title)}</strong><span>${escapeHtml(check.detail)}</span>`;
+    card.title = check.detail;
+    return card;
+  }));
 }
 
 function fileMatches(file) {
@@ -439,6 +569,10 @@ async function saveConfiguration() {
     await refreshFiles();
     showConfigurationActionResult(result, "configuration.yaml wurde gespeichert und gesichert.");
     toastSaveResult(result, "configuration.yaml gespeichert.");
+    if (state.settings?.afterSave === "dashboard") {
+      closeConfigurationEditor();
+      await openDashboard();
+    }
   } catch (error) {
     elements["configuration-save"].disabled = false;
     if (error.details?.line) showConfigurationValidation(error.details);
@@ -818,6 +952,7 @@ function renderDashboard(result) {
     }));
   }
   renderRemoteStatus(result.git.remote);
+  renderHealth(result.health);
 }
 
 async function loadDashboard() {
@@ -1025,6 +1160,50 @@ async function removeRemoteConfiguration() {
   } catch (error) { toast(error.message, "error"); }
 }
 
+function fillSettings(settings = state.settings) {
+  if (!settings) return;
+  elements["settings-backup-retention"].value = settings.backupRetention;
+  elements["settings-import-size"].value = settings.maxImportSizeMiB;
+  elements["settings-expanded-size"].value = settings.maxExpandedImportSizeMiB;
+  elements["settings-import-files"].value = settings.maxImportFiles;
+  elements["settings-theme"].value = settings.theme;
+  elements["settings-after-save"].value = settings.afterSave;
+  elements["settings-branch-prefix"].value = settings.defaultBranchPrefix;
+  elements["settings-unused-scripts"].checked = settings.showUnusedScripts;
+}
+
+async function openSettingsDialog() {
+  try {
+    const settings = await loadSettings();
+    fillSettings(settings);
+    elements["settings-dialog"].showModal();
+  } catch (error) { toast(error.message, "error"); }
+}
+
+async function saveSettings() {
+  elements["settings-save"].disabled = true;
+  try {
+    const settings = await api("api/settings", {
+      method: "PUT",
+      body: JSON.stringify({
+        backupRetention: elements["settings-backup-retention"].value,
+        maxImportSizeMiB: elements["settings-import-size"].value,
+        maxExpandedImportSizeMiB: elements["settings-expanded-size"].value,
+        maxImportFiles: elements["settings-import-files"].value,
+        theme: elements["settings-theme"].value,
+        afterSave: elements["settings-after-save"].value,
+        defaultBranchPrefix: elements["settings-branch-prefix"].value,
+        showUnusedScripts: elements["settings-unused-scripts"].checked,
+      }),
+    });
+    applySettings(settings);
+    fillSettings(settings);
+    await loadDashboard();
+    toast("Einstellungen gespeichert", "success");
+  } catch (error) { toast(error.message, "error"); }
+  finally { elements["settings-save"].disabled = false; }
+}
+
 function fillExportCategories() {
   elements["export-category"].replaceChildren(...state.categories.map((category) => {
     const option = document.createElement("option");
@@ -1106,8 +1285,9 @@ async function previewPackageImport() {
     toast("Wähle zuerst ein ZIP-Archiv.", "error");
     return;
   }
-  if (file.size > 10 * 1024 * 1024) {
-    toast("Das ZIP-Archiv ist größer als 10 MiB.", "error");
+  const maxSize = (state.settings?.maxImportSizeMiB || 10) * 1024 * 1024;
+  if (file.size > maxSize) {
+    toast(`Das ZIP-Archiv ist größer als ${state.settings?.maxImportSizeMiB || 10} MiB.`, "error");
     return;
   }
   elements["import-preview"].disabled = true;
@@ -1146,6 +1326,107 @@ async function applyPackageImport() {
     elements["import-apply"].disabled = false;
     toast(error.message, "error");
   }
+}
+
+function renderTrash(result) {
+  state.trash = result;
+  elements["trash-summary"].textContent = result.count
+    ? `${result.count} gelöschte Datei(en) im Papierkorb`
+    : "Der Papierkorb ist leer.";
+  elements["trash-purge-all"].disabled = !result.count;
+  if (!result.entries.length) {
+    const empty = document.createElement("div");
+    empty.className = "history-empty";
+    empty.textContent = "Keine gelöschten Dateien vorhanden.";
+    elements["trash-list"].replaceChildren(empty);
+    return;
+  }
+  elements["trash-list"].replaceChildren(...result.entries.map((entry) => {
+    const item = document.createElement("div");
+    item.className = "trash-item";
+    const details = document.createElement("div");
+    details.innerHTML = `<strong>${escapeHtml(entry.path)}</strong><small>${escapeHtml(entry.deleted.replace("T", " "))} · ${entry.size} Bytes · ${escapeHtml(entry.category || DEFAULT_CATEGORY)}</small>`;
+    const stateLabel = document.createElement("div");
+    stateLabel.innerHTML = `<small>${entry.exists ? "Pfad ist belegt" : "Pfad ist frei"}</small><small>${escapeHtml((entry.tags || []).map((tag) => `#${tag}`).join(" "))}</small>`;
+    const actions = document.createElement("div");
+    actions.className = "trash-actions";
+    const restore = document.createElement("button");
+    restore.type = "button";
+    restore.className = "button secondary";
+    restore.textContent = "Wiederherstellen";
+    restore.addEventListener("click", () => restoreTrashEntry(entry));
+    const purge = document.createElement("button");
+    purge.type = "button";
+    purge.className = "button warning";
+    purge.textContent = "Löschen";
+    purge.addEventListener("click", () => purgeTrashEntry(entry));
+    actions.append(restore, purge);
+    item.append(details, stateLabel, actions);
+    return item;
+  }));
+}
+
+async function loadTrash() {
+  const result = await api("api/trash");
+  renderTrash(result);
+  return result;
+}
+
+async function openTrashDialog() {
+  try {
+    await loadTrash();
+    elements["trash-dialog"].showModal();
+  } catch (error) { toast(error.message, "error"); }
+}
+
+async function restoreTrashEntry(entry) {
+  let version = null;
+  let overwrite = false;
+  if (entry.exists) {
+    if (!confirm(`${entry.path} existiert bereits. Vorhandene Datei überschreiben?`)) return;
+    try {
+      const current = await api(`api/file?path=${encodeURIComponent(entry.path)}`);
+      version = current.version;
+      overwrite = true;
+    } catch (error) {
+      toast(error.message, "error");
+      return;
+    }
+  }
+  try {
+    const result = await api("api/trash/restore", {
+      method: "POST",
+      body: JSON.stringify({ id: entry.id, path: entry.path, overwrite, version }),
+    });
+    await refreshFiles();
+    await loadTrash();
+    elements["trash-dialog"].close();
+    await openFile(result.path, true);
+    renderFileHomeAssistantCheck(result.configurationCheck);
+    toast(result.message, "success");
+  } catch (error) { toast(error.message, "error"); }
+}
+
+async function purgeTrashEntry(entry) {
+  if (!confirm(`${entry.path} endgültig aus dem Papierkorb löschen?`)) return;
+  try {
+    const result = await api("api/trash", {
+      method: "DELETE",
+      body: JSON.stringify({ id: entry.id, path: entry.path }),
+    });
+    renderTrash(result);
+    toast("Papierkorb-Eintrag gelöscht", "success");
+  } catch (error) { toast(error.message, "error"); }
+}
+
+async function purgeAllTrash() {
+  if (!state.trash?.count || !confirm("Papierkorb vollständig leeren? Diese Dateien können danach nicht über die App wiederhergestellt werden.")) return;
+  try {
+    const result = await api("api/trash", { method: "DELETE", body: "{}" });
+    renderTrash(result);
+    await loadDashboard();
+    toast("Papierkorb geleert", "success");
+  } catch (error) { toast(error.message, "error"); }
 }
 
 function renderHaObjects() {
@@ -1283,6 +1564,10 @@ async function saveResource() {
     elements["resource-save"].disabled = true;
     await loadHaObjects();
     toastSaveResult(result, "HA-Ressource gespeichert.");
+    if (state.settings?.afterSave === "dashboard") {
+      closeResourceEditor();
+      await openDashboard();
+    }
   } catch (error) {
     elements["resource-save"].disabled = false;
     toast(error.message, "error");
@@ -1416,6 +1701,7 @@ async function saveCurrent() {
     await refreshFiles();
     await loadDependencies();
     toastSaveResult(file, "Datei gespeichert.");
+    if (state.settings?.afterSave === "dashboard") await openDashboard();
   } catch (error) {
     elements["save-button"].disabled = false;
     if (error.details?.line) showValidation(error.details);
@@ -1657,6 +1943,100 @@ function insertText(text) {
   editor.dispatchEvent(new Event("input"));
 }
 
+function completionRange() {
+  const editor = elements.editor;
+  const before = editor.value.slice(0, editor.selectionStart);
+  const match = before.match(/[A-Za-z0-9_.-]*$/);
+  const token = match?.[0] || "";
+  return { start: editor.selectionStart - token.length, end: editor.selectionStart, token };
+}
+
+function completionCandidates(token) {
+  const term = token.toLocaleLowerCase("de");
+  const items = [];
+  if (state.helpers?.entities) {
+    for (const entity of state.helpers.entities) {
+      items.push({
+        value: entity.entity_id,
+        label: entity.entity_id,
+        detail: entity.name || "Entität",
+      });
+    }
+  }
+  if (state.helpers?.services) {
+    for (const service of state.helpers.services) {
+      items.push({ value: service, label: service, detail: "Dienst" });
+    }
+  }
+  for (const script of state.dependencies?.scripts || []) {
+    items.push({ value: script.entityId, label: script.entityId, detail: script.alias || "Script" });
+  }
+  for (const snippet of snippets) {
+    items.push({ value: snippet.text, label: snippet.name, detail: "Baustein" });
+  }
+  const filtered = items
+    .filter((item) => !term || `${item.label} ${item.detail}`.toLocaleLowerCase("de").includes(term))
+    .slice(0, 12);
+  return filtered;
+}
+
+function renderCompletion() {
+  const popover = elements["completion-popover"];
+  if (!state.completion.open || !state.completion.items.length) {
+    popover.classList.add("hidden");
+    popover.replaceChildren();
+    return;
+  }
+  popover.classList.remove("hidden");
+  popover.replaceChildren(...state.completion.items.map((item, index) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `completion-item${index === state.completion.index ? " active" : ""}`;
+    button.innerHTML = `<strong>${escapeHtml(item.label)}</strong><span>${escapeHtml(item.detail)}</span>`;
+    button.addEventListener("mousedown", (event) => {
+      event.preventDefault();
+      acceptCompletion(index);
+    });
+    return button;
+  }));
+}
+
+function openCompletion() {
+  if (!state.selected) return;
+  const range = completionRange();
+  const items = completionCandidates(range.token);
+  if (!items.length) {
+    hideCompletion();
+    toast("Keine passenden Vorschläge gefunden.", "error");
+    return;
+  }
+  state.completion = { open: true, items, index: 0, start: range.start, end: range.end };
+  renderCompletion();
+}
+
+function hideCompletion() {
+  state.completion.open = false;
+  renderCompletion();
+}
+
+function moveCompletion(delta) {
+  if (!state.completion.open) return;
+  const count = state.completion.items.length;
+  state.completion.index = (state.completion.index + delta + count) % count;
+  renderCompletion();
+}
+
+function acceptCompletion(index = state.completion.index) {
+  if (!state.completion.open) return;
+  const item = state.completion.items[index];
+  if (!item) return;
+  const editor = elements.editor;
+  editor.setRangeText(item.value, state.completion.start, state.completion.end, "end");
+  hideCompletion();
+  editor.focus();
+  editor.dispatchEvent(new Event("input"));
+}
+
 function renderSnippets() {
   elements["snippet-list"].replaceChildren(...snippets.map((snippet) => {
     const button = document.createElement("button");
@@ -1792,17 +2172,32 @@ async function reloadScripts() {
   } catch (error) { toast(error.message, "error"); }
 }
 
-elements.editor.addEventListener("input", () => { updateEditorRendering(); setDirty(); scheduleValidation(); });
+elements.editor.addEventListener("input", () => { hideCompletion(); updateEditorRendering(); setDirty(); scheduleValidation(); });
 elements.editor.addEventListener("scroll", syncScroll);
 elements.editor.addEventListener("click", updateCursor);
 elements.editor.addEventListener("keyup", updateCursor);
 elements.editor.addEventListener("keydown", (event) => {
+  if (state.completion.open) {
+    if (event.key === "ArrowDown") { event.preventDefault(); moveCompletion(1); return; }
+    if (event.key === "ArrowUp") { event.preventDefault(); moveCompletion(-1); return; }
+    if (event.key === "Enter" || event.key === "Tab") { event.preventDefault(); acceptCompletion(); return; }
+    if (event.key === "Escape") { event.preventDefault(); hideCompletion(); return; }
+  }
+  if ((event.ctrlKey || event.metaKey) && event.key === " ") {
+    event.preventDefault();
+    openCompletion();
+    return;
+  }
   if (event.key === "Tab") {
     event.preventDefault();
     elements.editor.setRangeText("  ", elements.editor.selectionStart, elements.editor.selectionEnd, "end");
     elements.editor.dispatchEvent(new Event("input"));
   }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") { event.preventDefault(); saveCurrent(); }
+  if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "f") {
+    event.preventDefault();
+    openSearchReplaceDialog();
+  }
 });
 elements["category-select"].addEventListener("change", () => {
   if (elements["category-select"].value === NEW_CATEGORY) {
@@ -1837,6 +2232,16 @@ elements["remote-sync"].addEventListener("click", () => synchronizeRemote("sync"
 elements["remote-merge"].addEventListener("click", () => synchronizeRemote("merge"));
 elements["remote-force-push"].addEventListener("click", () => synchronizeRemote("force-push"));
 elements["remote-remove"].addEventListener("click", removeRemoteConfiguration);
+elements["settings-button"].addEventListener("click", openSettingsDialog);
+elements["settings-close"].addEventListener("click", () => elements["settings-dialog"].close());
+elements["settings-dialog"].addEventListener("cancel", () => elements["settings-dialog"].close());
+elements["settings-save"].addEventListener("click", saveSettings);
+elements["settings-reload"].addEventListener("click", () => fillSettings());
+elements["trash-button"].addEventListener("click", openTrashDialog);
+elements["trash-close"].addEventListener("click", () => elements["trash-dialog"].close());
+elements["trash-refresh"].addEventListener("click", () => loadTrash().catch((error) => toast(error.message, "error")));
+elements["trash-purge-all"].addEventListener("click", purgeAllTrash);
+elements["trash-dialog"].addEventListener("cancel", () => elements["trash-dialog"].close());
 elements["transfer-button"].addEventListener("click", openTransferDialog);
 elements["transfer-close"].addEventListener("click", () => elements["transfer-dialog"].close());
 elements["transfer-dialog"].addEventListener("cancel", () => elements["transfer-dialog"].close());
@@ -1956,9 +2361,16 @@ document.querySelectorAll(".action-menu").forEach((menu) => menu.addEventListene
   if (event.target.closest(".action-menu-item")) menu.removeAttribute("open");
 }));
 document.addEventListener("click", (event) => {
+  hideCompletion();
   document.querySelectorAll(".action-menu[open]").forEach((menu) => {
     if (!menu.contains(event.target)) menu.removeAttribute("open");
   });
+});
+document.addEventListener("keydown", (event) => {
+  if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "f") {
+    event.preventDefault();
+    openSearchReplaceDialog();
+  }
 });
 document.querySelectorAll(".helper-tab").forEach((tab) => tab.addEventListener("click", () => {
   document.querySelectorAll(".helper-tab").forEach((item) => {
@@ -1973,4 +2385,4 @@ window.addEventListener("beforeunload", (event) => {
 });
 
 renderSnippets();
-Promise.all([refreshFiles(), loadHelpers(), loadDashboard(), loadBranches()]).catch((error) => toast(error.message, "error"));
+Promise.all([loadSettings(), refreshFiles(), loadHelpers(), loadDashboard(), loadBranches()]).catch((error) => toast(error.message, "error"));
