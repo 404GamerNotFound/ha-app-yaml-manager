@@ -20,14 +20,15 @@ Automationen, Szenen und zugehörigen YAML-Ressourcen.
 - Suche nach Home-Assistant-Entitäten und -Diensten
 - Sicheres Speichern mit Sicherungskopien und Papierkorb
 - Papierkorb-Dialog zum Wiederherstellen oder endgültigen Entfernen gelöschter Dateien
+- Automatische Papierkorb-Aufbewahrung nach Alter und Maximalgröße
 - Umbenennen und Verschieben von Dateien innerhalb des Package-Ordners
 - Direkter Aufruf von `script.reload`
 - Prüfung, ob `/config/packages` über `homeassistant.packages` eingebunden ist
 - Editor für `configuration.yaml` mit Ein-Klick-Package-Import
 - Vorschau-basierte Auslagerung der Top-Level-Konfiguration in ein Package
 - Automatische Home-Assistant-Konfigurationsprüfung nach Konfigurationsänderungen
-- Versionsverlauf mit Diff und Wiederherstellung für Konfiguration und Packages
-- Automatische lokale Git-Commits mit Historie, Diff und Wiederherstellung
+- Versionsverlauf mit Side-by-side-Diff und Wiederherstellung für Konfiguration und Packages
+- Automatische lokale Git-Commits mit Historie, Side-by-side-Diff und Wiederherstellung
 - Git-Branches anzeigen, erstellen, wechseln, vergleichen und konfliktgeprüft zusammenführen
 - Optionaler manueller GitHub-/GitLab-Remote-Sync mit geschützter Token-Ablage
 - Optionaler automatischer Remote-Push nach jedem erfolgreichen Speichern
@@ -188,14 +189,19 @@ eine Zeilennummer, springt ein Klick zur betroffenen Stelle.
 
 Gelöschte Package-Dateien werden mit Metadatenmanifest nach `/data/trash`
 verschoben. Der Papierkorb-Dialog listet gelöschte Dateien mit ursprünglichem
-Pfad, Kategorie, Tags, Version und Belegungsstatus des Zielpfads. Beim
-Wiederherstellen validiert das Backend das YAML erneut, schützt vorhandene
-Zieldateien über SHA-256-Versionsvergleich, legt bei Überschreibungen ein Backup
-an und erzeugt wie bei normalen Schreibvorgängen einen Git-Commit.
+Pfad, Kategorie, Tags, Version und Belegungsstatus des Zielpfads. Beim Öffnen
+des Papierkorbs, nach dem Löschen und nach Einstellungsänderungen entfernt das
+Backend abgelaufene Einträge und reduziert einen zu großen Papierkorb über die
+ältesten Stände. Beim Wiederherstellen validiert das Backend das YAML erneut,
+schützt vorhandene Zieldateien über SHA-256-Versionsvergleich, legt bei
+Überschreibungen ein Backup an und erzeugt wie bei normalen Schreibvorgängen
+einen Git-Commit.
 
 Der Versionsdialog ermittelt pro Datei alle Sicherungen, zeigt Additionen und
-Löschungen sowie einen serverseitig erzeugten Unified Diff und stellt einen
-ausgewählten Stand wieder her. Vor der Wiederherstellung wird die aktuelle
+Löschungen sowie einen serverseitig erzeugten Diff und stellt einen ausgewählten
+Stand wieder her. Im Frontend wird der Diff als Side-by-side-Ansicht mit
+Zeilennummern dargestellt; **Nur Änderungen** blendet Kontextzeilen aus und
+fokussiert geänderte YAML-Blöcke. Vor der Wiederherstellung wird die aktuelle
 Fassung erneut gesichert. Ein SHA-256-Versionsvergleich verhindert, dass dabei
 eine extern geänderte Datei überschrieben wird.
 
@@ -217,8 +223,8 @@ Home-Assistant-Konfigurationsverzeichnis. Vor und nach jeder von der App
 ausgeführten Dateiänderung werden ausschließlich die betroffenen Pfade
 versioniert. Bereits vom Nutzer vorgemerkte Änderungen an anderen Dateien
 bleiben unangetastet. Die Git-Historie in beiden Editoren bietet Commit-Metadaten,
-Unified Diffs und eine konfliktgeschützte Wiederherstellung. Das bestehende
-Datei-Backup wird dabei weiterhin zusätzlich angelegt.
+Side-by-side-Diffs mit Änderungsfokus und eine konfliktgeschützte Wiederherstellung.
+Das bestehende Datei-Backup wird dabei weiterhin zusätzlich angelegt.
 
 Das Qualitätsdashboard ist der erste Eintrag links oben und fasst Package-Konflikte,
 mögliche ungenutzte Scripts, Backup-Anzahl und Git-Remote-Status zusammen. Ein

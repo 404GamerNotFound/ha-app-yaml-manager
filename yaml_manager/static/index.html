@@ -347,8 +347,11 @@
         <div class="history-body">
           <aside class="history-list" id="history-list"></aside>
           <section class="diff-panel">
+            <div class="diff-toolbar">
+              <label><input id="diff-changed-only" type="checkbox"> Nur Änderungen</label>
+            </div>
             <div class="diff-placeholder" id="diff-placeholder">Wähle links eine Version für den Vergleich.</div>
-            <pre class="diff-view hidden" id="diff-view"></pre>
+            <div class="diff-view hidden" id="diff-view"></div>
           </section>
         </div>
         <div class="dialog-actions history-actions">
@@ -370,8 +373,11 @@
         <div class="history-body">
           <aside class="history-list" id="git-history-list"></aside>
           <section class="diff-panel">
+            <div class="diff-toolbar">
+              <label><input id="git-diff-changed-only" type="checkbox"> Nur Änderungen</label>
+            </div>
             <div class="diff-placeholder" id="git-diff-placeholder">Wähle links einen Commit für den Vergleich.</div>
-            <pre class="diff-view hidden" id="git-diff-view"></pre>
+            <div class="diff-view hidden" id="git-diff-view"></div>
           </section>
         </div>
         <div class="dialog-actions history-actions">
@@ -510,6 +516,8 @@
             <h3>Dateien und Backups</h3>
             <div class="settings-grid">
               <label><span>Backup-Aufbewahrung</span><input id="settings-backup-retention" type="number" min="5" max="500" step="1"></label>
+              <label><span>Papierkorb Tage</span><input id="settings-trash-days" type="number" min="0" max="3650" step="1"></label>
+              <label><span>Papierkorb MiB</span><input id="settings-trash-size" type="number" min="0" max="10240" step="1"></label>
               <label><span>Max. ZIP-Größe MiB</span><input id="settings-import-size" type="number" min="1" max="100" step="1"></label>
               <label><span>Max. entpackt MiB</span><input id="settings-expanded-size" type="number" min="1" max="500" step="1"></label>
               <label><span>Max. Importdateien</span><input id="settings-import-files" type="number" min="1" max="2000" step="1"></label>

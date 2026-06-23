@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.0 - 2026-06-23
+
+- Konfigurierbare Papierkorb-Aufbewahrung nach Alter und maximaler Größe ergänzt
+- Automatische Papierkorb-Bereinigung beim Löschen, beim Öffnen des Papierkorbs und nach Einstellungsänderungen
+- Papierkorb-Status zeigt aktive Aufbewahrungsregeln und automatisch entfernte Einträge
+- Backup- und Git-Historie zeigen Diffs jetzt als Side-by-side-Vergleich
+- Option **Nur Änderungen** blendet Kontextzeilen aus und fokussiert geänderte YAML-Blöcke
+- Versionsnummer der Home-Assistant-App und Python-Projektmetadaten auf `1.0.0` angehoben
+
 ## 0.13.0 - 2026-06-22
 
 - Linke Navigation in kompakte Hauptbereiche, Systemstatus und Filter gegliedert

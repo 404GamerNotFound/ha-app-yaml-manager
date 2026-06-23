@@ -28,8 +28,8 @@ const state = {
   originalContent: "", originalCategory: "", originalTags: [], dirty: false, helpers: null,
   configuration: null, configurationOriginal: "", configurationDirty: false,
   packageConflicts: null,
-  history: { scope: "", path: "", currentVersion: "", selectedId: "" },
-  gitHistory: { scope: "", path: "", currentVersion: "", selectedCommit: "" },
+  history: { scope: "", path: "", currentVersion: "", selectedId: "", diffResult: null },
+  gitHistory: { scope: "", path: "", currentVersion: "", selectedCommit: "", diffResult: null },
   dashboard: null,
   dependencies: null,
   branches: null,
@@ -56,14 +56,14 @@ const elements = Object.fromEntries([
   "configuration-line-numbers", "configuration-validation", "configuration-cursor", "configuration-save",
   "configuration-enable-packages", "configuration-migrate", "migration-package-name", "configuration-notice",
   "configuration-check", "configuration-history", "configuration-git-history", "home-assistant-check", "history-button", "git-history-button",
-  "history-dialog", "history-close", "history-path", "history-list", "diff-placeholder", "diff-view", "history-summary", "history-restore",
-  "git-dialog", "git-history-close", "git-history-path", "git-history-list", "git-diff-placeholder", "git-diff-view", "git-history-summary", "git-history-restore",
+  "history-dialog", "history-close", "history-path", "history-list", "diff-placeholder", "diff-view", "diff-changed-only", "history-summary", "history-restore",
+  "git-dialog", "git-history-close", "git-history-path", "git-history-list", "git-diff-placeholder", "git-diff-view", "git-diff-changed-only", "git-history-summary", "git-history-restore",
   "package-conflicts-button", "conflict-dialog", "conflict-close", "conflict-summary", "conflict-list",
   "dashboard-button", "dashboard-dialog", "dashboard-close", "dashboard-refresh", "quality-score", "quality-stats", "dashboard-findings",
   "health-badge", "health-grid",
   "remote-status", "remote-badge", "remote-url", "remote-branch", "remote-username", "remote-token", "remote-auto-push", "remote-clear-token", "remote-save", "remote-fetch", "remote-pull", "remote-push", "remote-sync", "remote-remove", "remote-resolution", "remote-merge", "remote-force-push",
   "transfer-button", "transfer-dialog", "transfer-close", "export-scope", "export-category", "export-start", "import-file", "import-strategy", "import-preview", "import-apply", "import-summary", "import-preview-list",
-  "settings-button", "settings-dialog", "settings-close", "settings-save", "settings-reload", "settings-backup-retention", "settings-import-size", "settings-expanded-size", "settings-import-files", "settings-theme", "settings-after-save", "settings-branch-prefix", "settings-unused-scripts",
+  "settings-button", "settings-dialog", "settings-close", "settings-save", "settings-reload", "settings-backup-retention", "settings-trash-days", "settings-trash-size", "settings-import-size", "settings-expanded-size", "settings-import-files", "settings-theme", "settings-after-save", "settings-branch-prefix", "settings-unused-scripts",
   "trash-button", "trash-dialog", "trash-close", "trash-refresh", "trash-purge-all", "trash-summary", "trash-list",
   "objects-button", "objects-dialog", "objects-close", "objects-refresh", "object-search", "object-domain", "objects-summary", "object-list",
   "resource-dialog", "resource-close", "resource-title", "resource-path", "resource-save", "resource-editor", "resource-highlighting", "resource-line-numbers", "resource-validation", "resource-cursor",
@@ -669,6 +669,81 @@ function historyQuery(path, extra = {}) {
   return params.toString();
 }
 
+function parseUnifiedDiff(diff) {
+  const rows = [];
+  const lines = diff ? diff.split("\n") : [];
+  let oldLine = 0;
+  let newLine = 0;
+  let pendingRemoved = [];
+  let pendingAdded = [];
+
+  function flushChange() {
+    const count = Math.max(pendingRemoved.length, pendingAdded.length);
+    for (let index = 0; index < count; index += 1) {
+      const removed = pendingRemoved[index];
+      const added = pendingAdded[index];
+      rows.push({
+        type: removed && added ? "changed" : removed ? "removed" : "added",
+        oldLine: removed?.line || "",
+        oldText: removed?.text || "",
+        newLine: added?.line || "",
+        newText: added?.text || "",
+      });
+    }
+    pendingRemoved = [];
+    pendingAdded = [];
+  }
+
+  for (const line of lines) {
+    if (line.startsWith("---") || line.startsWith("+++")) continue;
+    const hunk = line.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@(.*)$/);
+    if (hunk) {
+      flushChange();
+      oldLine = Number(hunk[1]);
+      newLine = Number(hunk[2]);
+      rows.push({ type: "hunk", label: `@@ -${hunk[1]} +${hunk[2]} @@${hunk[3] || ""}` });
+      continue;
+    }
+    if (line.startsWith("-")) {
+      pendingRemoved.push({ line: oldLine, text: line.slice(1) });
+      oldLine += 1;
+      continue;
+    }
+    if (line.startsWith("+")) {
+      pendingAdded.push({ line: newLine, text: line.slice(1) });
+      newLine += 1;
+      continue;
+    }
+    flushChange();
+    const text = line.startsWith(" ") ? line.slice(1) : line;
+    rows.push({ type: "context", oldLine, oldText: text, newLine, newText: text });
+    oldLine += 1;
+    newLine += 1;
+  }
+  flushChange();
+  return rows;
+}
+
+function renderSideBySideDiff(target, placeholder, result, changedOnly = false) {
+  const rows = parseUnifiedDiff(result.diff);
+  const visibleRows = changedOnly
+    ? rows.filter((row) => row.type !== "context")
+    : rows;
+  if (!visibleRows.length) {
+    target.innerHTML = '<div class="diff-empty">Keine Unterschiede zur aktuellen Fassung.</div>';
+  } else {
+    const body = visibleRows.map((row) => {
+      if (row.type === "hunk") {
+        return `<tr class="diff-row hunk"><td colspan="4">${escapeHtml(row.label)}</td></tr>`;
+      }
+      return `<tr class="diff-row ${row.type}"><td class="line-no">${row.oldLine || ""}</td><td class="text-cell old-text">${escapeHtml(row.oldText || "")}</td><td class="line-no">${row.newLine || ""}</td><td class="text-cell new-text">${escapeHtml(row.newText || "")}</td></tr>`;
+    }).join("");
+    target.innerHTML = `<table class="diff-table"><colgroup><col class="line-col"><col class="text-col"><col class="line-col"><col class="text-col"></colgroup><tbody>${body}</tbody></table>`;
+  }
+  placeholder.classList.add("hidden");
+  target.classList.remove("hidden");
+}
+
 async function selectHistoryEntry(entry, button) {
   document.querySelectorAll(".history-entry").forEach((item) => item.classList.toggle("active", item === button));
   state.history.selectedId = entry.id;
@@ -676,16 +751,13 @@ async function selectHistoryEntry(entry, button) {
   elements["history-summary"].textContent = `${entry.created.replace("T", " ")} · +${entry.additions} / -${entry.deletions}`;
   try {
     const result = await api(`api/backup/diff?${historyQuery(state.history.path, { id: entry.id })}`);
-    const lines = result.diff ? result.diff.split("\n") : ["Keine Unterschiede zur aktuellen Fassung."];
-    elements["diff-view"].innerHTML = lines.map((line) => {
-      let css = "";
-      if (line.startsWith("+++") || line.startsWith("---") || line.startsWith("@@")) css = "header";
-      else if (line.startsWith("+")) css = "added";
-      else if (line.startsWith("-")) css = "removed";
-      return `<span class="diff-line ${css}">${escapeHtml(line)}</span>`;
-    }).join("");
-    elements["diff-placeholder"].classList.add("hidden");
-    elements["diff-view"].classList.remove("hidden");
+    state.history.diffResult = result;
+    renderSideBySideDiff(
+      elements["diff-view"],
+      elements["diff-placeholder"],
+      result,
+      elements["diff-changed-only"].checked,
+    );
     if (result.truncated) toast("Der Diff wurde nach 1.200 Zeilen gekürzt.");
   } catch (error) { toast(error.message, "error"); }
 }
@@ -694,6 +766,7 @@ function renderHistory(history) {
   elements["history-path"].textContent = history.path;
   state.history.currentVersion = history.currentVersion;
   state.history.selectedId = "";
+  state.history.diffResult = null;
   elements["history-restore"].disabled = true;
   elements["history-summary"].textContent = `${history.entries.length} gespeicherte Versionen`;
   elements["diff-view"].classList.add("hidden");
@@ -767,16 +840,13 @@ function gitHistoryQuery(extra = {}) {
 }
 
 function renderGitDiff(result) {
-  const lines = result.diff ? result.diff.split("\n") : ["Keine Unterschiede zur aktuellen Fassung."];
-  elements["git-diff-view"].innerHTML = lines.map((line) => {
-    let css = "";
-    if (line.startsWith("+++") || line.startsWith("---") || line.startsWith("@@")) css = "header";
-    else if (line.startsWith("+")) css = "added";
-    else if (line.startsWith("-")) css = "removed";
-    return `<span class="diff-line ${css}">${escapeHtml(line)}</span>`;
-  }).join("");
-  elements["git-diff-placeholder"].classList.add("hidden");
-  elements["git-diff-view"].classList.remove("hidden");
+  state.gitHistory.diffResult = result;
+  renderSideBySideDiff(
+    elements["git-diff-view"],
+    elements["git-diff-placeholder"],
+    result,
+    elements["git-diff-changed-only"].checked,
+  );
   if (result.truncated) toast("Der Git-Diff wurde nach 1.200 Zeilen gekürzt.");
 }
 
@@ -797,6 +867,7 @@ function renderGitHistory(history) {
   elements["git-history-path"].textContent = history.path;
   state.gitHistory.currentVersion = history.currentVersion;
   state.gitHistory.selectedCommit = "";
+  state.gitHistory.diffResult = null;
   elements["git-history-restore"].disabled = true;
   elements["git-diff-view"].classList.add("hidden");
   elements["git-diff-placeholder"].classList.remove("hidden");
@@ -1163,6 +1234,8 @@ async function removeRemoteConfiguration() {
 function fillSettings(settings = state.settings) {
   if (!settings) return;
   elements["settings-backup-retention"].value = settings.backupRetention;
+  elements["settings-trash-days"].value = settings.trashRetentionDays;
+  elements["settings-trash-size"].value = settings.trashMaxSizeMiB;
   elements["settings-import-size"].value = settings.maxImportSizeMiB;
   elements["settings-expanded-size"].value = settings.maxExpandedImportSizeMiB;
   elements["settings-import-files"].value = settings.maxImportFiles;
@@ -1187,6 +1260,8 @@ async function saveSettings() {
       method: "PUT",
       body: JSON.stringify({
         backupRetention: elements["settings-backup-retention"].value,
+        trashRetentionDays: elements["settings-trash-days"].value,
+        trashMaxSizeMiB: elements["settings-trash-size"].value,
         maxImportSizeMiB: elements["settings-import-size"].value,
         maxExpandedImportSizeMiB: elements["settings-expanded-size"].value,
         maxImportFiles: elements["settings-import-files"].value,
@@ -1330,9 +1405,15 @@ async function applyPackageImport() {
 
 function renderTrash(result) {
   state.trash = result;
+  const retention = result.retention
+    ? ` · ${result.retention.days || "∞"} Tage · ${result.retention.maxSizeMiB || "∞"} MiB`
+    : "";
+  const cleanup = result.cleanup?.removedEntries
+    ? ` · ${result.cleanup.removedEntries} automatisch entfernt`
+    : "";
   elements["trash-summary"].textContent = result.count
-    ? `${result.count} gelöschte Datei(en) im Papierkorb`
-    : "Der Papierkorb ist leer.";
+    ? `${result.count} gelöschte Datei(en) im Papierkorb${retention}${cleanup}`
+    : `Der Papierkorb ist leer.${cleanup}`;
   elements["trash-purge-all"].disabled = !result.count;
   if (!result.entries.length) {
     const empty = document.createElement("div");
@@ -2329,10 +2410,30 @@ elements["configuration-dialog"].addEventListener("cancel", (event) => {
 elements["history-button"].addEventListener("click", () => openHistory("package"));
 elements["history-close"].addEventListener("click", () => elements["history-dialog"].close());
 elements["history-restore"].addEventListener("click", restoreSelectedBackup);
+elements["diff-changed-only"].addEventListener("change", () => {
+  if (state.history.diffResult) {
+    renderSideBySideDiff(
+      elements["diff-view"],
+      elements["diff-placeholder"],
+      state.history.diffResult,
+      elements["diff-changed-only"].checked,
+    );
+  }
+});
 elements["history-dialog"].addEventListener("cancel", () => elements["history-dialog"].close());
 elements["git-history-button"].addEventListener("click", () => openGitHistory("package"));
 elements["git-history-close"].addEventListener("click", () => elements["git-dialog"].close());
 elements["git-history-restore"].addEventListener("click", restoreSelectedGitCommit);
+elements["git-diff-changed-only"].addEventListener("change", () => {
+  if (state.gitHistory.diffResult) {
+    renderSideBySideDiff(
+      elements["git-diff-view"],
+      elements["git-diff-placeholder"],
+      state.gitHistory.diffResult,
+      elements["git-diff-changed-only"].checked,
+    );
+  }
+});
 elements["git-dialog"].addEventListener("cancel", () => elements["git-dialog"].close());
 elements["package-conflicts-button"].addEventListener("click", openPackageConflicts);
 elements["conflict-close"].addEventListener("click", () => elements["conflict-dialog"].close());

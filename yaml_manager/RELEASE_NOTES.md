@@ -1,6 +1,29 @@
-# Release Notes 0.13.0
+# Release Notes 1.0.0
 
-Veröffentlicht am 22. Juni 2026.
+Veröffentlicht am 23. Juni 2026.
+
+## Papierkorb-Aufbewahrung
+
+Der Papierkorb kann jetzt automatisch bereinigt werden. In den Einstellungen
+lassen sich eine maximale Aufbewahrungsdauer in Tagen und eine maximale
+Papierkorbgröße in MiB festlegen. Beim Löschen, Öffnen des Papierkorbs und nach
+Einstellungsänderungen entfernt die App abgelaufene Einträge und reduziert einen
+zu großen Papierkorb über die ältesten Einträge. Der neueste Eintrag bleibt
+erhalten, damit eine frisch gelöschte Datei nicht sofort aus der Oberfläche
+verschwindet.
+
+Der Papierkorb zeigt zusätzlich die aktiven Regeln sowie die Anzahl automatisch
+entfernter Einträge an.
+
+## Side-by-side-Diffs
+
+Backup- und Git-Historie zeigen Unterschiede jetzt als zweispaltigen Vergleich
+zwischen alter und aktueller Fassung. Zeilennummern bleiben sichtbar, gelöschte
+und hinzugefügte Inhalte werden gegenübergestellt, und zusammengehörige
+Änderungen erscheinen als eine gemeinsame Zeile.
+
+Mit **Nur Änderungen** lassen sich Kontextzeilen ausblenden. Dadurch bleibt bei
+größeren YAML-Dateien der Blick auf die tatsächlich geänderten Blöcke fokussiert.
 
 ## Aufgeräumte Navigation
 

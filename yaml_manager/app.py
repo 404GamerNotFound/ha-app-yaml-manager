@@ -105,7 +105,9 @@ def load_settings() -> dict[str, Any]:
 
 
 def update_settings(body: dict[str, Any]) -> dict[str, Any]:
-    return settings_service.update_settings(sys.modules[__name__], body)
+    settings = settings_service.update_settings(sys.modules[__name__], body)
+    cleanup_trash(settings)
+    return settings
 
 
 def import_limits() -> dict[str, int]:
@@ -881,6 +883,7 @@ def delete_file(raw_path: str, expected_version: str | None) -> dict[str, Any]:
         metadata = load_metadata()
         metadata["files"].pop(relative, None)
         save_metadata(metadata)
+    cleanup_trash()
     git_result["autoSync"] = auto_push_after_change(git_result)
     return git_result
 
@@ -930,7 +933,75 @@ def _cleanup_empty_trash_parents(path: Path, root: Path) -> None:
         current = current.parent
 
 
+def _trash_deleted_timestamp(directory: Path) -> float:
+    try:
+        return time.mktime(time.strptime(directory.name[:15], "%Y%m%d-%H%M%S"))
+    except ValueError:
+        return 0.0
+
+
+def _trash_entry_size(directory: Path) -> int:
+    total = 0
+    for candidate in directory.rglob("*"):
+        if candidate.is_file():
+            try:
+                total += candidate.stat().st_size
+            except OSError:
+                pass
+    return total
+
+
+def _trash_entry_directories() -> list[Path]:
+    trash_root = DATA_ROOT / "trash"
+    if not trash_root.exists():
+        return []
+    return [
+        directory
+        for directory in trash_root.iterdir()
+        if directory.is_dir() and re.fullmatch(r"\d{8}-\d{6}-\d{6}", directory.name)
+    ]
+
+
+def cleanup_trash(settings: dict[str, Any] | None = None) -> dict[str, int]:
+    settings = settings or load_settings()
+    removed_entries = 0
+    removed_bytes = 0
+    retention_days = int(settings.get("trashRetentionDays", 30))
+    max_size = int(settings.get("trashMaxSizeMiB", 100)) * 1024 * 1024
+    now = time.time()
+
+    directories = _trash_entry_directories()
+    for directory in list(directories):
+        if retention_days <= 0:
+            continue
+        deleted_at = _trash_deleted_timestamp(directory)
+        if deleted_at and now - deleted_at > retention_days * 24 * 60 * 60:
+            size = _trash_entry_size(directory)
+            shutil.rmtree(directory, ignore_errors=True)
+            removed_entries += 1
+            removed_bytes += size
+
+    directories = sorted(
+        [directory for directory in _trash_entry_directories() if directory.exists()],
+        key=_trash_deleted_timestamp,
+        reverse=True,
+    )
+    if max_size > 0:
+        total = sum(_trash_entry_size(directory) for directory in directories)
+        for directory in reversed(directories[1:]):
+            if total <= max_size:
+                break
+            size = _trash_entry_size(directory)
+            shutil.rmtree(directory, ignore_errors=True)
+            total -= size
+            removed_entries += 1
+            removed_bytes += size
+
+    return {"removedEntries": removed_entries, "removedBytes": removed_bytes}
+
+
 def trash_history() -> dict[str, Any]:
+    cleanup = cleanup_trash()
     trash_root = DATA_ROOT / "trash"
     entries: list[dict[str, Any]] = []
     if trash_root.exists():
@@ -963,7 +1034,16 @@ def trash_history() -> dict[str, Any]:
                         "exists": (PACKAGES_ROOT / relative).exists(),
                     }
                 )
-    return {"entries": entries, "count": len(entries)}
+    settings = load_settings()
+    return {
+        "entries": entries,
+        "count": len(entries),
+        "retention": {
+            "days": settings["trashRetentionDays"],
+            "maxSizeMiB": settings["trashMaxSizeMiB"],
+        },
+        "cleanup": cleanup,
+    }
 
 
 def restore_trash_file(

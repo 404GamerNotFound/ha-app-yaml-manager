@@ -16,6 +16,8 @@ except ImportError:  # pragma: no cover - direct execution in the app container
 
 DEFAULT_SETTINGS: dict[str, Any] = {
     "backupRetention": 30,
+    "trashRetentionDays": 30,
+    "trashMaxSizeMiB": 100,
     "maxImportFiles": 500,
     "maxImportSizeMiB": 10,
     "maxExpandedImportSizeMiB": 50,
@@ -77,6 +79,18 @@ def sanitize_settings(raw: Any) -> dict[str, Any]:
             DEFAULT_SETTINGS["maxExpandedImportSizeMiB"],
             1,
             500,
+        ),
+        "trashRetentionDays": _bounded_int(
+            source.get("trashRetentionDays"),
+            DEFAULT_SETTINGS["trashRetentionDays"],
+            0,
+            3650,
+        ),
+        "trashMaxSizeMiB": _bounded_int(
+            source.get("trashMaxSizeMiB"),
+            DEFAULT_SETTINGS["trashMaxSizeMiB"],
+            0,
+            10240,
         ),
         "showUnusedScripts": bool(source.get("showUnusedScripts", True)),
         "defaultBranchPrefix": prefix,

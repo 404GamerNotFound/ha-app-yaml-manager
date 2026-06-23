@@ -100,6 +100,39 @@ class FileApiTests(unittest.TestCase):
         self.assertEqual(app.trash_history()["count"], 1)
         self.assertEqual(app.purge_trash()["count"], 0)
 
+    def test_trash_retention_removes_expired_and_oldest_entries(self):
+        app.update_settings({"trashRetentionDays": 1, "trashMaxSizeMiB": 1})
+        created = app.write_file("old.yaml", "script: {}\n", None, "Tests", create=True)
+        app.delete_file(created["path"], created["version"])
+        old_directory = next((app.DATA_ROOT / "trash").iterdir())
+        expired = app.DATA_ROOT / "trash" / "20000101-000000-000000"
+        old_directory.rename(expired)
+
+        self.assertEqual(app.trash_history()["count"], 0)
+
+        app.update_settings({"trashRetentionDays": 0, "trashMaxSizeMiB": 1})
+        first = app.write_file(
+            "first.yaml",
+            "script:\n  first:\n    alias: " + ("A" * 700_000) + "\n    sequence: []\n",
+            None,
+            "Tests",
+            create=True,
+        )
+        app.delete_file(first["path"], first["version"])
+        second = app.write_file(
+            "second.yaml",
+            "script:\n  second:\n    alias: " + ("B" * 700_000) + "\n    sequence: []\n",
+            None,
+            "Tests",
+            create=True,
+        )
+        app.delete_file(second["path"], second["version"])
+
+        remaining = app.trash_history()
+
+        self.assertEqual(remaining["count"], 1)
+        self.assertEqual(remaining["entries"][0]["path"], "second.yaml")
+
     def test_rejects_stale_version(self):
         created = app.write_file("test.yaml", "script: {}\n", None, "Test", create=True)
         with self.assertRaises(app.ApiError) as missing:
