@@ -30,10 +30,13 @@ import yaml
 try:
     from .api import create_handler
     from . import backup as backup_service
+    from . import blueprints as blueprint_service
     from . import configuration as configuration_service
+    from . import documentation as documentation_service
     from . import git as git_service
     from . import metadata as metadata_service
     from . import resources as resource_service
+    from . import semantic as semantic_service
     from . import settings as settings_service
     from .dependencies import (
         analyze_dependencies,
@@ -47,10 +50,13 @@ try:
 except ImportError:  # pragma: no cover - direct execution in the app container
     from api import create_handler
     import backup as backup_service
+    import blueprints as blueprint_service
     import configuration as configuration_service
+    import documentation as documentation_service
     import git as git_service
     import metadata as metadata_service
     import resources as resource_service
+    import semantic as semantic_service
     import settings as settings_service
     from dependencies import (
         analyze_dependencies,
@@ -91,6 +97,8 @@ file_lock = threading.RLock()
 git_lock = threading.RLock()
 yaml_text_cache = TextFileCache()
 last_configuration_check: dict[str, Any] | None = None
+ha_helper_cache: dict[str, Any] = {"timestamp": 0.0, "data": None}
+HA_HELPER_CACHE_SECONDS = 20
 
 
 def ensure_directories() -> None:
@@ -667,6 +675,8 @@ def analyze_yaml(content: str, current_path: str = "") -> dict[str, Any]:
             }
         )
 
+    findings.extend(semantic_service.semantic_findings(content, cached_helper_data()))
+
     return analysis_result(validation, findings)
 
 
@@ -962,6 +972,14 @@ def _trash_entry_directories() -> list[Path]:
     ]
 
 
+def _trash_entry_sort_key(directory: Path) -> tuple[float, int, str]:
+    try:
+        modified = directory.stat().st_mtime_ns
+    except OSError:
+        modified = 0
+    return _trash_deleted_timestamp(directory), modified, directory.name
+
+
 def cleanup_trash(settings: dict[str, Any] | None = None) -> dict[str, int]:
     settings = settings or load_settings()
     removed_entries = 0
@@ -983,7 +1001,7 @@ def cleanup_trash(settings: dict[str, Any] | None = None) -> dict[str, int]:
 
     directories = sorted(
         [directory for directory in _trash_entry_directories() if directory.exists()],
-        key=_trash_deleted_timestamp,
+        key=_trash_entry_sort_key,
         reverse=True,
     )
     if max_size > 0:
@@ -1238,6 +1256,72 @@ def apply_search_replace(
         case_sensitive,
         state_version,
     )
+
+
+def managed_yaml_files() -> dict[str, str]:
+    return resource_service.managed_yaml_files(sys.modules[__name__])
+
+
+def semantic_overview() -> dict[str, Any]:
+    return semantic_service.semantic_overview(managed_yaml_files(), cached_helper_data())
+
+
+def list_blueprints() -> dict[str, Any]:
+    return blueprint_service.list_blueprints(sys.modules[__name__])
+
+
+def read_blueprint(raw_path: Any) -> dict[str, Any]:
+    return blueprint_service.read_blueprint(sys.modules[__name__], raw_path)
+
+
+def import_blueprint(raw_path: Any, content: Any) -> dict[str, Any]:
+    return blueprint_service.import_blueprint(sys.modules[__name__], raw_path, content)
+
+
+def create_blueprint_from_yaml(
+    domain: Any,
+    name: Any,
+    content: Any,
+    raw_path: Any = "",
+) -> dict[str, Any]:
+    return blueprint_service.create_blueprint_from_yaml(
+        sys.modules[__name__],
+        domain,
+        name,
+        content,
+        raw_path,
+    )
+
+
+def instantiate_blueprint(
+    raw_blueprint_path: Any,
+    raw_package_path: Any,
+    object_id: Any,
+    alias: Any = "",
+    inputs: Any = None,
+    inputs_text: Any = "",
+) -> dict[str, Any]:
+    return blueprint_service.instantiate_blueprint(
+        sys.modules[__name__],
+        raw_blueprint_path,
+        raw_package_path,
+        object_id,
+        alias,
+        inputs,
+        inputs_text,
+    )
+
+
+def documentation_overview() -> dict[str, Any]:
+    return documentation_service.documentation_overview(sys.modules[__name__])
+
+
+def documentation_status() -> dict[str, Any]:
+    return documentation_service.documentation_status(sys.modules[__name__])
+
+
+def write_documentation() -> dict[str, Any]:
+    return documentation_service.write_documentation(sys.modules[__name__])
 
 
 def script_dependency_analysis(raw_path: str = "") -> dict[str, Any]:
@@ -1678,30 +1762,51 @@ def configuration_quality_dashboard() -> dict[str, Any]:
         }
         for script_id in unused
     ]
-    findings = [*conflicts["findings"], *unused_findings]
-    errors = conflicts["counts"]["error"]
-    warnings = conflicts["counts"]["warning"] + len(unused_findings)
+    semantic = semantic_overview()
+    objects = home_assistant_objects()
+    blueprints = list_blueprints()
+    docs = documentation_status()
+    semantic_findings = [
+        {
+            **finding,
+            "title": f"Live-HA: {finding['title']}",
+        }
+        for finding in semantic.get("findings", [])
+    ]
+    findings = [*conflicts["findings"], *semantic_findings, *unused_findings]
+    errors = conflicts["counts"]["error"] + semantic.get("counts", {}).get("error", 0)
+    warnings = (
+        conflicts["counts"]["warning"]
+        + semantic.get("counts", {}).get("warning", 0)
+        + len(unused_findings)
+        + blueprints["summary"].get("invalid", 0)
+    )
     score = max(0, 100 - errors * 10 - warnings * 2)
     backups_root = DATA_ROOT / "backups"
     backup_count = sum(path.is_dir() for path in backups_root.iterdir()) if backups_root.exists() else 0
-    remote = git_remote_status()
     return {
         "score": score,
         "summary": {
             "files": conflicts["fileCount"],
-            "scripts": len(definitions),
+            "scripts": max(len(definitions), objects["summary"].get("script", 0)),
+            "automations": objects["summary"].get("automation", 0),
+            "scenes": objects["summary"].get("scene", 0),
+            "references": objects["summary"].get("references", 0),
             "unusedScripts": len(unused),
             "errors": errors,
             "warnings": warnings,
             "backups": backup_count,
+            "blueprints": blueprints["summary"].get("total", 0),
+            "semanticErrors": semantic.get("counts", {}).get("error", 0),
+            "semanticWarnings": semantic.get("counts", {}).get("warning", 0),
         },
         "findings": findings[:200],
         "findingsTruncated": len(findings) > 200,
-        "git": {
-            "remote": remote,
-            "recentCommits": recent_git_commits(),
-        },
-        "health": system_health(remote),
+        "objects": objects["summary"],
+        "blueprints": blueprints["summary"],
+        "semantic": semantic,
+        "documentation": docs,
+        "health": system_health(include_git=False),
     }
 
 
@@ -1719,27 +1824,15 @@ def directory_usage(path: Path) -> dict[str, int]:
     return {"files": files, "size": size}
 
 
-def system_health(remote: dict[str, Any] | None = None) -> dict[str, Any]:
+def system_health(remote: dict[str, Any] | None = None, include_git: bool = True) -> dict[str, Any]:
     backups_root = DATA_ROOT / "backups"
     trash_root = DATA_ROOT / "trash"
-    try:
-        git_available = ensure_git_repository().get("available", False)
-        git_message = "Git ist verfügbar."
-    except GitOperationError as exc:
-        git_available = False
-        git_message = str(exc)
-    remote_status = remote if remote is not None else git_remote_status()
-    return {
+    result: dict[str, Any] = {
         "settings": load_settings(),
         "paths": {
             "packages": str(PACKAGES_ROOT),
             "data": str(DATA_ROOT),
             "configuration": str(configuration_file()),
-        },
-        "git": {
-            "available": git_available,
-            "message": git_message,
-            "remote": remote_status,
         },
         "homeAssistant": {
             "tokenConfigured": bool(os.environ.get("SUPERVISOR_TOKEN")),
@@ -1756,6 +1849,20 @@ def system_health(remote: dict[str, Any] | None = None) -> dict[str, Any]:
             },
         },
     }
+    if include_git:
+        try:
+            git_available = ensure_git_repository().get("available", False)
+            git_message = "Git ist verfügbar."
+        except GitOperationError as exc:
+            git_available = False
+            git_message = str(exc)
+        remote_status = remote if remote is not None else git_remote_status()
+        result["git"] = {
+            "available": git_available,
+            "message": git_message,
+            "remote": remote_status,
+        }
+    return result
 
 
 def export_packages(scope: str, raw_path: str = "", category: str = "") -> tuple[str, bytes]:
@@ -2033,9 +2140,31 @@ def check_home_assistant_configuration() -> dict[str, Any]:
     return result
 
 
-def helper_data() -> dict[str, Any]:
-    states = home_assistant_request("states")
-    services_data = home_assistant_request("services")
+def _optional_home_assistant_request(path: str) -> Any:
+    try:
+        return home_assistant_request(path)
+    except ApiError:
+        return []
+
+
+def _fresh_helper_data() -> dict[str, Any]:
+    try:
+        states = home_assistant_request("states")
+        services_data = home_assistant_request("services")
+    except ApiError as exc:
+        return {
+            "available": False,
+            "message": exc.message,
+            "entities": [],
+            "services": [],
+            "serviceDetails": {},
+            "devices": [],
+            "areas": [],
+        }
+    states = states if isinstance(states, list) else []
+    services_data = services_data if isinstance(services_data, list) else []
+    devices = _optional_home_assistant_request("config/device_registry/list")
+    areas = _optional_home_assistant_request("config/area_registry/list")
     entities = [
         {
             "entity_id": item.get("entity_id", ""),
@@ -2043,16 +2172,46 @@ def helper_data() -> dict[str, Any]:
             "state": item.get("state", ""),
         }
         for item in states
+        if isinstance(item, dict)
     ]
-    services = [
-        f"{domain.get('domain')}.{service}"
-        for domain in services_data
-        for service in domain.get("services", {})
-    ]
+    service_details: dict[str, Any] = {}
+    services = []
+    for domain in services_data:
+        if not isinstance(domain, dict):
+            continue
+        domain_name = domain.get("domain")
+        if not domain_name:
+            continue
+        domain_services = domain.get("services", {})
+        if not isinstance(domain_services, dict):
+            continue
+        for service, details in domain_services.items():
+            service_id = f"{domain_name}.{service}"
+            services.append(service_id)
+            service_details[service_id] = details if isinstance(details, dict) else {}
     return {
+        "available": True,
         "entities": sorted(entities, key=lambda item: item["entity_id"]),
         "services": sorted(services),
+        "serviceDetails": service_details,
+        "devices": devices if isinstance(devices, list) else [],
+        "areas": areas if isinstance(areas, list) else [],
     }
+
+
+def cached_helper_data(force: bool = False) -> dict[str, Any]:
+    now = time.monotonic()
+    cached = ha_helper_cache.get("data")
+    if not force and isinstance(cached, dict) and now - float(ha_helper_cache.get("timestamp", 0)) < HA_HELPER_CACHE_SECONDS:
+        return cached
+    data = _fresh_helper_data()
+    ha_helper_cache["timestamp"] = now
+    ha_helper_cache["data"] = data
+    return data
+
+
+def helper_data() -> dict[str, Any]:
+    return cached_helper_data(force=True)
 
 
 Handler = create_handler(sys.modules[__name__])

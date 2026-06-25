@@ -34,6 +34,9 @@ const state = {
   dependencies: null,
   branches: null,
   branchPreview: null,
+  blueprints: null,
+  selectedBlueprint: null,
+  documentation: null,
   settings: null,
   trash: null,
   completion: { open: false, items: [], index: 0, start: 0, end: 0 },
@@ -61,11 +64,16 @@ const elements = Object.fromEntries([
   "package-conflicts-button", "conflict-dialog", "conflict-close", "conflict-summary", "conflict-list",
   "dashboard-button", "dashboard-dialog", "dashboard-close", "dashboard-refresh", "quality-score", "quality-stats", "dashboard-findings",
   "health-badge", "health-grid",
+  "git-page-button", "git-page", "git-page-close",
   "remote-status", "remote-badge", "remote-url", "remote-branch", "remote-username", "remote-token", "remote-auto-push", "remote-clear-token", "remote-save", "remote-fetch", "remote-pull", "remote-push", "remote-sync", "remote-remove", "remote-resolution", "remote-merge", "remote-force-push",
   "transfer-button", "transfer-dialog", "transfer-close", "export-scope", "export-category", "export-start", "import-file", "import-strategy", "import-preview", "import-apply", "import-summary", "import-preview-list",
   "settings-button", "settings-dialog", "settings-close", "settings-save", "settings-reload", "settings-backup-retention", "settings-trash-days", "settings-trash-size", "settings-import-size", "settings-expanded-size", "settings-import-files", "settings-theme", "settings-after-save", "settings-branch-prefix", "settings-unused-scripts",
   "trash-button", "trash-dialog", "trash-close", "trash-refresh", "trash-purge-all", "trash-summary", "trash-list",
   "objects-button", "objects-dialog", "objects-close", "objects-refresh", "object-search", "object-domain", "objects-summary", "object-list",
+  "blueprints-button", "blueprints-page", "blueprints-close", "blueprints-refresh", "blueprints-summary", "blueprint-search", "blueprint-domain", "blueprint-list",
+  "blueprint-selected-title", "blueprint-selected-path", "blueprint-selected-domain", "blueprint-package-path", "blueprint-instance-id", "blueprint-instance-alias", "blueprint-inputs", "blueprint-instantiate",
+  "blueprint-import-path", "blueprint-import-content", "blueprint-import", "blueprint-from-domain", "blueprint-from-name", "blueprint-from-path", "blueprint-from-content", "blueprint-from-create",
+  "documentation-button", "documentation-page", "documentation-close", "documentation-refresh", "documentation-save", "documentation-summary", "documentation-preview",
   "resource-dialog", "resource-close", "resource-title", "resource-path", "resource-save", "resource-editor", "resource-highlighting", "resource-line-numbers", "resource-validation", "resource-cursor",
   "search-replace-button", "search-replace-dialog", "search-replace-close", "replace-search", "replace-value", "replace-case-sensitive", "replace-preview", "replace-apply", "replace-summary", "replace-file-list",
   "branch-status", "branch-current", "branch-new-name", "branch-create", "branch-select", "branch-switch", "branch-compare", "branch-merge", "branch-summary", "branch-diff",
@@ -244,18 +252,6 @@ function bytesLabel(value) {
 function renderHealth(health) {
   if (!health) return;
   const checks = [
-    {
-      title: "Git",
-      detail: health.git.available ? health.git.message : health.git.message || "Nicht verfügbar",
-      status: health.git.available ? "ok" : "error",
-    },
-    {
-      title: "Git Remote",
-      detail: health.git.remote.configured
-        ? `${health.git.remote.branch} · ${health.git.remote.ahead || 0} voraus · ${health.git.remote.behind || 0} zurück`
-        : "Nicht konfiguriert",
-      status: health.git.remote.configured ? (health.git.remote.available ? "ok" : "error") : "warn",
-    },
     {
       title: "Home Assistant",
       detail: health.homeAssistant.lastCheck
@@ -1002,7 +998,11 @@ function renderDashboard(result) {
   elements["quality-score"].innerHTML = `<strong>${result.score}</strong><span>Qualität</span>`;
   const stats = [
     [result.summary.files, "Package-Dateien"],
+    [result.summary.automations || 0, "Automationen"],
     [result.summary.scripts, "Scripts"],
+    [result.summary.scenes || 0, "Szenen"],
+    [result.summary.references || 0, "Bezüge"],
+    [result.summary.blueprints || 0, "Blueprints"],
     [result.summary.unusedScripts, "Möglicherweise ungenutzt"],
     [result.summary.errors, "Fehler"],
     [result.summary.warnings, "Warnungen"],
@@ -1022,7 +1022,6 @@ function renderDashboard(result) {
       return item;
     }));
   }
-  renderRemoteStatus(result.git.remote);
   renderHealth(result.health);
 }
 
@@ -1040,19 +1039,39 @@ async function loadDashboard() {
   }
 }
 
+function closePages() {
+  ["dashboard-dialog", "git-page", "objects-dialog", "blueprints-page", "documentation-page"].forEach((id) => {
+    elements[id].classList.add("hidden");
+  });
+  ["dashboard-button", "git-page-button", "objects-button", "blueprints-button", "documentation-button"].forEach((id) => {
+    elements[id].classList.remove("active");
+  });
+}
+
 async function openDashboard() {
-  elements["objects-dialog"].classList.add("hidden");
+  closePages();
   elements["dashboard-dialog"].classList.remove("hidden");
   elements["dashboard-button"].classList.add("active");
-  elements["objects-button"].classList.remove("active");
-  await Promise.all([loadDashboard(), loadBranches()]);
+  await loadDashboard();
 }
 
 function openScriptManager() {
-  elements["dashboard-dialog"].classList.add("hidden");
-  elements["objects-dialog"].classList.add("hidden");
-  elements["dashboard-button"].classList.remove("active");
-  elements["objects-button"].classList.remove("active");
+  closePages();
+}
+
+async function loadRemoteStatus() {
+  const remote = await api("api/git/remote");
+  renderRemoteStatus(remote);
+  return remote;
+}
+
+async function openGitPage() {
+  closePages();
+  elements["git-page"].classList.remove("hidden");
+  elements["git-page-button"].classList.add("active");
+  try {
+    await Promise.all([loadBranches(), loadRemoteStatus()]);
+  } catch (error) { toast(error.message, "error"); }
 }
 
 function renderBranches(result) {
@@ -1542,9 +1561,8 @@ async function loadHaObjects() {
 }
 
 async function openObjectsDialog() {
-  elements["dashboard-dialog"].classList.add("hidden");
+  closePages();
   elements["objects-dialog"].classList.remove("hidden");
-  elements["dashboard-button"].classList.remove("active");
   elements["objects-button"].classList.add("active");
   try { await loadHaObjects(); } catch (error) { toast(error.message, "error"); }
 }
@@ -1561,6 +1579,161 @@ async function openHaObject(item) {
   } else {
     await openResourceEditor(item.path, item.line);
   }
+}
+
+function slug(value) {
+  return String(value || "").toLocaleLowerCase("de").replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "") || "blueprint";
+}
+
+function blueprintDefaultInputs(blueprint) {
+  return (blueprint.inputs || []).map((input) => {
+    let value = input.default;
+    if (value === undefined || value === null) value = "";
+    if (typeof value === "object") value = JSON.stringify(value);
+    return `${input.name}: ${value}`;
+  }).join("\n");
+}
+
+function selectBlueprint(blueprint) {
+  state.selectedBlueprint = blueprint;
+  elements["blueprint-selected-title"].textContent = blueprint.name;
+  elements["blueprint-selected-path"].textContent = blueprint.path;
+  elements["blueprint-selected-domain"].textContent = blueprint.domain;
+  const id = slug(blueprint.name);
+  elements["blueprint-instance-id"].value = id;
+  elements["blueprint-instance-alias"].value = blueprint.name;
+  elements["blueprint-package-path"].value = `blueprints/${id}.yaml`;
+  elements["blueprint-inputs"].value = blueprintDefaultInputs(blueprint);
+  elements["blueprint-instantiate"].disabled = !["automation", "script"].includes(blueprint.domain);
+  renderBlueprints();
+}
+
+function renderBlueprints() {
+  const result = state.blueprints;
+  if (!result) return;
+  const term = elements["blueprint-search"].value.trim().toLocaleLowerCase("de");
+  const domain = elements["blueprint-domain"].value;
+  const visible = result.blueprints.filter((item) => {
+    const haystack = `${item.name} ${item.description} ${item.path}`.toLocaleLowerCase("de");
+    return (!domain || item.domain === domain) && (!term || haystack.includes(term));
+  });
+  elements["blueprints-summary"].textContent = `${result.summary.total} Blueprints · ${result.summary.automation} Automation · ${result.summary.script} Script · ${result.summary.invalid} ungültig`;
+  elements["blueprint-list"].replaceChildren(...visible.map((item) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `blueprint-item${state.selectedBlueprint?.path === item.path ? " active" : ""}`;
+    button.innerHTML = `<span><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.path)}</small></span><span class="object-kind">${escapeHtml(item.domain)}</span><small>${item.inputCount} Eingaben</small>`;
+    button.addEventListener("click", () => selectBlueprint(item));
+    return button;
+  }));
+  if (!visible.length) {
+    const empty = document.createElement("div");
+    empty.className = "history-empty";
+    empty.textContent = "Keine Blueprints gefunden.";
+    elements["blueprint-list"].replaceChildren(empty);
+  }
+}
+
+async function loadBlueprints() {
+  elements["blueprints-summary"].textContent = "Blueprints werden geladen …";
+  state.blueprints = await api("api/blueprints");
+  if (state.selectedBlueprint) {
+    state.selectedBlueprint = state.blueprints.blueprints.find((item) => item.path === state.selectedBlueprint.path) || null;
+  }
+  renderBlueprints();
+}
+
+async function openBlueprintsPage() {
+  closePages();
+  elements["blueprints-page"].classList.remove("hidden");
+  elements["blueprints-button"].classList.add("active");
+  if (state.selected && !elements["blueprint-from-content"].value) {
+    elements["blueprint-from-content"].value = elements.editor.value;
+    elements["blueprint-from-name"].value = state.selected.name || state.selected.path.split("/").at(-1).replace(/\.ya?ml$/i, "");
+  }
+  try { await loadBlueprints(); } catch (error) { toast(error.message, "error"); }
+}
+
+async function instantiateSelectedBlueprint() {
+  const blueprint = state.selectedBlueprint;
+  if (!blueprint) return;
+  try {
+    const result = await api("api/blueprints/instantiate", {
+      method: "POST",
+      body: JSON.stringify({
+        blueprintPath: blueprint.path,
+        packagePath: elements["blueprint-package-path"].value,
+        objectId: elements["blueprint-instance-id"].value,
+        alias: elements["blueprint-instance-alias"].value,
+        inputsText: elements["blueprint-inputs"].value,
+      }),
+    });
+    await refreshFiles();
+    await openFile(result.path, true);
+    renderFileHomeAssistantCheck(result.configurationCheck);
+    toast(result.message, "success");
+  } catch (error) { toast(error.message, "error"); }
+}
+
+async function importBlueprint() {
+  try {
+    const blueprint = await api("api/blueprints/import", {
+      method: "POST",
+      body: JSON.stringify({
+        path: elements["blueprint-import-path"].value,
+        content: elements["blueprint-import-content"].value,
+      }),
+    });
+    elements["blueprint-import-content"].value = "";
+    await loadBlueprints();
+    selectBlueprint(blueprint);
+    toast("Blueprint importiert", "success");
+  } catch (error) { toast(error.message, "error"); }
+}
+
+async function createBlueprintFromYaml() {
+  try {
+    const blueprint = await api("api/blueprints/from-yaml", {
+      method: "POST",
+      body: JSON.stringify({
+        domain: elements["blueprint-from-domain"].value,
+        name: elements["blueprint-from-name"].value,
+        path: elements["blueprint-from-path"].value,
+        content: elements["blueprint-from-content"].value,
+      }),
+    });
+    await loadBlueprints();
+    selectBlueprint(blueprint);
+    toast("Blueprint erzeugt", "success");
+  } catch (error) { toast(error.message, "error"); }
+}
+
+function renderDocumentation(result) {
+  state.documentation = result;
+  const summary = result.summary || {};
+  elements["documentation-summary"].textContent = `${summary.files || 0} Dateien · ${summary.automations || 0} Automationen · ${summary.scripts || 0} Scripts · ${summary.entities || 0} Entitäten`;
+  elements["documentation-preview"].textContent = result.content || "";
+}
+
+async function loadDocumentation() {
+  const result = await api("api/documentation");
+  renderDocumentation(result);
+  return result;
+}
+
+async function openDocumentationPage() {
+  closePages();
+  elements["documentation-page"].classList.remove("hidden");
+  elements["documentation-button"].classList.add("active");
+  try { await loadDocumentation(); } catch (error) { toast(error.message, "error"); }
+}
+
+async function saveDocumentation() {
+  try {
+    const result = await api("api/documentation/write", { method: "POST", body: "{}" });
+    renderDocumentation(result);
+    toast(`Dokumentation gespeichert: ${result.path}`, "success");
+  } catch (error) { toast(error.message, "error"); }
 }
 
 function syncResourceScroll() {
@@ -2151,6 +2324,7 @@ function renderHelperResults(type) {
 async function loadHelpers() {
   try {
     state.helpers = await api("api/helpers");
+    elements["api-notice"].classList.toggle("hidden", state.helpers.available !== false);
     renderHelperResults("entity");
     renderHelperResults("service");
   } catch {
@@ -2295,6 +2469,8 @@ elements["file-search"].addEventListener("input", renderFiles);
 elements["dashboard-button"].addEventListener("click", openDashboard);
 elements["dashboard-close"].addEventListener("click", openScriptManager);
 elements["dashboard-refresh"].addEventListener("click", loadDashboard);
+elements["git-page-button"].addEventListener("click", openGitPage);
+elements["git-page-close"].addEventListener("click", openScriptManager);
 elements["branch-create"].addEventListener("click", createBranch);
 elements["branch-switch"].addEventListener("click", switchBranch);
 elements["branch-compare"].addEventListener("click", compareBranch);
@@ -2331,6 +2507,18 @@ elements["objects-close"].addEventListener("click", openScriptManager);
 elements["objects-refresh"].addEventListener("click", loadHaObjects);
 elements["object-search"].addEventListener("input", renderHaObjects);
 elements["object-domain"].addEventListener("change", renderHaObjects);
+elements["blueprints-button"].addEventListener("click", openBlueprintsPage);
+elements["blueprints-close"].addEventListener("click", openScriptManager);
+elements["blueprints-refresh"].addEventListener("click", () => loadBlueprints().catch((error) => toast(error.message, "error")));
+elements["blueprint-search"].addEventListener("input", renderBlueprints);
+elements["blueprint-domain"].addEventListener("change", renderBlueprints);
+elements["blueprint-instantiate"].addEventListener("click", instantiateSelectedBlueprint);
+elements["blueprint-import"].addEventListener("click", importBlueprint);
+elements["blueprint-from-create"].addEventListener("click", createBlueprintFromYaml);
+elements["documentation-button"].addEventListener("click", openDocumentationPage);
+elements["documentation-close"].addEventListener("click", openScriptManager);
+elements["documentation-refresh"].addEventListener("click", loadDocumentation);
+elements["documentation-save"].addEventListener("click", saveDocumentation);
 elements["resource-close"].addEventListener("click", closeResourceEditor);
 elements["resource-save"].addEventListener("click", saveResource);
 elements["resource-dialog"].addEventListener("cancel", (event) => {
@@ -2486,4 +2674,4 @@ window.addEventListener("beforeunload", (event) => {
 });
 
 renderSnippets();
-Promise.all([loadSettings(), refreshFiles(), loadHelpers(), loadDashboard(), loadBranches()]).catch((error) => toast(error.message, "error"));
+Promise.all([loadSettings(), refreshFiles(), loadHelpers(), loadDashboard()]).catch((error) => toast(error.message, "error"));

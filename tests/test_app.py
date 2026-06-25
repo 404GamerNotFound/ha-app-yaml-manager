@@ -18,6 +18,7 @@ class FileApiTests(unittest.TestCase):
         app.METADATA_FILE = app.DATA_ROOT / "metadata.json"
         app.GIT_REMOTE_FILE = app.DATA_ROOT / "git_remote.json"
         app.SETTINGS_FILE = app.DATA_ROOT / "settings.json"
+        app.ha_helper_cache = {"timestamp": 0.0, "data": None}
         app.ensure_directories()
 
     def tearDown(self):
@@ -279,6 +280,45 @@ class FileApiTests(unittest.TestCase):
         self.assertIn("missing-alias", codes)
         self.assertIn("missing-mode", codes)
         self.assertIn("duplicate-entity", codes)
+
+    def test_semantic_analysis_checks_live_home_assistant_helpers(self):
+        helpers = {
+            "available": True,
+            "entities": [{"entity_id": "switch.flur", "name": "Flur", "state": "off"}],
+            "services": ["light.turn_on"],
+            "serviceDetails": {
+                "light.turn_on": {
+                    "fields": {"brightness": {"required": True}},
+                    "target": {"entity": {"domain": "light"}},
+                }
+            },
+            "devices": [{"id": "device_ok"}],
+            "areas": [{"area_id": "kueche"}],
+        }
+        with patch.object(app, "cached_helper_data", return_value=helpers):
+            result = app.analyze_yaml(
+                "script:\n"
+                "  test:\n"
+                "    alias: Test\n"
+                "    mode: single\n"
+                "    sequence:\n"
+                "      - action: light.turn_on\n"
+                "        target:\n"
+                "          entity_id: switch.flur\n"
+                "      - action: switch.turn_on\n"
+                "        target:\n"
+                "          device_id: missing_device\n"
+                "          area_id: missing_area\n",
+                "semantic.yaml",
+            )
+
+        codes = {finding["code"] for finding in result["findings"]}
+
+        self.assertIn("ha-target-domain", codes)
+        self.assertIn("ha-required-field", codes)
+        self.assertIn("ha-unknown-service", codes)
+        self.assertIn("ha-unknown-device", codes)
+        self.assertIn("ha-unknown-area", codes)
 
     def test_analysis_detects_script_id_in_another_file(self):
         app.write_file(
@@ -1005,6 +1045,58 @@ class FileApiTests(unittest.TestCase):
         self.assertEqual(dashboard["summary"]["scripts"], 2)
         self.assertTrue(any("unused" in title for title in unused_titles))
         self.assertFalse(any(title.startswith("Script „used“") for title in unused_titles))
+
+    def test_blueprint_import_and_instantiation_create_package(self):
+        blueprint = app.import_blueprint(
+            "blueprints/script/local/notify.yaml",
+            "blueprint:\n"
+            "  name: Notify Script\n"
+            "  domain: script\n"
+            "  input:\n"
+            "    message:\n"
+            "      name: Nachricht\n"
+            "sequence:\n"
+            "  - action: notify.mobile_app\n"
+            "    data:\n"
+            "      message: !input message\n",
+        )
+
+        listing = app.list_blueprints()
+        result = app.instantiate_blueprint(
+            blueprint["path"],
+            "blueprint_notify.yaml",
+            "notify_test",
+            "Notify Test",
+            inputs_text="message: Hallo\n",
+        )
+
+        self.assertEqual(listing["summary"]["script"], 1)
+        self.assertEqual(result["path"], "blueprint_notify.yaml")
+        self.assertIn("use_blueprint:", result["content"])
+        self.assertIn("path: local/notify.yaml", result["content"])
+
+    def test_documentation_generator_summarizes_packages_and_objects(self):
+        app.write_file(
+            "doc.yaml",
+            "script:\n"
+            "  doc_script:\n"
+            "    alias: Doc Script\n"
+            "    sequence:\n"
+            "      - action: light.turn_on\n"
+            "        target:\n"
+            "          entity_id: light.flur\n",
+            None,
+            "Doku",
+            create=True,
+        )
+
+        result = app.documentation_overview()
+        saved = app.write_documentation()
+
+        self.assertIn("# Home Assistant YAML Dokumentation", result["content"])
+        self.assertIn("doc_script", result["content"])
+        self.assertEqual(result["summary"]["files"], 1)
+        self.assertTrue(Path(saved["path"]).is_file())
 
     def test_package_export_import_roundtrip_preserves_metadata(self):
         created = app.write_file(

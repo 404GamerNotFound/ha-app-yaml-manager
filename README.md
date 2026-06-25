@@ -9,10 +9,13 @@ Automationen, Szenen und zugehörigen YAML-Ressourcen.
 - YAML-Editor mit Syntaxhervorhebung, Zeilennummern und Live-Validierung
 - YAML-Strukturansicht, Editor-Autocomplete und Shortcuts für häufige Aktionen
 - Kontextbezogene Script-Prüfung für doppelte Schlüssel, Script-IDs und Entitäten
+- Live-HA-Semantikprüfung für Dienste, Ziel-Entitäten, Geräte, Bereiche und Pflichtfelder
 - Script-Abhängigkeitsansicht mit Sprung zu Verwendung und Definition
 - Vorschau-basierte Script-ID-Umbenennung einschließlich erkannter Referenzen
 - Objektbrowser für Automationen, Scripts und Szenen aus Packages und Includes
 - In die Sidebar integrierte, kompakte HA-Objektliste statt modaler Kartenansicht
+- Blueprint-Browser mit Import, YAML-basierter Blueprint-Erzeugung und Package-Instanziierung
+- Markdown-Dokumentationsgenerator für Packages, HA-Objekte, Bezüge, Entitäten und Git-Historie
 - Geschützter Editor für `automations.yaml`, `scripts.yaml`, `scenes.yaml` und Include-Verzeichnisse
 - Multi-Datei-Suche und Ersetzung mit Vorschau, Backups und gemeinsamem Git-Commit
 - Schutz vor dem Überschreiben parallel geänderter Dateien
@@ -29,12 +32,13 @@ Automationen, Szenen und zugehörigen YAML-Ressourcen.
 - Automatische Home-Assistant-Konfigurationsprüfung nach Konfigurationsänderungen
 - Versionsverlauf mit Side-by-side-Diff und Wiederherstellung für Konfiguration und Packages
 - Automatische lokale Git-Commits mit Historie, Side-by-side-Diff und Wiederherstellung
-- Git-Branches anzeigen, erstellen, wechseln, vergleichen und konfliktgeprüft zusammenführen
+- Eigene Git-Seite zum Anzeigen, Erstellen, Wechseln, Vergleichen und konfliktgeprüften Zusammenführen lokaler Branches
 - Optionaler manueller GitHub-/GitLab-Remote-Sync mit geschützter Token-Ablage
 - Optionaler automatischer Remote-Push nach jedem erfolgreichen Speichern
 - Globale Package-Konfliktprüfung nach den Home-Assistant-Merge-Regeln
-- Qualitätsdashboard für Konflikte, Warnungen, Script-Nutzung, Backups und Git
-- Systemstatus im Dashboard für Git, Remote, Home Assistant, Backups, Papierkorb und Importlimits
+- Qualitätsdashboard für Konflikte, Warnungen, Script-Nutzung und Backups
+- Erweitertes Dashboard für HA-Objekte, Referenzen, Blueprints, Live-HA-Semantik und Dokumentationsstatus
+- Systemstatus im Dashboard für Home Assistant, Backups, Papierkorb und Importlimits
 - Einstellungsdialog für Aufbewahrung, Importlimits, Dashboard-Regeln, Theme und Speicherverhalten
 - Konfliktgeprüfter ZIP-Import und Export nach Datei, Kategorie oder Gesamtbestand
 - Responsive Ingress-Oberfläche mit Hell- und Dunkelmodus
@@ -152,7 +156,7 @@ Fundzeile, Referenzen und Beziehungszählern. Dadurch bleiben auch große
 `automations.yaml`-Bestände ohne überlagernden Dialog durchsuchbar.
 
 Lokale Git-Commits werden weiterhin bei jedem Schreibvorgang erzeugt. Ist im
-Dashboard **Nach jedem Speichern automatisch pushen** aktiviert, führt das
+Bereich **Git Remote** auf der Git-Seite **Nach jedem Speichern automatisch pushen** aktiviert, führt das
 Backend danach zusätzlich einen geschützten Push auf den konfigurierten
 Remote-Branch aus. Dabei wird zuerst der Remote-Stand ermittelt; ein neuerer oder
 divergierter Remote führt zu einem sichtbaren Sync-Fehler, ohne den bereits
@@ -227,18 +231,39 @@ Side-by-side-Diffs mit Änderungsfokus und eine konfliktgeschützte Wiederherste
 Das bestehende Datei-Backup wird dabei weiterhin zusätzlich angelegt.
 
 Das Qualitätsdashboard ist der erste Eintrag links oben und fasst Package-Konflikte,
-mögliche ungenutzte Scripts, Backup-Anzahl und Git-Remote-Status zusammen. Ein
-optionaler HTTPS-Remote für GitHub.com oder GitLab.com kann manuell per Fetch,
-Pull, Push oder sicherer
-Synchronisation bedient werden. Das Token wird mit Dateimodus `0600` unter
-`/data` gespeichert, nie an das Frontend zurückgesendet und nicht in
-`.git/config` geschrieben.
+mögliche ungenutzte Scripts, Backup-Anzahl, HA-Objekte, Blueprint-Bestand,
+semantische Live-HA-Hinweise und den Dokumentationsstatus zusammen. Git-Branches
+und Git-Remote-Aktionen sind aus dem Dashboard in eine eigene Inhaltsseite
+verschoben. Ein optionaler HTTPS-Remote für GitHub.com oder GitLab.com kann dort
+manuell per Fetch, Pull, Push oder sicherer Synchronisation bedient werden. Das
+Token wird mit Dateimodus `0600` unter `/data` gespeichert, nie an das Frontend
+zurückgesendet und nicht in `.git/config` geschrieben.
+
+Die Live-HA-Semantikprüfung verwendet gecachte Daten aus `states`, `services`,
+`config/device_registry/list` und `config/area_registry/list`. Während die
+normale YAML- und Script-Prüfung unverändert lokal funktioniert, ergänzt die App
+innerhalb von Home Assistant Hinweise zu unbekannten Diensten, fehlenden
+Pflichtfeldern, nicht gefundenen Entitäten, Geräten und Bereichen sowie
+offensichtlichen Service-/Entity-Domain-Konflikten. In der lokalen Entwicklung
+ohne Supervisor-Token wird diese Zusatzprüfung als nicht verfügbar behandelt.
+
+Blueprints werden unter `/config/blueprints/<domain>/...` gelesen und als eigene
+Seite in der linken Navigation angezeigt. Importierte oder aus YAML erzeugte
+Blueprint-Dateien werden validiert, atomar geschrieben und über Git versioniert.
+Die Instanziierung erzeugt eine normale Package-Datei mit `use_blueprint` und
+läuft dadurch durch dieselben Schutzmechanismen wie andere Package-Erstellungen.
+
+Der Dokumentationsgenerator erstellt serverseitig eine Markdown-Übersicht über
+Package-Dateien, Automationen, Scripts, Szenen, erkannte Bezüge, verwendete
+Entitäten, Package-Auffälligkeiten und die letzten Git-Commits. Die Vorschau
+erscheint in der Oberfläche; optional wird der Stand unter
+`/data/documentation/packages.md` abgelegt.
 
 Der Systemstatus im Dashboard ergänzt diese Qualitätswerte um konkrete
-Betriebsinformationen: Git-Verfügbarkeit, Remote-Zustand, Home-Assistant-Token
-und letzte Konfigurationsprüfung, Backup- und Papierkorbgröße sowie aktive
-Importlimits. Die Daten kommen aus `/api/system/health` und werden zusätzlich in
-der Dashboard-Antwort mitgeliefert.
+Betriebsinformationen: Home-Assistant-Token und letzte Konfigurationsprüfung,
+Backup- und Papierkorbgröße sowie aktive Importlimits. Git-Verfügbarkeit und
+Remote-Zustand bleiben über die eigene Git-Seite beziehungsweise
+`/api/system/health` abrufbar.
 
 Der Editor bleibt ein nativer Textbereich mit synchronisierter Highlighting-
 Ebene. Ergänzend gibt es eine YAML-Strukturansicht aus erkannten Mapping-
@@ -246,7 +271,7 @@ Schlüsseln, eine Completion-Palette über `Strg`/`Cmd` + Leertaste für Entitä
 Dienste, erkannte Scripts und Bausteine sowie Shortcuts für Speichern und
 globale Suche/Ersetzung.
 
-Bei einer divergierten Historie bietet das Dashboard zwei bewusste Lösungen:
+Bei einer divergierten Historie bietet die Git-Seite zwei bewusste Lösungen:
 **Historien verbinden** übernimmt einen typischen initialen README-/Lizenz-Commit
 und erzeugt einen gemeinsamen Merge. **Remote durch lokalen Stand ersetzen**
 verwendet `force-with-lease` und verwirft die bisherige Remote-Historie nur,

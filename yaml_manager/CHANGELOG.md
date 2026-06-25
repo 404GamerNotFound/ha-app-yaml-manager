@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Filterbereich in der Sidebar standardmäßig eingeklappt
+- Git-Branch- und Git-Remote-Verwaltung aus dem Dashboard auf eine eigene Seite verschoben
+- Dashboard um HA-Objektzahlen, Referenzen, Blueprint-Bestand, Live-HA-Semantik und Dokumentationsstatus erweitert
+- Live-HA-Semantikprüfung für Dienste, Entitäten, Geräte, Bereiche, Pflichtfelder und Service-/Entity-Domain-Konflikte ergänzt
+- Blueprint-Seite mit Anzeige, Import, YAML-basierter Erzeugung und Package-Instanziierung ergänzt
+- Markdown-Dokumentationsgenerator für Packages, HA-Objekte, Bezüge, Entitäten, Auffälligkeiten und Git-Historie ergänzt
+
 ## 1.0.0 - 2026-06-23
 
 - Konfigurierbare Papierkorb-Aufbewahrung nach Alter und maximaler Größe ergänzt

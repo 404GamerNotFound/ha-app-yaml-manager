@@ -47,6 +47,28 @@ Die zugehörigen HTTP-Endpunkte sind:
 - `POST /api/script/rename-preview`
 - `POST /api/script/rename`
 
+## Live-HA-Semantikprüfung
+
+Die normale YAML- und Script-Prüfung läuft weiterhin lokal während der Eingabe.
+Wenn die App innerhalb von Home Assistant einen Supervisor-Token erhält, ergänzt
+sie diese Prüfung um semantische Hinweise aus den aktuellen HA-Helferdaten. Dafür
+werden `states`, `services`, `config/device_registry/list` und
+`config/area_registry/list` serverseitig gelesen und kurzzeitig gecacht.
+
+Die Prüfung erkennt unter anderem:
+
+- unbekannte Dienste unter `action:` beziehungsweise `service:`,
+- fehlende Service-Felder, die Home Assistant als erforderlich meldet,
+- unbekannte `entity_id`, `device_id` und `area_id`-Werte,
+- offensichtliche Domain-Konflikte zwischen Dienst und Zielentität.
+
+Ist die Home-Assistant-API lokal nicht verfügbar, bleibt die Zusatzprüfung ohne
+Fehlermeldung inaktiv.
+
+API-Endpunkt:
+
+- `GET /api/helpers`
+
 ## Backend-Module
 
 Die Backend-Verantwortlichkeiten sind getrennt aufgebaut:
@@ -58,6 +80,9 @@ Die Backend-Verantwortlichkeiten sind getrennt aufgebaut:
 - `backup.py`: Backup-Historie, Diff und Wiederherstellung
 - `validation.py`: Home-Assistant-kompatibler YAML-Loader und Syntaxprüfung
 - `dependencies.py`: Script-Graph und quellpositionsbasierte Umbenennung
+- `semantic.py`: Live-HA-Semantikprüfung anhand von States, Services, Devices und Areas
+- `blueprints.py`: Blueprint-Index, Import, Erzeugung und Package-Instanziierung
+- `documentation.py`: Markdown-Dokumentationsgenerator
 - `errors.py`: gemeinsamer erwarteter API-Fehlertyp
 
 ## Home-Assistant-Objektbrowser
@@ -115,7 +140,7 @@ API-Endpunkte:
 
 ## Git-Branch-Verwaltung
 
-Das Dashboard zeigt alle lokalen Branches und den aktiven Branch. Neue Branches
+Die eigene Seite **Git** zeigt alle lokalen Branches und den aktiven Branch. Neue Branches
 werden vom aktuellen `HEAD` erstellt und sofort ausgecheckt. Vor Branch-Wechseln
 und Merges legt die App einen Git-Zwischenstand der verwalteten Konfiguration an.
 
@@ -136,7 +161,7 @@ API-Endpunkte:
 ## Automatischer Git-Remote-Push
 
 Die App erstellt bei jedem erfolgreichen Schreibvorgang weiterhin zuerst einen
-lokalen, pfadbegrenzten Commit. Im Dashboard kann unter **Git Remote** zusätzlich
+lokalen, pfadbegrenzten Commit. Auf der Seite **Git** kann unter **Git Remote** zusätzlich
 **Nach jedem Speichern automatisch pushen** aktiviert werden. Diese Einstellung
 wird zusammen mit der Remote-Konfiguration unter `/data/git_remote.json`
 gespeichert und ist bei konfigurierten Remotes standardmäßig aktiv.
@@ -266,7 +291,7 @@ Die zugehörigen HTTP-Endpunkte sind:
 
 ## GitHub- und GitLab-Remote
 
-Das Qualitätsdashboard enthält eine optionale Git-Remote-Konfiguration. Erlaubt
+Die Seite **Git** enthält eine optionale Git-Remote-Konfiguration. Erlaubt
 sind ausschließlich HTTPS-Repository-URLs auf `github.com` und `gitlab.com`;
 eingebettete Benutzernamen, Tokens, Query-Parameter und URL-Fragmente werden
 abgewiesen. Die App verwendet den eigenen Remote-Namen `yaml-manager` und
@@ -290,7 +315,7 @@ Die Synchronisation erfolgt ausschließlich nach einer manuellen Aktion:
 - **Push** überträgt den lokalen `HEAD` auf den konfigurierten Remote-Branch.
 - **Sicher synchronisieren** führt Fetch, einen möglichen Fast-forward und Push aus.
 
-Sind lokale und entfernte Historie divergiert, zeigt das Dashboard zwei
+Sind lokale und entfernte Historie divergiert, zeigt die Git-Seite zwei
 Auflösungswege:
 
 - **Historien verbinden** ist für ein neu angelegtes Remote mit eigenem README-
@@ -308,6 +333,11 @@ Package-YAML-Dateien sowie README, LICENSE, CHANGELOG, `.gitignore` und
 ungültiges YAML führen zum Abbruch. Automatische Rebases und ungeschützte
 Force-Pushes werden nicht ausgeführt.
 
+API-Endpunkte:
+
+- `GET|PUT|DELETE /api/git/remote`
+- `POST /api/git/remote/sync`
+
 ## Qualitätsdashboard
 
 Das Dashboard ist der erste Eintrag oben in der linken Seitenleiste. Kategorien,
@@ -315,15 +345,60 @@ Tags und die Script-Direktauswahl bleiben während der Dashboard-Anzeige sichtba
 Ein Klick auf eine Datei öffnet sie unmittelbar im Script-Editor; der Eintrag
 **Dashboard** führt zurück, ohne den geöffneten Editorstand zu verwerfen. Das
 Dashboard kombiniert die
-globale Package-Konfliktprüfung mit Betriebs- und
-Git-Daten. Angezeigt werden Package-Dateien, Script-Anzahl, Fehler, Warnungen,
-Backups, Git-Ahead/Behind und ein daraus berechneter Qualitätswert.
+globale Package-Konfliktprüfung mit Betriebs-, Objekt-, Blueprint- und
+Semantikdaten. Angezeigt werden Package-Dateien, Automationen, Scripts, Szenen,
+Bezüge, Blueprints, Fehler, Warnungen, Backups und ein daraus berechneter
+Qualitätswert. Git-Branches und Remote-Sync sind bewusst auf die eigene Seite
+**Git** verschoben.
 
 Für die Nutzungsanalyse werden Script-Definitionen mit `script.<id>`-Referenzen
 in allen lesbaren YAML-Dateien unterhalb des Konfigurationsverzeichnisses
 verglichen. Nicht gefundene Referenzen werden bewusst nur als **möglicherweise
 ungenutzt** gemeldet: Aufrufe aus Dashboards, der Benutzeroberfläche, Apps oder
 externen Integrationen sind aus YAML allein nicht vollständig ableitbar.
+
+## Blueprint-Unterstützung
+
+**Blueprints** ist eine eigene Inhaltsseite in der linken Navigation. Die App
+liest YAML-Dateien unter `/config/blueprints/automation`,
+`/config/blueprints/script` und `/config/blueprints/scene`, validiert den
+`blueprint:`-Block und zeigt Domain, Eingaben und Quellpfad an.
+
+Unterstützt werden:
+
+- vorhandene Blueprints anzeigen und filtern,
+- Blueprint-YAML in einen sicheren Zielpfad importieren,
+- aus einem Automation-, Script- oder Szenen-YAML einen Blueprint-Skeleton erzeugen,
+- Automation- und Script-Blueprints als neue Package-Datei mit `use_blueprint`
+  instanziieren.
+
+Blueprint-Import und YAML-basierte Erzeugung schreiben atomar, erzeugen lokale
+Git-Commits und verwenden die vorhandene geschützte Token-/Remote-Sync-Logik.
+Die Instanziierung läuft über den normalen Package-Erstellungsweg mit YAML-
+Prüfung, Metadaten, Git-Commit und Home-Assistant-Konfigurationsprüfung.
+
+API-Endpunkte:
+
+- `GET /api/blueprints`
+- `GET /api/blueprint`
+- `POST /api/blueprints/import`
+- `POST /api/blueprints/from-yaml`
+- `POST /api/blueprints/instantiate`
+
+## Dokumentationsgenerator
+
+Die Seite **Doku** erzeugt eine Markdown-Übersicht über den verwalteten Bestand.
+Die generierte Datei enthält Package-Dateien, Automationen, Scripts, Szenen,
+erkannte Script-/Szenenbezüge, verwendete Entitäten, Package-Auffälligkeiten
+und die letzten Git-Commits.
+
+Die Vorschau bleibt zunächst nur im Browser. Über **Unter /data speichern** wird
+der aktuelle Stand atomar unter `/data/documentation/packages.md` abgelegt.
+
+API-Endpunkte:
+
+- `GET /api/documentation`
+- `POST /api/documentation/write`
 
 ## Package-Import und -Export
 
@@ -354,8 +429,6 @@ Die zugehörigen Endpunkte sind:
 - `POST /api/import/preview`
 - `POST /api/import/apply`
 - `GET /api/dashboard`
-- `GET|PUT|DELETE /api/git/remote`
-- `POST /api/git/remote/sync`
 
 ## Globale Package-Konfliktprüfung
 

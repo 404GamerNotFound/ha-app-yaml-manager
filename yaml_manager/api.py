@@ -128,6 +128,15 @@ def create_handler(backend: Any) -> type[BaseHTTPRequestHandler]:
                     )
                 elif path == "/api/ha-objects":
                     self.send_json(HTTPStatus.OK, backend.home_assistant_objects())
+                elif path == "/api/blueprints":
+                    self.send_json(HTTPStatus.OK, backend.list_blueprints())
+                elif path == "/api/blueprint":
+                    self.send_json(
+                        HTTPStatus.OK,
+                        backend.read_blueprint(query.get("path", [""])[0]),
+                    )
+                elif path == "/api/documentation":
+                    self.send_json(HTTPStatus.OK, backend.documentation_overview())
                 elif path == "/api/resource":
                     self.send_json(
                         HTTPStatus.OK,
@@ -239,6 +248,35 @@ def create_handler(backend: Any) -> type[BaseHTTPRequestHandler]:
                             body.get("stateVersion"),
                         ),
                     )
+                elif path == "/api/blueprints/import":
+                    self.send_json(
+                        HTTPStatus.CREATED,
+                        backend.import_blueprint(body.get("path", ""), body.get("content", "")),
+                    )
+                elif path == "/api/blueprints/from-yaml":
+                    self.send_json(
+                        HTTPStatus.CREATED,
+                        backend.create_blueprint_from_yaml(
+                            body.get("domain", ""),
+                            body.get("name", ""),
+                            body.get("content", ""),
+                            body.get("path", ""),
+                        ),
+                    )
+                elif path == "/api/blueprints/instantiate":
+                    self.send_json(
+                        HTTPStatus.CREATED,
+                        backend.instantiate_blueprint(
+                            body.get("blueprintPath", ""),
+                            body.get("packagePath", ""),
+                            body.get("objectId", ""),
+                            body.get("alias", ""),
+                            body.get("inputs"),
+                            body.get("inputsText", ""),
+                        ),
+                    )
+                elif path == "/api/documentation/write":
+                    self.send_json(HTTPStatus.OK, backend.write_documentation())
                 elif path == "/api/configuration/enable-packages":
                     self.send_json(
                         HTTPStatus.OK,
