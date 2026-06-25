@@ -1,6 +1,15 @@
 # Changelog
 
-## Unreleased
+## 1.2.0 - 2026-06-25
+
+- Interaktive interne Doku-Seite mit Übersicht, Objektgraph, Entity-Liste, Änderungsverlauf und Markdown-Ansicht ergänzt
+- Secret- und Sicherheitsprüfung für fehlende `!secret`-Einträge, mögliche Klartext-Tokens und ungenutzte Secrets ergänzt
+- Sicherheitswarnung vor Git-Push, Sync, Merge und Force-Push eingebaut
+- Jinja-Template-Tester mit Home-Assistant-Rendering, Fehleranzeige und Entity-Erkennung ergänzt
+- Trace-/Debug-Seite für letzte Automation- und Script-Ausführungen über die Home-Assistant-Trace-API ergänzt
+- Dashboard-Hinweise um direkte Aktionen zum Öffnen von Konflikten, Blueprints, Security, Traces und betroffenen Dateien erweitert
+
+## 1.1.0 - 2026-06-25
 
 - Filterbereich in der Sidebar standardmäßig eingeklappt
 - Git-Branch- und Git-Remote-Verwaltung aus dem Dashboard auf eine eigene Seite verschoben

@@ -722,6 +722,111 @@ class FileApiTests(unittest.TestCase):
         self.assertEqual(invalid["line"], 17)
         self.assertFalse(unavailable["available"])
 
+    def test_security_scan_detects_missing_secret_and_plaintext_token(self):
+        (app.PACKAGES_ROOT.parent / "secrets.yaml").write_text("known_secret: vorhanden\n", encoding="utf-8")
+        app.write_file(
+            "security.yaml",
+            "rest_command:\n"
+            "  webhook:\n"
+            "    url: https://example.test/hook?token=abcdef0123456789\n"
+            "script:\n"
+            "  sicherheit:\n"
+            "    sequence:\n"
+            "      - action: notify.mobile_app\n"
+            "        data:\n"
+            "          password: !secret missing_password\n"
+            "          api_key: abcdef0123456789abcdef0123456789\n",
+            None,
+            "Tests",
+            create=True,
+        )
+
+        result = app.security_scan()
+        warning = app.security_push_warning()
+        codes = {finding["code"] for finding in result["findings"]}
+
+        self.assertIn("missing-secret", codes)
+        self.assertIn("plaintext-secret-url", codes)
+        self.assertIn("plaintext-secret", codes)
+        self.assertFalse(warning["ok"])
+        self.assertGreaterEqual(warning["count"], 3)
+
+    def test_render_template_posts_to_home_assistant_and_reports_entities(self):
+        with patch.object(app, "home_assistant_request", return_value="23.5") as request:
+            result = app.render_template({"template": "{{ states('sensor.temperatur') }} {{ states.light.kueche.state }}"})
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["result"], "23.5")
+        self.assertEqual(result["entities"], ["light.kueche", "sensor.temperatur"])
+        request.assert_called_once_with(
+            "template",
+            method="POST",
+            payload={"template": "{{ states('sensor.temperatur') }} {{ states.light.kueche.state }}"},
+        )
+
+    def test_render_template_reports_unavailable_home_assistant(self):
+        with patch.object(app, "home_assistant_request", side_effect=app.ApiError(503, "nicht verfügbar")):
+            result = app.render_template({"template": "{{ states('sensor.temperatur') }}"})
+
+        self.assertFalse(result["success"])
+        self.assertFalse(result["available"])
+        self.assertEqual(result["entities"], ["sensor.temperatur"])
+
+    def test_trace_index_and_detail_use_home_assistant_trace_api(self):
+        app.write_file(
+            "trace.yaml",
+            "script:\n  trace_test:\n    alias: Trace Test\n    sequence: []\n",
+            None,
+            "Tests",
+            create=True,
+        )
+
+        def fake_request(path, method="GET", payload=None):
+            if path == "trace/script/trace_test":
+                return {
+                    "stored_traces": {
+                        "run-1": {
+                            "timestamp": "2026-06-25T10:00:00+00:00",
+                            "state": "stopped",
+                            "last_step": "sequence/0",
+                        }
+                    }
+                }
+            if path == "trace/script/trace_test/run-1":
+                return {"trace": {"last_step": "sequence/0"}}
+            raise app.ApiError(404, "nicht gefunden")
+
+        with patch.object(app, "home_assistant_request", side_effect=fake_request):
+            index = app.trace_index()
+            detail = app.trace_detail("script", "trace_test", "run-1")
+
+        self.assertTrue(index["available"])
+        self.assertEqual(index["summary"]["traces"], 1)
+        self.assertEqual(index["entries"][0]["runId"], "run-1")
+        self.assertEqual(detail["trace"], {"trace": {"last_step": "sequence/0"}})
+
+    def test_documentation_overview_contains_html_page_data(self):
+        app.write_file(
+            "docs.yaml",
+            "script:\n"
+            "  dokumentiert:\n"
+            "    alias: Dokumentiert\n"
+            "    sequence:\n"
+            "      - action: light.turn_on\n"
+            "        target:\n"
+            "          entity_id: light.kueche\n",
+            None,
+            "Tests",
+            create=True,
+        )
+
+        result = app.documentation_overview()
+
+        self.assertIn("content", result)
+        self.assertTrue(any(item["entityId"] == "light.kueche" for item in result["data"]["entities"]))
+        self.assertTrue(any(item["entityId"] == "script.dokumentiert" for item in result["data"]["objects"]))
+        self.assertIn("commits", result["data"])
+
     def test_package_save_runs_home_assistant_check_and_extracts_source(self):
         response = {
             "result": "invalid",
@@ -943,6 +1048,35 @@ class FileApiTests(unittest.TestCase):
             ["--git-dir", str(remote), "rev-parse", "refs/heads/main"]
         ).stdout.decode().strip()
         self.assertEqual(remote_head, app.run_git(["rev-parse", "HEAD"]).stdout.decode().strip())
+
+    def test_automatic_push_is_blocked_by_security_warning(self):
+        remote = app.PACKAGES_ROOT.parent / "blocked-remote.git"
+        app.run_git(["init", "--bare", str(remote)])
+        app.save_git_remote_file(
+            {
+                "url": str(remote),
+                "provider": "test",
+                "branch": "main",
+                "username": "test",
+                "token": "",
+                "autoPush": True,
+            }
+        )
+
+        saved = app.write_file(
+            "blocked_secret.yaml",
+            "rest_command:\n"
+            "  webhook:\n"
+            "    url: https://example.test/hook?token=abcdef0123456789\n",
+            None,
+            "Tests",
+            create=True,
+        )
+
+        self.assertTrue(saved["gitSync"]["enabled"])
+        self.assertFalse(saved["gitSync"]["success"])
+        self.assertTrue(saved["gitSync"]["blocked"])
+        self.assertGreaterEqual(saved["gitSync"]["security"]["count"], 1)
 
     def test_git_remote_can_merge_unrelated_initial_readme_history(self):
         root = app.PACKAGES_ROOT.parent

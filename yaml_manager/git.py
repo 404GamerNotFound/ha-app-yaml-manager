@@ -42,6 +42,7 @@ def bind(backend: Any) -> None:
         "read_configuration",
         "read_file",
         "read_yaml_text",
+        "security_push_warning",
         "validate_yaml",
     )
     globals().update({name: getattr(backend, name) for name in names})
@@ -553,6 +554,15 @@ def auto_push_after_change(git_result: dict[str, Any] | None = None) -> dict[str
             "success": True,
             "skipped": True,
             "message": "Keine neue Git-Änderung zum Pushen vorhanden.",
+        }
+    security = security_push_warning()
+    if not security.get("ok", True):
+        return {
+            "enabled": True,
+            "success": False,
+            "blocked": True,
+            "message": f"Datei gespeichert, automatischer Git-Push wegen {security['count']} Sicherheits-Hinweisen blockiert.",
+            "security": security,
         }
     try:
         result = synchronize_git_remote("push")

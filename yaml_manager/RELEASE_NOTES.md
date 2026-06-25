@@ -1,134 +1,74 @@
-# Release Notes 1.0.0
+# Release Notes 1.2.0
 
-Veröffentlicht am 23. Juni 2026.
+Veröffentlicht am 25. Juni 2026.
 
-## Papierkorb-Aufbewahrung
+## Interaktive Dokumentation
 
-Der Papierkorb kann jetzt automatisch bereinigt werden. In den Einstellungen
-lassen sich eine maximale Aufbewahrungsdauer in Tagen und eine maximale
-Papierkorbgröße in MiB festlegen. Beim Löschen, Öffnen des Papierkorbs und nach
-Einstellungsänderungen entfernt die App abgelaufene Einträge und reduziert einen
-zu großen Papierkorb über die ältesten Einträge. Der neueste Eintrag bleibt
-erhalten, damit eine frisch gelöschte Datei nicht sofort aus der Oberfläche
-verschwindet.
+Die Seite **Doku** zeigt die generierte Dokumentation jetzt zusätzlich als
+interne HTML-Ansicht. Tabs trennen Übersicht, Objektgraph, Entitäten,
+Änderungen und Markdown. Der Filter durchsucht die strukturierten Daten direkt
+im Browser.
 
-Der Papierkorb zeigt zusätzlich die aktiven Regeln sowie die Anzahl automatisch
-entfernter Einträge an.
+Der Backend-Generator liefert dafür neben der Markdown-Datei ein `data`-Objekt
+mit Package-Dateien, HA-Objekten, Referenzen, Graph-Kanten, Entity-Nutzung,
+Konflikten und letzten Git-Commits.
 
-## Side-by-side-Diffs
+## Sicherheit und Git-Push-Warnung
 
-Backup- und Git-Historie zeigen Unterschiede jetzt als zweispaltigen Vergleich
-zwischen alter und aktueller Fassung. Zeilennummern bleiben sichtbar, gelöschte
-und hinzugefügte Inhalte werden gegenübergestellt, und zusammengehörige
-Änderungen erscheinen als eine gemeinsame Zeile.
+Die neue Seite **Sicherheit** scannt alle verwalteten YAML-Dateien auf
+`!secret`-Referenzen, fehlende Einträge in `secrets.yaml`, mögliche Klartext-
+Tokens in URL-Parametern oder typischen Secret-Feldern und wahrscheinlich
+ungenutzte Secrets.
 
-Mit **Nur Änderungen** lassen sich Kontextzeilen ausblenden. Dadurch bleibt bei
-größeren YAML-Dateien der Blick auf die tatsächlich geänderten Blöcke fokussiert.
+Vor Git-Push, sicherer Synchronisation, Merge-Push und Force-Push ruft das
+Frontend dieselbe Prüfung über `/api/security/push-warning` auf. Kritische
+Hinweise müssen bewusst bestätigt werden, bevor die Remote-Aktion startet.
+Automatische Pushes nach Speichervorgängen werden bei riskanten Funden
+serverseitig blockiert und als `gitSync`-Status gemeldet.
 
-## Aufgeräumte Navigation
+## Jinja-Template-Tester
 
-Die linke Seitenleiste trennt Hauptbereiche, Systemstatus und Filter jetzt klar
-voneinander. Dashboard, HA-Objekte sowie Suchen und Ersetzen bleiben direkt
-erreichbar. Diagnose und Filter lassen sich platzsparend ein- und ausklappen;
-Statuspunkte und die aktive Filterauswahl bleiben dabei sichtbar.
+Der rechte Hilfebereich enthält den neuen Tab **Templates**. Dort kann ein
+Jinja-Template gegen Home Assistants `/api/template` gerendert werden. Die App
+zeigt das Ergebnis oder die Fehlermeldung und extrahiert verwendete Entitäten
+aus `states(...)`, `is_state(...)`, `state_attr(...)` und `states.domain.name`.
 
-## Kompakte Aktionsmenüs
+Ohne Supervisor-Token bleibt der Tester sichtbar, meldet aber die nicht
+verfügbare Home-Assistant-API.
 
-Import/Export, `configuration.yaml` und das Neuladen der Scripts sind im neuen
-Werkzeugmenü gebündelt. Im Editor fasst das Menü **Datei** Umbenennen,
-Versionsverlauf, Git-Historie, Duplizieren und Löschen verständlich beschriftet
-zusammen. **Neue Datei** und **Speichern** bleiben dauerhaft sichtbar.
+## Trace-/Debug-Ansicht
 
-Alle bisherigen Funktionen, Dialoge, Tastaturkürzel und Sicherheitsprüfungen
-bleiben unverändert verfügbar.
+Die neue Seite **Traces** sammelt die letzten Ausführungen erkannter Automationen
+und Scripts über Home Assistants Trace-API. Die Liste zeigt Objekt, Entity-ID,
+Zeitpunkt, Status, letzten Schritt und Fehler. Ein Klick lädt die Detaildaten
+einer Ausführung als JSON, damit Variablen, Trigger und Schritte gezielt
+untersucht werden können.
 
-## Integrierte HA-Objektansicht
+## Dashboard-Aktionen
 
-Automationen, Scripts und Szenen öffnen jetzt als reguläre App-Seite neben der
-sichtbaren Sidebar. Die bisherige große Modalansicht wurde durch kompakte Zeilen
-mit Objekt, Quelldatei, Referenzen und Beziehungszählern ersetzt. HA-Objekte und
-Suchen/Ersetzen liegen als logische Werkzeuge in der Sidebar statt in der
-Topbar.
+Dashboard-Hinweise enthalten nun direkte Aktionen. Je nach Hinweis öffnet die App
+die Konfliktübersicht, die Blueprint-Seite, die Sicherheitsprüfung, die
+Trace-Ansicht oder springt in die betroffene YAML-Datei und Zeile. Dadurch wird
+das Dashboard stärker zu einem Arbeitsbereich statt nur zu einer Übersicht.
 
-## Automatischer Git-Push
+## Technische Änderungen
 
-Unter **Git Remote** kann Auto-Push pro Remote aktiviert werden. Nach jedem
-erfolgreichen lokalen App-Commit wird der konfigurierte Remote-Branch sicher
-aktualisiert. Ein neuerer oder divergierter Remote wird nicht überschrieben;
-der lokale Save bleibt erfolgreich und der Sync-Fehler wird separat angezeigt.
+- Neue Backend-Module `security.py` und `traces.py`
+- `documentation.py` liefert strukturierte Daten für HTML-Doku, Objektgraph,
+  Entity-Liste und Änderungsverlauf
+- Neue API-Endpunkte für Security, Push-Warnung, Trace-Index, Trace-Detail und
+  Template-Rendering
+- Dashboard-Antworten enthalten Security- und Trace-Summaries sowie optionale
+  Aktions-Metadaten pro Finding
+- Frontend-Seiten für Sicherheit und Traces sowie Doku-Tabs, Template-Tester und
+  Dashboard-Aktionsbuttons ergänzt
+- Unit-Tests für Security-Scan, Template-Rendering, Trace-API und strukturierte
+  Dokumentationsdaten ergänzt
 
-## Git-Branch-Verwaltung
+## Neue API-Endpunkte
 
-Lokale Branches können im Dashboard angezeigt, erstellt und gewechselt werden.
-Vor einem Merge zeigt die App Ahead/Behind, betroffene Dateien und einen Unified
-Diff. Konflikte und ungültiges YAML brechen den noch nicht eingecheckten Merge
-automatisch ab.
-
-## Multi-Datei-Suche und Ersetzen
-
-`configuration.yaml`, Packages und erkannte HA-Includes können gemeinsam
-durchsucht und nach einer Vorschau geändert werden. Zustandshash, YAML- und
-Konfliktprüfung, Backups, Rollback und ein gemeinsamer Git-Commit schützen den
-Vorgang.
-
-## Automationen, Scripts und Szenen
-
-Der neue HA-Objektbrowser folgt den entsprechenden Bereichen aus
-`configuration.yaml`, `!include`, Include-Verzeichnissen und Packages. Objekte
-und Referenzen sind durchsuchbar und öffnen direkt den passenden Editor. Für
-`automations.yaml`, `scripts.yaml`, `scenes.yaml` und weitere eingebundene
-Dateien steht ein geschützter YAML-Ressourceneditor bereit.
-
-## Script-Abhängigkeiten
-
-Der neue Tab **Bezüge** zeigt Definitionen, verwendete Scripts, Szenen und
-Entitäten sowie eingehende Verweise aus anderen Package-Dateien. Fundstellen und
-bekannte Definitionen lassen sich direkt im Editor öffnen.
-
-## Referenzsichere Script-ID-Umbenennung
-
-Script-IDs können nach einer Vorschau zusammen mit allen erkannten Referenzen
-umbenannt werden. Die Anwendung ist durch einen globalen Package-Zustandshash,
-YAML- und Konfliktprüfung, Backups, Rollback und einen gemeinsamen Git-Commit
-geschützt.
-
-## Modularisiertes Backend
-
-HTTP, `configuration.yaml`, Git, Backups, YAML-Validierung und
-Abhängigkeitsanalyse liegen jetzt in eigenen Python-Modulen. `app.py` bleibt als
-kompatible Service-Fassade bestehen; bestehende API-Verträge bleiben erhalten.
-
-## Dashboard in der linken Navigation
-
-Das Dashboard ist jetzt der erste Eintrag links oben. Es belegt ausschließlich
-den Inhaltsbereich rechts neben der Sidebar. Kategorien, Tags und sämtliche
-Script-Dateien bleiben dadurch auch auf der Qualitätsübersicht sichtbar.
-
-## Direkter Zugriff auf Scripts
-
-Ein Klick auf eine Datei in der linken Spalte öffnet unmittelbar den YAML-Editor.
-Der Dashboard-Eintrag führt zurück zur Übersicht, ohne einen geöffneten
-Editorstand zu verwerfen. Auf mobilen Geräten bleibt die Scriptliste über die
-vorhandene Seitenleisten-Schaltfläche erreichbar.
-
-## Bestehende Funktionen
-
-Qualitätsprüfung, Git-Divergenzauflösung, Git-Historie sowie ZIP-Import und
--Export bleiben vollständig verfügbar.
-
-## Technische API-Erweiterungen
-
-- `GET /api/git/branches`
-- `POST /api/git/branches/create|switch|compare|merge`
-- `POST /api/search-replace/preview|apply`
-- `GET /api/ha-objects`
-- `GET|PUT /api/resource`
-- `GET /api/dependencies`
-- `POST /api/script/rename-preview`
-- `POST /api/script/rename`
-
-## Nach dem Update
-
-1. Öffne eine Package-Datei und wähle rechts **Bezüge**.
-2. Nutze **Öffnen** oder **Definition**, um zwischen Fundstellen zu wechseln.
-3. Nutze **Umbenennen**, prüfe die Vorschau und bestätige die Änderungen.
+- `GET /api/security`
+- `GET /api/security/push-warning`
+- `GET /api/traces`
+- `GET /api/trace`
+- `POST /api/template/render`

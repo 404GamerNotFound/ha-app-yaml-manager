@@ -16,6 +16,10 @@ Automationen, Szenen und zugehörigen YAML-Ressourcen.
 - In die Sidebar integrierte, kompakte HA-Objektliste statt modaler Kartenansicht
 - Blueprint-Browser mit Import, YAML-basierter Blueprint-Erzeugung und Package-Instanziierung
 - Markdown-Dokumentationsgenerator für Packages, HA-Objekte, Bezüge, Entitäten und Git-Historie
+- Interaktive HTML-Doku mit Filter, Objektgraph, Entity-Liste und Änderungsverlauf
+- Secret- und Sicherheitsprüfung für `!secret`, Klartext-Tokens und Git-Push-Warnungen
+- Jinja-Template-Tester mit Home-Assistant-Rendering und Entity-Erkennung
+- Trace-/Debug-Ansicht für letzte Automation- und Script-Ausführungen
 - Geschützter Editor für `automations.yaml`, `scripts.yaml`, `scenes.yaml` und Include-Verzeichnisse
 - Multi-Datei-Suche und Ersetzung mit Vorschau, Backups und gemeinsamem Git-Commit
 - Schutz vor dem Überschreiben parallel geänderter Dateien
@@ -38,6 +42,7 @@ Automationen, Szenen und zugehörigen YAML-Ressourcen.
 - Globale Package-Konfliktprüfung nach den Home-Assistant-Merge-Regeln
 - Qualitätsdashboard für Konflikte, Warnungen, Script-Nutzung und Backups
 - Erweitertes Dashboard für HA-Objekte, Referenzen, Blueprints, Live-HA-Semantik und Dokumentationsstatus
+- Direkte Dashboard-Aktionen zum Öffnen betroffener Dateien, Konflikte, Blueprints, Security und Traces
 - Systemstatus im Dashboard für Home Assistant, Backups, Papierkorb und Importlimits
 - Einstellungsdialog für Aufbewahrung, Importlimits, Dashboard-Regeln, Theme und Speicherverhalten
 - Konfliktgeprüfter ZIP-Import und Export nach Datei, Kategorie oder Gesamtbestand
@@ -82,6 +87,15 @@ verwendet ausschließlich die Python-Standardbibliothek für HTTP und Dateizugri
 PyYAML übernimmt die Syntaxprüfung. Home-Assistant-spezifische YAML-Tags wie
 `!secret` und `!include` werden bei der Prüfung akzeptiert, doppelte Schlüssel
 werden dagegen als Fehler gemeldet.
+
+Die neuen Prüf- und Diagnosefunktionen sind ebenfalls serverseitig gekapselt:
+`security.py` liest die verwalteten YAML-Dateien und `/config/secrets.yaml`,
+prüft `!secret`-Referenzen, heuristische Klartext-Tokens und ungenutzte Secrets.
+`traces.py` übersetzt erkannte Automation- und Script-Definitionen in
+Home-Assistant-Trace-Endpunkte und normalisiert die Antwort für die Oberfläche.
+Das Template-Rendering bleibt in `app.py`, weil es nur einen schmalen
+Supervisor-API-Aufruf an `POST /api/template` sowie die lokale Entity-Erkennung
+benötigt.
 
 Die Projektkonfiguration liegt in `pyproject.toml`. Die Test-Suite ist als
 importierbares `tests`-Paket angelegt, sodass sowohl `python -m unittest` als
@@ -232,12 +246,14 @@ Das bestehende Datei-Backup wird dabei weiterhin zusätzlich angelegt.
 
 Das Qualitätsdashboard ist der erste Eintrag links oben und fasst Package-Konflikte,
 mögliche ungenutzte Scripts, Backup-Anzahl, HA-Objekte, Blueprint-Bestand,
-semantische Live-HA-Hinweise und den Dokumentationsstatus zusammen. Git-Branches
-und Git-Remote-Aktionen sind aus dem Dashboard in eine eigene Inhaltsseite
-verschoben. Ein optionaler HTTPS-Remote für GitHub.com oder GitLab.com kann dort
-manuell per Fetch, Pull, Push oder sicherer Synchronisation bedient werden. Das
-Token wird mit Dateimodus `0600` unter `/data` gespeichert, nie an das Frontend
-zurückgesendet und nicht in `.git/config` geschrieben.
+semantische Live-HA-Hinweise, Sicherheitsfunde, Trace-Verfügbarkeit und den
+Dokumentationsstatus zusammen. Findings enthalten optional Aktions-Metadaten,
+damit das Frontend direkt die passende Detailseite oder die betroffene Datei
+öffnen kann. Git-Branches und Git-Remote-Aktionen sind aus dem Dashboard in eine
+eigene Inhaltsseite verschoben. Ein optionaler HTTPS-Remote für GitHub.com oder
+GitLab.com kann dort manuell per Fetch, Pull, Push oder sicherer Synchronisation
+bedient werden. Das Token wird mit Dateimodus `0600` unter `/data` gespeichert,
+nie an das Frontend zurückgesendet und nicht in `.git/config` geschrieben.
 
 Die Live-HA-Semantikprüfung verwendet gecachte Daten aus `states`, `services`,
 `config/device_registry/list` und `config/area_registry/list`. Während die
@@ -253,11 +269,32 @@ Blueprint-Dateien werden validiert, atomar geschrieben und über Git versioniert
 Die Instanziierung erzeugt eine normale Package-Datei mit `use_blueprint` und
 läuft dadurch durch dieselben Schutzmechanismen wie andere Package-Erstellungen.
 
-Der Dokumentationsgenerator erstellt serverseitig eine Markdown-Übersicht über
-Package-Dateien, Automationen, Scripts, Szenen, erkannte Bezüge, verwendete
-Entitäten, Package-Auffälligkeiten und die letzten Git-Commits. Die Vorschau
-erscheint in der Oberfläche; optional wird der Stand unter
-`/data/documentation/packages.md` abgelegt.
+Der Dokumentationsgenerator erstellt serverseitig weiterhin eine Markdown-
+Übersicht über Package-Dateien, Automationen, Scripts, Szenen, erkannte Bezüge,
+verwendete Entitäten, Package-Auffälligkeiten und die letzten Git-Commits.
+Zusätzlich liefert derselbe Endpunkt strukturierte Daten für die interne
+HTML-Doku-Seite: Übersichtskarten, Objektgraph, Entity-Liste, Findings und
+Änderungsverlauf können im Browser gefiltert werden. Optional wird der
+Markdown-Stand unter `/data/documentation/packages.md` abgelegt.
+
+Die Sicherheitsprüfung ist ein lesender Scan über Packages und `secrets.yaml`.
+Fehlende Secret-Dateien oder nicht definierte Secret-Namen werden als Fehler
+gemeldet, mögliche Klartext-Tokens als Warnung und nicht referenzierte Secrets
+als Tipp. Git-Remote-Aktionen fragen vor Push-Varianten denselben Scan ab und
+fordern eine bewusste Bestätigung, wenn riskante Hinweise vorhanden sind. Ein
+automatischer Push nach dem Speichern wird bei solchen Hinweisen serverseitig
+blockiert und als separater `gitSync`-Status zurückgegeben; der lokale Commit
+bleibt erhalten.
+
+Der Template-Tester nutzt Home Assistants `POST /api/template` und läuft damit
+gegen aktuelle States. Er extrahiert erkannte Entitäten lokal aus verbreiteten
+Jinja-Aufrufen, sodass auch bei nicht verfügbarer HA-API sichtbar bleibt, welche
+Entities ein Template wahrscheinlich verwendet.
+
+Die Trace-Seite basiert auf dem HA-Objektindex und fragt für Automationen und
+Scripts die Home-Assistant-Trace-API ab. Die App speichert keine Trace-Daten,
+sondern normalisiert die letzten Ausführungen nur für die aktuelle Ansicht und
+lädt Detail-JSON bei Auswahl einer konkreten Run-ID nach.
 
 Der Systemstatus im Dashboard ergänzt diese Qualitätswerte um konkrete
 Betriebsinformationen: Home-Assistant-Token und letzte Konfigurationsprüfung,

@@ -20,7 +20,7 @@ def create_handler(backend: Any) -> type[BaseHTTPRequestHandler]:
     """Bind the transport layer to a backend module with the service functions."""
 
     class Handler(BaseHTTPRequestHandler):
-        server_version = "YamlScriptManager/0.13"
+        server_version = "YamlScriptManager/1.2"
 
         def log_message(self, format_string: str, *args: Any) -> None:
             print(f"{self.address_string()} - {format_string % args}", flush=True)
@@ -137,6 +137,21 @@ def create_handler(backend: Any) -> type[BaseHTTPRequestHandler]:
                     )
                 elif path == "/api/documentation":
                     self.send_json(HTTPStatus.OK, backend.documentation_overview())
+                elif path == "/api/security":
+                    self.send_json(HTTPStatus.OK, backend.security_scan())
+                elif path == "/api/security/push-warning":
+                    self.send_json(HTTPStatus.OK, backend.security_push_warning())
+                elif path == "/api/traces":
+                    self.send_json(HTTPStatus.OK, backend.trace_index())
+                elif path == "/api/trace":
+                    self.send_json(
+                        HTTPStatus.OK,
+                        backend.trace_detail(
+                            query.get("domain", [""])[0],
+                            query.get("itemId", [""])[0],
+                            query.get("runId", [""])[0],
+                        ),
+                    )
                 elif path == "/api/resource":
                     self.send_json(
                         HTTPStatus.OK,
@@ -248,6 +263,8 @@ def create_handler(backend: Any) -> type[BaseHTTPRequestHandler]:
                             body.get("stateVersion"),
                         ),
                     )
+                elif path == "/api/template/render":
+                    self.send_json(HTTPStatus.OK, backend.render_template(body))
                 elif path == "/api/blueprints/import":
                     self.send_json(
                         HTTPStatus.CREATED,

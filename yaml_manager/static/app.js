@@ -37,6 +37,9 @@ const state = {
   blueprints: null,
   selectedBlueprint: null,
   documentation: null,
+  documentationTab: "overview",
+  security: null,
+  traces: null,
   settings: null,
   trash: null,
   completion: { open: false, items: [], index: 0, start: 0, end: 0 },
@@ -73,8 +76,11 @@ const elements = Object.fromEntries([
   "blueprints-button", "blueprints-page", "blueprints-close", "blueprints-refresh", "blueprints-summary", "blueprint-search", "blueprint-domain", "blueprint-list",
   "blueprint-selected-title", "blueprint-selected-path", "blueprint-selected-domain", "blueprint-package-path", "blueprint-instance-id", "blueprint-instance-alias", "blueprint-inputs", "blueprint-instantiate",
   "blueprint-import-path", "blueprint-import-content", "blueprint-import", "blueprint-from-domain", "blueprint-from-name", "blueprint-from-path", "blueprint-from-content", "blueprint-from-create",
-  "documentation-button", "documentation-page", "documentation-close", "documentation-refresh", "documentation-save", "documentation-summary", "documentation-preview",
+  "documentation-button", "documentation-page", "documentation-close", "documentation-refresh", "documentation-save", "documentation-summary", "documentation-search", "documentation-html", "documentation-preview",
+  "security-button", "security-page", "security-close", "security-refresh", "security-summary", "security-stats", "security-list",
+  "traces-button", "traces-page", "traces-close", "traces-refresh", "traces-summary", "trace-search", "trace-domain", "trace-clear-detail", "trace-list", "trace-detail-summary", "trace-detail",
   "resource-dialog", "resource-close", "resource-title", "resource-path", "resource-save", "resource-editor", "resource-highlighting", "resource-line-numbers", "resource-validation", "resource-cursor",
+  "template-input", "template-render", "template-result", "template-entities",
   "search-replace-button", "search-replace-dialog", "search-replace-close", "replace-search", "replace-value", "replace-case-sensitive", "replace-preview", "replace-apply", "replace-summary", "replace-file-list",
   "branch-status", "branch-current", "branch-new-name", "branch-create", "branch-select", "branch-switch", "branch-compare", "branch-merge", "branch-summary", "branch-diff",
 ].map((id) => [id, document.getElementById(id)]));
@@ -1003,6 +1009,8 @@ function renderDashboard(result) {
     [result.summary.scenes || 0, "Szenen"],
     [result.summary.references || 0, "Bezüge"],
     [result.summary.blueprints || 0, "Blueprints"],
+    [result.summary.security || 0, "Security-Hinweise"],
+    [result.summary.traces || 0, "Traces"],
     [result.summary.unusedScripts, "Möglicherweise ungenutzt"],
     [result.summary.errors, "Fehler"],
     [result.summary.warnings, "Warnungen"],
@@ -1019,6 +1027,14 @@ function renderDashboard(result) {
       const item = document.createElement("div");
       item.className = `dashboard-finding ${finding.severity}`;
       item.innerHTML = `<span class="finding-dot"></span><div><strong>${escapeHtml(finding.title)}</strong><small>${escapeHtml(finding.message)}</small><small>${escapeHtml((finding.files || []).join(" · "))}</small></div>`;
+      if (finding.action) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "dependency-action dashboard-action";
+        button.textContent = finding.action.label || "Öffnen";
+        button.addEventListener("click", () => runDashboardAction(finding.action));
+        item.append(button);
+      }
       return item;
     }));
   }
@@ -1040,10 +1056,10 @@ async function loadDashboard() {
 }
 
 function closePages() {
-  ["dashboard-dialog", "git-page", "objects-dialog", "blueprints-page", "documentation-page"].forEach((id) => {
+  ["dashboard-dialog", "git-page", "objects-dialog", "blueprints-page", "documentation-page", "security-page", "traces-page"].forEach((id) => {
     elements[id].classList.add("hidden");
   });
-  ["dashboard-button", "git-page-button", "objects-button", "blueprints-button", "documentation-button"].forEach((id) => {
+  ["dashboard-button", "git-page-button", "objects-button", "blueprints-button", "documentation-button", "security-button", "traces-button"].forEach((id) => {
     elements[id].classList.remove("active");
   });
 }
@@ -1217,6 +1233,24 @@ async function synchronizeRemote(action) {
     "force-push": "Remote-Historie wirklich durch den lokalen Stand ersetzen? Vorhandene Remote-Commits gehen dabei verloren.",
   };
   if (!confirm(descriptions[action])) return;
+  if (["push", "sync", "merge", "force-push"].includes(action)) {
+    try {
+      const warning = await api("api/security/push-warning");
+      if (!warning.ok) {
+        const examples = (warning.findings || [])
+          .slice(0, 3)
+          .map((item) => `• ${item.title}${item.files?.[0] ? ` (${item.files[0]}${item.line ? `:${item.line}` : ""})` : ""}`)
+          .join("\n");
+        const message = `Die Sicherheitsprüfung meldet ${warning.count} kritische Hinweise vor dem Git-Push.\n\n${examples}\n\nTrotzdem fortfahren?`;
+        if (!confirm(message)) {
+          toast("Git-Aktion wegen Sicherheitsprüfung abgebrochen.", "error");
+          return;
+        }
+      }
+    } catch (error) {
+      if (!confirm(`Sicherheitsprüfung konnte nicht ausgeführt werden: ${error.message}\n\nGit-Aktion trotzdem fortsetzen?`)) return;
+    }
+  }
   const button = elements[`remote-${action}`];
   button.disabled = true;
   try {
@@ -1581,6 +1615,36 @@ async function openHaObject(item) {
   }
 }
 
+async function openManagedPath(path, line = 0) {
+  const target = String(path || "");
+  if (!target) return;
+  if (target.startsWith("packages/")) {
+    const packagePath = target.replace(/^packages\//, "");
+    await openFile(packagePath);
+    if (line) jumpToLine(line);
+  } else if (target === "configuration.yaml" || target === "/config/configuration.yaml") {
+    await openConfigurationEditor();
+    if (line) jumpToConfigurationLine(line);
+  } else if (target.endsWith(".yaml") || target.endsWith(".yml")) {
+    await openResourceEditor(target.replace(/^\/config\//, ""), line);
+  }
+}
+
+async function runDashboardAction(action) {
+  if (!action) return;
+  if (action.type === "conflicts") {
+    await openPackageConflicts();
+  } else if (action.type === "blueprints") {
+    await openBlueprintsPage();
+  } else if (action.type === "security") {
+    await openSecurityPage();
+  } else if (action.type === "traces") {
+    await openTracesPage();
+  } else if (action.type === "open-managed") {
+    await openManagedPath(action.path, action.line);
+  }
+}
+
 function slug(value) {
   return String(value || "").toLocaleLowerCase("de").replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "") || "blueprint";
 }
@@ -1713,6 +1777,86 @@ function renderDocumentation(result) {
   const summary = result.summary || {};
   elements["documentation-summary"].textContent = `${summary.files || 0} Dateien · ${summary.automations || 0} Automationen · ${summary.scripts || 0} Scripts · ${summary.entities || 0} Entitäten`;
   elements["documentation-preview"].textContent = result.content || "";
+  renderDocumentationHtml();
+}
+
+function documentationMatches(value) {
+  const term = elements["documentation-search"].value.trim().toLocaleLowerCase("de");
+  return !term || JSON.stringify(value).toLocaleLowerCase("de").includes(term);
+}
+
+function docsCard(title, detail, meta = "") {
+  const item = document.createElement("div");
+  item.className = "documentation-card";
+  item.innerHTML = `<strong>${escapeHtml(title)}</strong><span>${escapeHtml(detail)}</span>${meta ? `<small>${escapeHtml(meta)}</small>` : ""}`;
+  return item;
+}
+
+function renderDocumentationHtml() {
+  const result = state.documentation;
+  if (!result) return;
+  const data = result.data || {};
+  document.querySelectorAll(".documentation-tab").forEach((tab) => {
+    const active = tab.dataset.docTab === state.documentationTab;
+    tab.classList.toggle("active", active);
+    tab.setAttribute("aria-selected", String(active));
+  });
+  elements["documentation-preview"].classList.toggle("hidden", state.documentationTab !== "markdown");
+  elements["documentation-html"].classList.toggle("hidden", state.documentationTab === "markdown");
+  if (state.documentationTab === "markdown") return;
+  const container = elements["documentation-html"];
+  if (state.documentationTab === "overview") {
+    const files = (data.files || []).filter(documentationMatches);
+    const objects = (data.objects || []).filter(documentationMatches);
+    container.replaceChildren(
+      docsCard("Package-Dateien", String(result.summary.files || 0), "Gefiltert: " + files.length),
+      docsCard("HA-Objekte", `${result.summary.automations || 0} Automationen · ${result.summary.scripts || 0} Scripts · ${result.summary.scenes || 0} Szenen`, "Gefiltert: " + objects.length),
+      docsCard("Bezüge", String(result.summary.references || 0), `${result.summary.entities || 0} Entitäten`),
+      docsCard("Auffälligkeiten", `${result.summary.conflicts || 0} Fehler · ${result.summary.warnings || 0} Warnungen`, `${result.summary.commits || 0} Git-Commits`),
+      documentationTable(["Typ", "Name", "Entity-ID", "Quelle"], objects.slice(0, 80).map((item) => [item.domain, item.alias, item.entityId, item.path])),
+    );
+  } else if (state.documentationTab === "graph") {
+    const graph = (data.graph || []).filter(documentationMatches);
+    container.replaceChildren(
+      ...graph.slice(0, 160).map((edge) => {
+        const item = document.createElement("button");
+        item.type = "button";
+        item.className = `graph-edge ${edge.resolved === false ? "warning" : ""}`;
+        item.innerHTML = `<span>${escapeHtml(edge.source || "Quelle")}</span><strong>→</strong><span>${escapeHtml(edge.targetLabel || edge.target || "Ziel")}</span><small>${escapeHtml(edge.path || "")}${edge.line ? ` · Zeile ${edge.line}` : ""}</small>`;
+        item.addEventListener("click", () => openManagedPath(edge.path, edge.line));
+        return item;
+      }),
+    );
+    if (!graph.length) container.replaceChildren(emptyBlock("Keine Graph-Bezüge gefunden."));
+  } else if (state.documentationTab === "entities") {
+    const entities = (data.entities || []).filter(documentationMatches);
+    container.replaceChildren(documentationTable(["Entity-ID", "Domain", "Verwendungen"], entities.map((item) => [item.entityId, item.domain, item.count])));
+  } else if (state.documentationTab === "changes") {
+    const commits = (data.commits || []).filter(documentationMatches);
+    const findings = (data.findings || []).filter(documentationMatches);
+    container.replaceChildren(
+      documentationTable(["Commit", "Zeitpunkt", "Nachricht"], commits.map((item) => [item.shortId, item.created, item.subject])),
+      documentationTable(["Schwere", "Hinweis", "Dateien"], findings.map((item) => [item.severity, item.title, (item.files || []).join(" · ")])),
+    );
+  }
+}
+
+function documentationTable(headers, rows) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "documentation-table-wrap";
+  if (!rows.length) return emptyBlock("Keine Einträge für diesen Filter.");
+  const table = document.createElement("table");
+  table.className = "documentation-table";
+  table.innerHTML = `<thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(String(cell ?? ""))}</td>`).join("")}</tr>`).join("")}</tbody>`;
+  wrapper.append(table);
+  return wrapper;
+}
+
+function emptyBlock(message) {
+  const empty = document.createElement("div");
+  empty.className = "history-empty";
+  empty.textContent = message;
+  return empty;
 }
 
 async function loadDocumentation() {
@@ -1734,6 +1878,138 @@ async function saveDocumentation() {
     renderDocumentation(result);
     toast(`Dokumentation gespeichert: ${result.path}`, "success");
   } catch (error) { toast(error.message, "error"); }
+}
+
+function renderSecurity(result) {
+  state.security = result;
+  const summary = result.summary || {};
+  elements["security-summary"].textContent = `${summary.references || 0} !secret-Referenzen · ${summary.missing || 0} fehlend · ${summary.plaintext || 0} Klartext-Hinweise`;
+  const stats = [
+    [result.secretsFile?.exists ? "Ja" : "Nein", "secrets.yaml"],
+    [result.secretsFile?.defined || 0, "Definierte Secrets"],
+    [result.counts?.error || 0, "Fehler"],
+    [result.counts?.warning || 0, "Warnungen"],
+    [summary.unused || 0, "Möglicherweise ungenutzt"],
+  ];
+  elements["security-stats"].innerHTML = stats.map(([value, label]) => `<div class="quality-stat"><strong>${escapeHtml(String(value))}</strong><span>${escapeHtml(label)}</span></div>`).join("");
+  if (!result.findings?.length) {
+    elements["security-list"].replaceChildren(emptyBlock("Keine Secret- oder Klartext-Hinweise gefunden."));
+    return;
+  }
+  elements["security-list"].replaceChildren(...result.findings.map((finding) => {
+    const item = document.createElement("div");
+    item.className = `dashboard-finding ${finding.severity}`;
+    item.innerHTML = `<span class="finding-dot"></span><div><strong>${escapeHtml(finding.title)}</strong><small>${escapeHtml(finding.message)}</small><small>${escapeHtml((finding.files || []).join(" · "))}${finding.line ? ` · Zeile ${finding.line}` : ""}</small></div>`;
+    if (finding.files?.[0] && finding.files[0] !== "secrets.yaml") {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "dependency-action dashboard-action";
+      button.textContent = "Öffnen";
+      button.addEventListener("click", () => openManagedPath(finding.files[0], finding.line));
+      item.append(button);
+    }
+    return item;
+  }));
+}
+
+async function loadSecurity() {
+  const result = await api("api/security");
+  renderSecurity(result);
+  return result;
+}
+
+async function openSecurityPage() {
+  closePages();
+  elements["security-page"].classList.remove("hidden");
+  elements["security-button"].classList.add("active");
+  try { await loadSecurity(); } catch (error) { toast(error.message, "error"); }
+}
+
+function renderTraces(result) {
+  if (!result) return;
+  state.traces = result;
+  if (!result.available) {
+    elements["traces-summary"].textContent = result.message || "Trace-API ist nicht verfügbar.";
+    elements["trace-list"].replaceChildren(emptyBlock(elements["traces-summary"].textContent));
+    return;
+  }
+  const term = elements["trace-search"].value.trim().toLocaleLowerCase("de");
+  const domain = elements["trace-domain"].value;
+  const entries = (result.entries || []).filter((item) => {
+    const haystack = `${item.alias} ${item.entityId} ${item.state} ${item.error} ${item.path}`.toLocaleLowerCase("de");
+    return (!domain || item.domain === domain) && (!term || haystack.includes(term));
+  });
+  elements["traces-summary"].textContent = `${result.summary.objects} Objekte · ${result.summary.traces} Traces · ${result.summary.errors} Fehler`;
+  if (!entries.length) {
+    elements["trace-list"].replaceChildren(emptyBlock("Keine Trace-Einträge gefunden."));
+    return;
+  }
+  elements["trace-list"].replaceChildren(...entries.map((entry) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `trace-item ${entry.error ? "error" : ""}`;
+    button.innerHTML = `<span><strong>${escapeHtml(entry.alias || entry.entityId)}</strong><small>${escapeHtml(entry.entityId)} · ${escapeHtml(entry.timestamp || "ohne Zeit")}</small></span><span>${escapeHtml(entry.state || "Trace")}</span><small>${escapeHtml(entry.error || entry.lastStep || "")}</small>`;
+    button.addEventListener("click", () => loadTraceDetail(entry));
+    return button;
+  }));
+}
+
+async function loadTraces() {
+  elements["traces-summary"].textContent = "Traces werden geladen …";
+  const result = await api("api/traces");
+  renderTraces(result);
+  return result;
+}
+
+async function openTracesPage() {
+  closePages();
+  elements["traces-page"].classList.remove("hidden");
+  elements["traces-button"].classList.add("active");
+  try { await loadTraces(); } catch (error) { toast(error.message, "error"); }
+}
+
+async function loadTraceDetail(entry) {
+  if (!entry.runId) {
+    elements["trace-detail-summary"].textContent = "Dieser Trace hat keine Run-ID.";
+    elements["trace-detail"].textContent = JSON.stringify(entry.summary || entry, null, 2);
+    return;
+  }
+  try {
+    const result = await api(`api/trace?domain=${encodeURIComponent(entry.domain)}&itemId=${encodeURIComponent(entry.itemId)}&runId=${encodeURIComponent(entry.runId)}`);
+    elements["trace-detail-summary"].textContent = `${entry.entityId} · ${entry.runId}`;
+    elements["trace-detail"].textContent = JSON.stringify(result.trace, null, 2);
+  } catch (error) {
+    elements["trace-detail-summary"].textContent = error.message;
+    elements["trace-detail"].textContent = JSON.stringify(entry.summary || entry, null, 2);
+  }
+}
+
+async function renderTemplate() {
+  const template = elements["template-input"].value;
+  elements["template-render"].disabled = true;
+  elements["template-result"].className = "template-result";
+  elements["template-result"].textContent = "Template wird gerendert …";
+  try {
+    const result = await api("api/template/render", {
+      method: "POST",
+      body: JSON.stringify({ template }),
+    });
+    elements["template-result"].className = `template-result ${result.success ? "valid" : "invalid"}`;
+    elements["template-result"].textContent = result.success ? result.result : result.message;
+    elements["template-entities"].replaceChildren(...(result.entities || []).map((entity) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "tag-filter";
+      button.textContent = entity;
+      button.addEventListener("click", () => insertText(entity));
+      return button;
+    }));
+  } catch (error) {
+    elements["template-result"].className = "template-result invalid";
+    elements["template-result"].textContent = error.message;
+  } finally {
+    elements["template-render"].disabled = false;
+  }
 }
 
 function syncResourceScroll() {
@@ -2519,6 +2795,23 @@ elements["documentation-button"].addEventListener("click", openDocumentationPage
 elements["documentation-close"].addEventListener("click", openScriptManager);
 elements["documentation-refresh"].addEventListener("click", loadDocumentation);
 elements["documentation-save"].addEventListener("click", saveDocumentation);
+elements["documentation-search"].addEventListener("input", renderDocumentationHtml);
+document.querySelectorAll(".documentation-tab").forEach((tab) => tab.addEventListener("click", () => {
+  state.documentationTab = tab.dataset.docTab || "overview";
+  renderDocumentationHtml();
+}));
+elements["security-button"].addEventListener("click", openSecurityPage);
+elements["security-close"].addEventListener("click", openScriptManager);
+elements["security-refresh"].addEventListener("click", () => loadSecurity().catch((error) => toast(error.message, "error")));
+elements["traces-button"].addEventListener("click", openTracesPage);
+elements["traces-close"].addEventListener("click", openScriptManager);
+elements["traces-refresh"].addEventListener("click", () => loadTraces().catch((error) => toast(error.message, "error")));
+elements["trace-search"].addEventListener("input", () => renderTraces(state.traces));
+elements["trace-domain"].addEventListener("change", () => renderTraces(state.traces));
+elements["trace-clear-detail"].addEventListener("click", () => {
+  elements["trace-detail-summary"].textContent = "Wähle eine Ausführung aus.";
+  elements["trace-detail"].textContent = "";
+});
 elements["resource-close"].addEventListener("click", closeResourceEditor);
 elements["resource-save"].addEventListener("click", saveResource);
 elements["resource-dialog"].addEventListener("cancel", (event) => {
@@ -2628,6 +2921,13 @@ elements["conflict-close"].addEventListener("click", () => elements["conflict-di
 elements["conflict-dialog"].addEventListener("cancel", () => elements["conflict-dialog"].close());
 elements["entity-search"].addEventListener("input", () => renderHelperResults("entity"));
 elements["service-search"].addEventListener("input", () => renderHelperResults("service"));
+elements["template-render"].addEventListener("click", renderTemplate);
+elements["template-input"].addEventListener("keydown", (event) => {
+  if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+    event.preventDefault();
+    renderTemplate();
+  }
+});
 elements["save-button"].addEventListener("click", saveCurrent);
 elements["new-button"].addEventListener("click", openNewDialog);
 elements["empty-new-button"].addEventListener("click", openNewDialog);

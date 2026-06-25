@@ -36,8 +36,10 @@ try:
     from . import git as git_service
     from . import metadata as metadata_service
     from . import resources as resource_service
+    from . import security as security_service
     from . import semantic as semantic_service
     from . import settings as settings_service
+    from . import traces as trace_service
     from .dependencies import (
         analyze_dependencies,
         focus_dependencies,
@@ -56,8 +58,10 @@ except ImportError:  # pragma: no cover - direct execution in the app container
     import git as git_service
     import metadata as metadata_service
     import resources as resource_service
+    import security as security_service
     import semantic as semantic_service
     import settings as settings_service
+    import traces as trace_service
     from dependencies import (
         analyze_dependencies,
         focus_dependencies,
@@ -1324,6 +1328,22 @@ def write_documentation() -> dict[str, Any]:
     return documentation_service.write_documentation(sys.modules[__name__])
 
 
+def security_scan() -> dict[str, Any]:
+    return security_service.security_scan(sys.modules[__name__])
+
+
+def security_push_warning() -> dict[str, Any]:
+    return security_service.security_push_warning(sys.modules[__name__])
+
+
+def trace_index() -> dict[str, Any]:
+    return trace_service.trace_index(sys.modules[__name__])
+
+
+def trace_detail(domain: Any, item_id: Any, run_id: Any) -> dict[str, Any]:
+    return trace_service.trace_detail(sys.modules[__name__], domain, item_id, run_id)
+
+
 def script_dependency_analysis(raw_path: str = "") -> dict[str, Any]:
     relative = ""
     if raw_path:
@@ -1720,6 +1740,30 @@ def recent_git_commits(limit: int = 5) -> list[dict[str, str]]:
     return commits
 
 
+def dashboard_action_for_finding(finding: dict[str, Any]) -> dict[str, Any] | None:
+    code = finding.get("code", "")
+    files = finding.get("files", [])
+    if code.startswith("duplicate-") or "conflict" in code or code == "invalid-package-yaml":
+        return {"type": "conflicts", "label": "Konflikte öffnen"}
+    if code.startswith("blueprint-") or "blueprint" in code:
+        return {"type": "blueprints", "label": "Blueprints öffnen"}
+    if code.startswith("security-") or code in {
+        "missing-secret",
+        "missing-secrets-file",
+        "plaintext-secret",
+        "plaintext-secret-url",
+    }:
+        return {"type": "security", "label": "Sicherheit öffnen"}
+    if files:
+        return {
+            "type": "open-managed",
+            "label": "Fundstelle öffnen",
+            "path": files[0],
+            "line": finding.get("line"),
+        }
+    return None
+
+
 def configuration_quality_dashboard() -> dict[str, Any]:
     settings = load_settings()
     conflicts = package_conflict_analysis()
@@ -1766,6 +1810,8 @@ def configuration_quality_dashboard() -> dict[str, Any]:
     objects = home_assistant_objects()
     blueprints = list_blueprints()
     docs = documentation_status()
+    security = security_scan()
+    traces = trace_index()
     semantic_findings = [
         {
             **finding,
@@ -1773,11 +1819,37 @@ def configuration_quality_dashboard() -> dict[str, Any]:
         }
         for finding in semantic.get("findings", [])
     ]
-    findings = [*conflicts["findings"], *semantic_findings, *unused_findings]
-    errors = conflicts["counts"]["error"] + semantic.get("counts", {}).get("error", 0)
+    security_findings = [
+        {
+            **finding,
+            "title": f"Sicherheit: {finding['title']}",
+        }
+        for finding in security.get("findings", [])
+        if finding.get("severity") in {"error", "warning"}
+    ]
+    blueprint_findings = [
+        {
+            "severity": "warning",
+            "code": "blueprint-invalid",
+            "title": f'Ungültiger Blueprint „{item["path"]}“',
+            "message": item["message"],
+            "files": [item["path"]],
+            "action": {"type": "blueprints", "label": "Blueprints öffnen"},
+        }
+        for item in blueprints.get("invalidFiles", [])[:20]
+    ]
+    findings = [*conflicts["findings"], *semantic_findings, *security_findings, *blueprint_findings, *unused_findings]
+    for finding in findings:
+        finding.setdefault("action", dashboard_action_for_finding(finding))
+    errors = (
+        conflicts["counts"]["error"]
+        + semantic.get("counts", {}).get("error", 0)
+        + security.get("counts", {}).get("error", 0)
+    )
     warnings = (
         conflicts["counts"]["warning"]
         + semantic.get("counts", {}).get("warning", 0)
+        + security.get("counts", {}).get("warning", 0)
         + len(unused_findings)
         + blueprints["summary"].get("invalid", 0)
     )
@@ -1797,6 +1869,8 @@ def configuration_quality_dashboard() -> dict[str, Any]:
             "warnings": warnings,
             "backups": backup_count,
             "blueprints": blueprints["summary"].get("total", 0),
+            "security": security["counts"].get("error", 0) + security["counts"].get("warning", 0),
+            "traces": traces.get("summary", {}).get("traces", 0),
             "semanticErrors": semantic.get("counts", {}).get("error", 0),
             "semanticWarnings": semantic.get("counts", {}).get("warning", 0),
         },
@@ -1805,6 +1879,8 @@ def configuration_quality_dashboard() -> dict[str, Any]:
         "objects": objects["summary"],
         "blueprints": blueprints["summary"],
         "semantic": semantic,
+        "security": security["summary"],
+        "traces": traces.get("summary", {}),
         "documentation": docs,
         "health": system_health(include_git=False),
     }
@@ -2076,21 +2152,35 @@ def apply_package_import(
     return result
 
 
-def home_assistant_request(path: str, method: str = "GET") -> Any:
+def home_assistant_request(path: str, method: str = "GET", payload: Any | None = None) -> Any:
     token = os.environ.get("SUPERVISOR_TOKEN")
     if not token:
         raise ApiError(HTTPStatus.SERVICE_UNAVAILABLE, "Home-Assistant-API ist lokal nicht verfuegbar.")
+    data = None
+    if method != "GET":
+        data = json_bytes(payload if payload is not None else {})
     request = urllib.request.Request(
         f"http://supervisor/core/api/{path.lstrip('/')}",
-        data=b"{}" if method == "POST" else None,
+        data=data,
         method=method,
         headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
     )
     try:
         with urllib.request.urlopen(request, timeout=8) as response:
-            payload = response.read()
-            return json.loads(payload) if payload else {}
-    except (urllib.error.URLError, json.JSONDecodeError) as exc:
+            raw = response.read()
+            if not raw:
+                return {}
+            content_type = response.headers.get("Content-Type", "").casefold()
+            text = raw.decode("utf-8")
+            if path.lstrip("/") == "template" and "json" not in content_type:
+                return text
+            try:
+                return json.loads(text)
+            except json.JSONDecodeError:
+                if "json" in content_type:
+                    raise
+                return text
+    except (urllib.error.URLError, json.JSONDecodeError, UnicodeDecodeError) as exc:
         raise ApiError(HTTPStatus.BAD_GATEWAY, "Home Assistant konnte nicht erreicht werden.") from exc
 
 
@@ -2138,6 +2228,44 @@ def check_home_assistant_configuration() -> dict[str, Any]:
             result["line"] = int(line_match.group(1))
     last_configuration_check = {**result, "checkedAt": checked_at}
     return result
+
+
+def template_entities(template: str) -> list[str]:
+    patterns = [
+        r"\b(?:states|is_state|state_attr|is_state_attr)\(\s*['\"]([A-Za-z0-9_]+\.[A-Za-z0-9_.-]+)['\"]",
+    ]
+    found: set[str] = set()
+    for pattern in patterns:
+        found.update(re.findall(pattern, template))
+    for domain, object_id in re.findall(r"\bstates\.([A-Za-z0-9_]+)\.([A-Za-z0-9_]+)\b", template):
+        found.add(f"{domain}.{object_id}")
+    return sorted(found, key=str.casefold)
+
+
+def render_template(body: dict[str, Any]) -> dict[str, Any]:
+    template = body.get("template")
+    if not isinstance(template, str) or not template.strip():
+        raise ApiError(HTTPStatus.BAD_REQUEST, "Ein Template ist erforderlich.")
+    if len(template.encode("utf-8")) > 64_000:
+        raise ApiError(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "Das Template ist zu groß.")
+    entities = template_entities(template)
+    try:
+        rendered = home_assistant_request("template", method="POST", payload={"template": template})
+    except ApiError as exc:
+        return {
+            "available": False,
+            "success": False,
+            "message": exc.message,
+            "entities": entities,
+            "result": "",
+        }
+    return {
+        "available": True,
+        "success": True,
+        "message": "Template wurde gerendert.",
+        "entities": entities,
+        "result": rendered if isinstance(rendered, str) else str(rendered),
+    }
 
 
 def _optional_home_assistant_request(path: str) -> Any:

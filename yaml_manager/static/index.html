@@ -78,6 +78,14 @@
             <span class="sidebar-nav-icon" aria-hidden="true">DOC</span>
             <span><strong>Doku</strong><small>Übersicht erzeugen</small></span>
           </button>
+          <button class="sidebar-nav-item security-nav" id="security-button" type="button" aria-label="Sicherheit">
+            <span class="sidebar-nav-icon" aria-hidden="true">SEC</span>
+            <span><strong>Sicherheit</strong><small>Secrets und Tokens</small></span>
+          </button>
+          <button class="sidebar-nav-item traces-nav" id="traces-button" type="button" aria-label="Traces">
+            <span class="sidebar-nav-icon" aria-hidden="true">TR</span>
+            <span><strong>Traces</strong><small>Ausführungen debuggen</small></span>
+          </button>
           <button class="sidebar-nav-item search-nav" id="search-replace-button" type="button" aria-label="Mehrere Dateien durchsuchen">
             <span class="sidebar-nav-icon" aria-hidden="true">⌕</span>
             <span><strong>Suchen &amp; Ersetzen</strong><small>Mehrere Dateien ändern</small></span>
@@ -210,6 +218,7 @@
           <button class="helper-tab" data-tab="blocks" role="tab" aria-selected="false">Bausteine</button>
           <button class="helper-tab" data-tab="entities" role="tab" aria-selected="false">Entitäten</button>
           <button class="helper-tab" data-tab="services" role="tab" aria-selected="false">Dienste</button>
+          <button class="helper-tab" data-tab="templates" role="tab" aria-selected="false">Templates</button>
         </div>
 
         <div class="helper-view" id="tab-analysis">
@@ -255,6 +264,16 @@
             <input id="service-search" type="search" placeholder="Dienst suchen" autocomplete="off">
           </label>
           <div class="helper-results" id="service-list"></div>
+        </div>
+
+        <div class="helper-view hidden" id="tab-templates">
+          <label class="template-tester-field">
+            <span>Jinja-Template</span>
+            <textarea id="template-input" spellcheck="false" placeholder="{{ states('sensor.beispiel') }}"></textarea>
+          </label>
+          <button class="button primary" id="template-render" type="button">Rendern</button>
+          <div class="template-result" id="template-result">Noch kein Template gerendert.</div>
+          <div class="template-entities" id="template-entities"></div>
         </div>
 
         <div class="api-notice hidden" id="api-notice">
@@ -666,21 +685,91 @@
         <div class="dialog-header admin-dialog-header">
           <div>
             <h2>Dokumentation</h2>
-            <p>Automatische Markdown-Übersicht über Packages, Objekte, Bezüge und Änderungen.</p>
+            <p>Interaktive Übersicht über Packages, Objekte, Bezüge, Entitäten und Änderungen.</p>
           </div>
           <button class="button primary" id="documentation-close" type="button">Scripts öffnen</button>
         </div>
         <div class="documentation-body">
           <section class="admin-section">
             <div class="admin-section-heading">
-              <div><h3>Markdown-Übersicht</h3><p id="documentation-summary">Noch nicht erzeugt.</p></div>
+              <div><h3>Interne Doku</h3><p id="documentation-summary">Noch nicht erzeugt.</p></div>
               <div class="documentation-actions">
                 <button class="button secondary" id="documentation-refresh" type="button">Aktualisieren</button>
                 <button class="button primary" id="documentation-save" type="button">Unter /data speichern</button>
               </div>
             </div>
+            <div class="documentation-toolbar">
+              <div class="documentation-tabs" role="tablist">
+                <button class="documentation-tab active" data-doc-tab="overview" type="button">Übersicht</button>
+                <button class="documentation-tab" data-doc-tab="graph" type="button">Objektgraph</button>
+                <button class="documentation-tab" data-doc-tab="entities" type="button">Entitäten</button>
+                <button class="documentation-tab" data-doc-tab="changes" type="button">Änderungen</button>
+                <button class="documentation-tab" data-doc-tab="markdown" type="button">Markdown</button>
+              </div>
+              <label class="search-field documentation-search"><span aria-hidden="true">⌕</span><input id="documentation-search" type="search" placeholder="Doku filtern"></label>
+            </div>
           </section>
-          <pre class="documentation-preview" id="documentation-preview"></pre>
+          <div class="documentation-html" id="documentation-html"></div>
+          <pre class="documentation-preview hidden" id="documentation-preview"></pre>
+        </div>
+      </div>
+    </section>
+
+    <section class="security-page hidden" id="security-page">
+      <div class="security-page-content">
+        <div class="dialog-header admin-dialog-header">
+          <div>
+            <h2>Sicherheit</h2>
+            <p>Secrets, Klartext-Tokens und Git-Push-Warnungen prüfen.</p>
+          </div>
+          <button class="button primary" id="security-close" type="button">Scripts öffnen</button>
+        </div>
+        <div class="security-body">
+          <section class="admin-section">
+            <div class="admin-section-heading">
+              <div><h3>Secret-Prüfung</h3><p id="security-summary">Sicherheitsprüfung wurde noch nicht geladen.</p></div>
+              <button class="button secondary" id="security-refresh" type="button">Aktualisieren</button>
+            </div>
+            <div class="security-stats" id="security-stats"></div>
+          </section>
+          <section class="admin-section">
+            <div class="admin-section-heading">
+              <div><h3>Hinweise</h3><p>Vor Git-Push wird dieselbe Prüfung als Warnung verwendet.</p></div>
+            </div>
+            <div class="security-list" id="security-list"></div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <section class="traces-page hidden" id="traces-page">
+      <div class="traces-page-content">
+        <div class="dialog-header admin-dialog-header">
+          <div>
+            <h2>Traces</h2>
+            <p>Letzte Ausführungen von Automationen und Scripts debuggen.</p>
+          </div>
+          <button class="button primary" id="traces-close" type="button">Scripts öffnen</button>
+        </div>
+        <div class="traces-body">
+          <section class="admin-section">
+            <div class="admin-section-heading">
+              <div><h3>Ausführungen</h3><p id="traces-summary">Traces wurden noch nicht geladen.</p></div>
+              <button class="button secondary" id="traces-refresh" type="button">Aktualisieren</button>
+            </div>
+            <div class="object-toolbar">
+              <label class="search-field"><span aria-hidden="true">⌕</span><input id="trace-search" type="search" placeholder="Automation, Script oder Fehler suchen"></label>
+              <select id="trace-domain"><option value="">Alle Typen</option><option value="automation">Automationen</option><option value="script">Scripts</option></select>
+              <button class="button secondary" id="trace-clear-detail" type="button">Detail leeren</button>
+            </div>
+            <div class="trace-list" id="trace-list"></div>
+          </section>
+          <section class="admin-section trace-detail-section">
+            <div class="admin-section-heading">
+              <div><h3>Trace-Detail</h3><p id="trace-detail-summary">Wähle eine Ausführung aus.</p></div>
+            </div>
+            <pre class="trace-detail" id="trace-detail"></pre>
+          </section>
         </div>
       </div>
     </section>

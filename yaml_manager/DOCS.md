@@ -82,7 +82,9 @@ Die Backend-Verantwortlichkeiten sind getrennt aufgebaut:
 - `dependencies.py`: Script-Graph und quellpositionsbasierte Umbenennung
 - `semantic.py`: Live-HA-Semantikprüfung anhand von States, Services, Devices und Areas
 - `blueprints.py`: Blueprint-Index, Import, Erzeugung und Package-Instanziierung
-- `documentation.py`: Markdown-Dokumentationsgenerator
+- `documentation.py`: Markdown- und HTML-Dokumentationsdaten
+- `security.py`: Secret-Referenzen, Klartext-Heuristiken und Push-Warnungen
+- `traces.py`: Home-Assistant-Trace-Index und Trace-Detaildaten
 - `errors.py`: gemeinsamer erwarteter API-Fehlertyp
 
 ## Home-Assistant-Objektbrowser
@@ -345,11 +347,17 @@ Tags und die Script-Direktauswahl bleiben während der Dashboard-Anzeige sichtba
 Ein Klick auf eine Datei öffnet sie unmittelbar im Script-Editor; der Eintrag
 **Dashboard** führt zurück, ohne den geöffneten Editorstand zu verwerfen. Das
 Dashboard kombiniert die
-globale Package-Konfliktprüfung mit Betriebs-, Objekt-, Blueprint- und
-Semantikdaten. Angezeigt werden Package-Dateien, Automationen, Scripts, Szenen,
-Bezüge, Blueprints, Fehler, Warnungen, Backups und ein daraus berechneter
-Qualitätswert. Git-Branches und Remote-Sync sind bewusst auf die eigene Seite
-**Git** verschoben.
+globale Package-Konfliktprüfung mit Betriebs-, Objekt-, Blueprint-, Security-,
+Trace- und Semantikdaten. Angezeigt werden Package-Dateien, Automationen,
+Scripts, Szenen, Bezüge, Blueprints, Security-Hinweise, Trace-Status, Fehler,
+Warnungen, Backups und ein daraus berechneter Qualitätswert. Git-Branches und
+Remote-Sync sind bewusst auf die eigene Seite **Git** verschoben.
+
+Findings können ein `action`-Objekt enthalten. Das Frontend öffnet damit je nach
+Hinweis die Konfliktübersicht, die Blueprint-Seite, die Sicherheitsprüfung, die
+Trace-Ansicht oder eine konkrete Datei mit Zeilensprung. Das Dashboard bleibt
+dadurch der Einstiegspunkt zur Behebung, ohne Git-Bedienelemente wieder in die
+Qualitätsseite zu mischen.
 
 Für die Nutzungsanalyse werden Script-Definitionen mit `script.<id>`-Referenzen
 in allen lesbaren YAML-Dateien unterhalb des Konfigurationsverzeichnisses
@@ -387,18 +395,85 @@ API-Endpunkte:
 
 ## Dokumentationsgenerator
 
-Die Seite **Doku** erzeugt eine Markdown-Übersicht über den verwalteten Bestand.
-Die generierte Datei enthält Package-Dateien, Automationen, Scripts, Szenen,
-erkannte Script-/Szenenbezüge, verwendete Entitäten, Package-Auffälligkeiten
-und die letzten Git-Commits.
+Die Seite **Doku** erzeugt eine Markdown-Übersicht und eine interne HTML-Ansicht
+über den verwalteten Bestand. Die generierte Markdown-Datei enthält
+Package-Dateien, Automationen, Scripts, Szenen, erkannte Script-/Szenenbezüge,
+verwendete Entitäten, Package-Auffälligkeiten und die letzten Git-Commits.
 
-Die Vorschau bleibt zunächst nur im Browser. Über **Unter /data speichern** wird
-der aktuelle Stand atomar unter `/data/documentation/packages.md` abgelegt.
+Die HTML-Ansicht verwendet dieselbe API-Antwort, arbeitet aber mit den
+strukturierten Daten aus `data`. Tabs zeigen:
+
+- Übersichtskarten und Objekt-Tabelle,
+- Objektgraph aus Script- und Szenenbezügen,
+- Entity-Liste mit Domain und Verwendungszahl,
+- Änderungsverlauf aus Git-Commits und Findings,
+- die Markdown-Rohansicht.
+
+Der Suchfilter wird clientseitig auf die jeweils aktive Ansicht angewendet.
+Über **Unter /data speichern** wird der aktuelle Markdown-Stand atomar unter
+`/data/documentation/packages.md` abgelegt.
 
 API-Endpunkte:
 
 - `GET /api/documentation`
 - `POST /api/documentation/write`
+
+## Secret- und Sicherheitsprüfung
+
+Die Seite **Sicherheit** scannt alle verwalteten Package-YAML-Dateien. Das
+Backend liest zusätzlich `/config/secrets.yaml`, ohne die Datei zu verändern.
+Geprüft werden:
+
+- `!secret`-Referenzen auf eine fehlende `secrets.yaml`,
+- `!secret`-Namen, die nicht in `secrets.yaml` definiert sind,
+- mögliche Klartext-Tokens in URL-Parametern und typischen Feldern wie
+  `token`, `api_key`, `password` oder `client_secret`,
+- wahrscheinlich ungenutzte Secrets.
+
+Fehlende Secrets werden als Fehler, Klartext-Heuristiken als Warnung und
+ungenutzte Secrets als Tipp ausgegeben. Vor manuellem Git-Push, sicherer
+Synchronisation, Merge-Push und Force-Push ruft das Frontend zusätzlich
+`/api/security/push-warning` auf. Enthält die Antwort Fehler oder Warnungen,
+muss die Remote-Aktion bewusst bestätigt werden. Der automatische Push nach
+einem Speichervorgang kann nicht interaktiv nachfragen und wird deshalb
+serverseitig blockiert; die API meldet dies unter `gitSync`, während der lokale
+Commit erhalten bleibt.
+
+API-Endpunkte:
+
+- `GET /api/security`
+- `GET /api/security/push-warning`
+
+## Jinja-Template-Tester
+
+Der Hilfebereich enthält den Tab **Templates**. Das eingegebene Template wird
+serverseitig über Home Assistants `POST /api/template` gerendert. Das Ergebnis
+oder die Fehlermeldung erscheint direkt im Tab.
+
+Die App extrahiert verwendete Entitäten lokal aus `states(...)`, `is_state(...)`,
+`state_attr(...)`, `is_state_attr(...)` und `states.domain.object`. Dadurch ist
+die Entity-Liste auch dann hilfreich, wenn die Home-Assistant-API in der lokalen
+Entwicklung nicht verfügbar ist.
+
+API-Endpunkt:
+
+- `POST /api/template/render`
+
+## Trace-/Debug-Ansicht
+
+Die Seite **Traces** nutzt den HA-Objektindex und fragt für Automationen und
+Scripts die Home-Assistant-Trace-API ab. Die Liste enthält Entity-ID, Alias,
+Zeitpunkt, Status, letzten Schritt und Fehlerhinweis. Ein Klick auf einen Trace
+lädt die Detailantwort für die Run-ID nach und zeigt sie als JSON an.
+
+Die Trace-Ansicht ist ein Best-effort-Debugwerkzeug. Ohne Supervisor-Token oder
+ohne verfügbare Trace-API bleibt die Seite erreichbar und zeigt die
+Nichtverfügbarkeit an, statt die übrige App zu blockieren.
+
+API-Endpunkte:
+
+- `GET /api/traces`
+- `GET /api/trace?domain=<automation|script>&itemId=<id>&runId=<run>`
 
 ## Package-Import und -Export
 
@@ -498,6 +573,8 @@ für diese Aktion.
 - **Entitäten** durchsucht die aktuellen Home-Assistant-Zustände und fügt eine
   `entity_id` ein.
 - **Dienste** durchsucht verfügbare Aktionen und fügt einen Aktionsblock ein.
+- **Templates** rendert Jinja-Ausdrücke gegen aktuelle Home-Assistant-States und
+  zeigt die dabei erkannten Entitäten.
 
 ## Datensicherheit
 

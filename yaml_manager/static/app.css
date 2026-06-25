@@ -271,7 +271,7 @@ button { color: inherit; }
 .helpers-header { display: flex; justify-content: space-between; align-items: center; padding: 17px 15px 12px; }
 .helpers-header div { display: flex; flex-direction: column; }
 .helpers-header span { color: var(--muted); font-size: 11px; }
-.helper-tabs { display: grid; grid-template-columns: repeat(6, 1fr); padding: 0 8px; border-bottom: 1px solid var(--border); }
+.helper-tabs { display: grid; grid-template-columns: repeat(7, 1fr); padding: 0 8px; border-bottom: 1px solid var(--border); }
 .helper-tab { height: 36px; border: 0; border-bottom: 2px solid transparent; color: var(--muted); background: transparent; cursor: pointer; font-size: 11px; font-weight: 650; }
 .helper-tab.active { color: var(--primary-dark); border-color: var(--primary); }
 .helper-view { padding: 13px 12px; }
@@ -351,6 +351,13 @@ button.analysis-finding:hover { border-color: var(--primary); }
 .helper-result strong, .helper-result span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .helper-result strong { font: 11px var(--font-code); }
 .helper-result span { color: var(--muted); font-size: 10px; }
+.template-tester-field { display: grid; gap: 7px; color: var(--muted); font-size: 10px; }
+.template-tester-field textarea { min-height: 150px; padding: 9px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 7px; outline: 0; resize: vertical; font: 11px/1.45 var(--font-code); }
+.template-tester-field textarea:focus { border-color: var(--primary); }
+.template-result { min-height: 78px; margin-top: 10px; padding: 10px; overflow: auto; color: var(--muted); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; font: 11px/1.45 var(--font-code); white-space: pre-wrap; overflow-wrap: anywhere; }
+.template-result.valid { color: var(--success); border-color: rgba(46, 155, 97, .35); background: rgba(46, 155, 97, .06); }
+.template-result.invalid { color: var(--danger); border-color: rgba(217, 74, 74, .35); background: rgba(217, 74, 74, .06); }
+.template-entities { margin-top: 9px; display: flex; flex-wrap: wrap; gap: 6px; }
 .api-notice { margin: 0 12px 14px; padding: 10px; color: var(--muted); background: var(--surface-soft); border-radius: 7px; font-size: 11px; }
 
 dialog { width: min(480px, calc(100vw - 28px)); padding: 0; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); }
@@ -445,13 +452,13 @@ dialog.history-dialog, dialog.conflict-dialog { width: min(920px, calc(100vw - 2
 .conflict-item small { color: var(--muted); font-size: 10px; }
 .conflict-files { color: var(--primary-dark) !important; font-family: var(--font-code); overflow-wrap: anywhere; }
 
-.dashboard-page, .objects-page, .git-page, .blueprints-page, .documentation-page { position: fixed; z-index: 15; top: 64px; right: 0; bottom: 0; left: 270px; min-height: 0; background: var(--surface-soft); }
-.dashboard-page-content, .objects-page-content, .git-page-content, .blueprints-page-content, .documentation-page-content { width: min(1180px, 100%); height: 100%; min-height: 0; margin: 0 auto; display: grid; grid-template-rows: auto minmax(0, 1fr); background: var(--surface); border-inline: 1px solid var(--border); }
+.dashboard-page, .objects-page, .git-page, .blueprints-page, .documentation-page, .security-page, .traces-page { position: fixed; z-index: 15; top: 64px; right: 0; bottom: 0; left: 270px; min-height: 0; background: var(--surface-soft); }
+.dashboard-page-content, .objects-page-content, .git-page-content, .blueprints-page-content, .documentation-page-content, .security-page-content, .traces-page-content { width: min(1180px, 100%); height: 100%; min-height: 0; margin: 0 auto; display: grid; grid-template-rows: auto minmax(0, 1fr); background: var(--surface); border-inline: 1px solid var(--border); }
 dialog.transfer-dialog { width: min(1040px, calc(100vw - 28px)); height: min(820px, calc(100vh - 28px)); max-width: none; max-height: none; }
 .transfer-dialog[open] { display: block; }
 .transfer-dialog-content { height: 100%; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); }
 .admin-dialog-header { margin: 0; padding: 16px 18px 12px; border-bottom: 1px solid var(--border); }
-.dashboard-body, .transfer-body, .git-body, .blueprint-body, .documentation-body { min-height: 0; padding: 16px; overflow-y: auto; display: grid; align-content: start; gap: 14px; background: var(--surface-soft); }
+.dashboard-body, .transfer-body, .git-body, .blueprint-body, .documentation-body, .security-body, .traces-body { min-height: 0; padding: 16px; overflow-y: auto; display: grid; align-content: start; gap: 14px; background: var(--surface-soft); }
 .quality-overview { display: grid; grid-template-columns: 145px minmax(0, 1fr); gap: 14px; }
 .quality-score { min-height: 125px; display: grid; place-content: center; justify-items: center; color: var(--primary-dark); background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
 .quality-score strong { font-size: 38px; line-height: 1; }
@@ -512,7 +519,44 @@ dialog.transfer-dialog { width: min(1040px, calc(100vw - 28px)); height: min(820
 .blueprint-textarea-field textarea { min-height: 120px; padding: 9px 10px; resize: vertical; font: 12px/1.45 var(--font-code); }
 .blueprint-editor-section h3 { margin-bottom: 2px; }
 .documentation-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+.documentation-toolbar { margin-top: 13px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 320px); gap: 10px; align-items: center; }
+.documentation-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.documentation-tab { min-height: 32px; padding: 0 10px; color: var(--muted); background: var(--surface-soft); border: 1px solid var(--border); border-radius: 7px; cursor: pointer; font-size: 10px; font-weight: 700; }
+.documentation-tab.active, .documentation-tab:hover { color: var(--primary-dark); border-color: var(--primary); background: var(--primary-soft); }
+.documentation-search { margin: 0; }
+.documentation-html { min-height: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.documentation-card { min-width: 0; padding: 13px; display: grid; gap: 3px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+.documentation-card strong { color: var(--text); font-size: 13px; }
+.documentation-card span { color: var(--primary-dark); font-size: 20px; font-weight: 750; overflow-wrap: anywhere; }
+.documentation-card small { color: var(--muted); font-size: 10px; overflow-wrap: anywhere; }
+.documentation-table-wrap { grid-column: 1 / -1; min-width: 0; overflow: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+.documentation-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.documentation-table th, .documentation-table td { padding: 9px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+.documentation-table th { color: var(--muted); background: var(--surface-soft); font-size: 10px; }
+.documentation-table tr:last-child td { border-bottom: 0; }
+.graph-edge { min-width: 0; min-height: 48px; padding: 9px 10px; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 8px; align-items: center; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; text-align: left; }
+.graph-edge:hover { border-color: var(--primary); background: var(--primary-soft); }
+.graph-edge.warning { border-color: rgba(210, 138, 25, .45); }
+.graph-edge span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.graph-edge strong { color: var(--primary-dark); }
+.graph-edge small { grid-column: 1 / -1; color: var(--muted); font: 10px var(--font-code); overflow-wrap: anywhere; }
 .documentation-preview { min-height: 0; max-height: calc(100vh - 190px); margin: 0; padding: 16px; overflow: auto; color: #d9e4e8; background: #131c20; border: 1px solid #2d3d44; border-radius: 8px; font: 12px/1.55 var(--font-code); white-space: pre-wrap; overflow-wrap: anywhere; }
+.security-stats { margin-top: 12px; display: grid; grid-template-columns: repeat(5, minmax(100px, 1fr)); gap: 9px; }
+.security-list { margin-top: 12px; display: grid; gap: 7px; }
+.security-list .dashboard-finding { grid-template-columns: 8px minmax(0, 1fr) auto; align-items: center; background: var(--surface-soft); }
+.traces-body { grid-template-columns: minmax(360px, .9fr) minmax(360px, 1.1fr); align-content: stretch; }
+.traces-body > .admin-section { min-height: 0; display: grid; grid-template-rows: auto auto minmax(0, 1fr); }
+.trace-list { min-height: 0; max-height: calc(100vh - 270px); overflow-y: auto; display: grid; align-content: start; gap: 7px; }
+.trace-item { width: 100%; min-height: 58px; padding: 9px 10px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; color: var(--text); background: var(--surface-soft); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; text-align: left; }
+.trace-item:hover { border-color: var(--primary); background: var(--primary-soft); }
+.trace-item.error { border-color: rgba(217, 74, 74, .45); }
+.trace-item span:first-child { min-width: 0; display: grid; gap: 2px; }
+.trace-item strong, .trace-item small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trace-item strong { font-size: 12px; }
+.trace-item span:nth-child(2) { color: var(--muted); font-size: 10px; }
+.trace-item small { grid-column: 1 / -1; color: var(--muted); font-size: 10px; }
+.trace-detail-section { grid-template-rows: auto minmax(0, 1fr) !important; }
+.trace-detail { min-height: 0; margin: 0; padding: 13px; overflow: auto; color: #d9e4e8; background: #131c20; border: 1px solid #2d3d44; border-radius: 8px; font: 11px/1.5 var(--font-code); white-space: pre-wrap; overflow-wrap: anywhere; }
 .transfer-body { grid-template-columns: 1fr; }
 .settings-body { min-height: 0; padding: 16px; overflow-y: auto; display: grid; align-content: start; gap: 14px; background: var(--surface-soft); }
 .settings-section h3 { margin-bottom: 11px; }
@@ -589,7 +633,9 @@ dialog.transfer-dialog { width: min(1040px, calc(100vw - 28px)); height: min(820
   .helpers { position: fixed; top: 64px; right: 0; bottom: 0; width: 310px; box-shadow: var(--shadow); transform: translateX(105%); transition: transform .2s ease; }
   .helpers.open { transform: translateX(0); }
   .mobile-only#helpers-toggle, .helpers .mobile-only { display: grid; }
-  .dashboard-page, .objects-page, .git-page, .blueprints-page, .documentation-page { left: 245px; }
+  .dashboard-page, .objects-page, .git-page, .blueprints-page, .documentation-page, .security-page, .traces-page { left: 245px; }
+  .documentation-html { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .traces-body { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 700px) {
@@ -622,8 +668,8 @@ dialog.transfer-dialog { width: min(1040px, calc(100vw - 28px)); height: min(820
   dialog.history-dialog, dialog.conflict-dialog { width: calc(100vw - 12px); height: calc(100vh - 12px); }
   dialog.transfer-dialog { width: calc(100vw - 12px); height: calc(100vh - 12px); }
   .branch-controls, .search-replace-controls, .object-toolbar { grid-template-columns: 1fr; }
-  .dashboard-page, .objects-page, .git-page, .blueprints-page, .documentation-page { top: 56px; left: 0; }
-  .dashboard-page-content, .objects-page-content, .git-page-content, .blueprints-page-content, .documentation-page-content { border-inline: 0; }
+  .dashboard-page, .objects-page, .git-page, .blueprints-page, .documentation-page, .security-page, .traces-page { top: 56px; left: 0; }
+  .dashboard-page-content, .objects-page-content, .git-page-content, .blueprints-page-content, .documentation-page-content, .security-page-content, .traces-page-content { border-inline: 0; }
   .object-item { grid-template-columns: minmax(0, 1fr) auto; }
   .object-location, .object-references { grid-column: 1 / -1; }
   .configuration-toolbar { align-items: stretch; flex-wrap: wrap; padding: 8px; }
@@ -636,6 +682,11 @@ dialog.transfer-dialog { width: min(1040px, calc(100vw - 28px)); height: min(820
   .quality-overview { grid-template-columns: 1fr; }
   .quality-score { min-height: 95px; }
   .quality-stats { grid-template-columns: repeat(2, minmax(90px, 1fr)); }
+  .security-stats, .documentation-html { grid-template-columns: 1fr; }
+  .documentation-toolbar { grid-template-columns: 1fr; }
+  .security-list .dashboard-finding { grid-template-columns: 8px minmax(0, 1fr); }
+  .security-list .dashboard-action { grid-column: 2; justify-self: start; }
+  .trace-list { max-height: 320px; }
   .blueprint-body { grid-template-columns: 1fr; }
   .blueprint-list-section { grid-row: auto; }
   .blueprint-list { max-height: 280px; }

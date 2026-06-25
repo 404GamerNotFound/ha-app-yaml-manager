@@ -40,6 +40,29 @@ def documentation_overview(backend: Any) -> dict[str, Any]:
     ]
     commits = backend.recent_git_commits(10)
     conflicts = backend.package_conflict_analysis()
+    entity_usage: dict[str, list[dict[str, Any]]] = {}
+    for reference in references:
+        if reference.get("type") != "entity":
+            continue
+        entity_usage.setdefault(reference["target"], []).append(
+            {
+                "source": reference.get("sourceObject") or reference.get("source"),
+                "path": reference.get("path"),
+                "line": reference.get("line"),
+            }
+        )
+    graph_edges = [
+        {
+            "source": reference.get("sourceObject") or reference.get("source"),
+            "target": reference.get("targetObject") or reference.get("target"),
+            "targetLabel": reference.get("target"),
+            "type": reference.get("type"),
+            "resolved": reference.get("resolved"),
+            "path": reference.get("path"),
+            "line": reference.get("line"),
+        }
+        for reference in object_references
+    ]
 
     lines: list[str] = [
         "# Home Assistant YAML Dokumentation",
@@ -142,6 +165,23 @@ def documentation_overview(backend: Any) -> dict[str, Any]:
     return {
         "generatedAt": generated_at,
         "content": content,
+        "data": {
+            "files": files,
+            "objects": objects["objects"],
+            "references": references,
+            "graph": graph_edges,
+            "entities": [
+                {
+                    "entityId": entity,
+                    "domain": entity.split(".", 1)[0] if "." in entity else "",
+                    "count": len(entity_usage.get(entity, [])),
+                    "uses": entity_usage.get(entity, []),
+                }
+                for entity in entity_references
+            ],
+            "findings": conflicts["findings"][:100],
+            "commits": commits,
+        },
         "summary": {
             "files": len(files),
             "automations": objects["summary"].get("automation", 0),
