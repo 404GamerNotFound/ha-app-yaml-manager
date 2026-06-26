@@ -1,6 +1,13 @@
-# Release Notes 1.4.0
+# Release Notes 1.4.1
 
 Veröffentlicht am 26. Juni 2026.
+
+## Sidebar
+
+Die Sidebar priorisiert wieder Suche, Filter und Dateiliste. Die vielen
+Werkzeugseiten sind in einem einklappbaren Bereich gebündelt. Nach der Auswahl
+eines Werkzeugs klappt dieser Bereich automatisch wieder ein und zeigt das
+aktive Werkzeug in der Zusammenfassung an.
 
 ## Entity-Refactoring
 
