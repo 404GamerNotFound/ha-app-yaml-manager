@@ -62,7 +62,7 @@ const state = {
 };
 
 const elements = Object.fromEntries([
-  "workspace", "sidebar", "sidebar-toggle", "sidebar-close", "file-search", "configuration-status", "configuration-status-dot", "package-conflicts-status-dot", "filter-summary", "categories", "tags", "file-list", "file-count", "root-path",
+  "workspace", "sidebar", "sidebar-toggle", "sidebar-close", "sidebar-tools", "sidebar-tools-current", "file-search", "configuration-status", "configuration-status-dot", "package-conflicts-status-dot", "filter-summary", "categories", "tags", "file-list", "file-count", "root-path",
   "empty-state", "empty-new-button", "editor-content", "document-name", "document-path", "dirty-dot", "category-select", "tag-input",
   "rename-button", "duplicate-button", "delete-button", "editor", "highlighting", "line-numbers", "completion-popover", "validation-status", "file-ha-check", "cursor-status",
   "save-button", "new-button", "reload-button", "helpers", "helpers-toggle", "helpers-close", "snippet-list", "analysis-summary", "analysis-list", "api-notice",
@@ -110,6 +110,35 @@ let validationTimer;
 let flowTimer;
 let configurationValidationTimer;
 let resourceValidationTimer;
+
+const sidebarToolLabels = {
+  "dashboard-button": "Dashboard",
+  "review-button": "Review",
+  "git-page-button": "Git",
+  "objects-button": "HA-Objekte",
+  "entity-health-button": "Entity-Health",
+  "graph-button": "Graph",
+  "lint-button": "Lint",
+  "compatibility-button": "Kompatibilität",
+  "refactor-button": "Refactor",
+  "secrets-button": "Secrets",
+  "preflight-button": "Preflight",
+  "blueprints-button": "Blueprints",
+  "documentation-button": "Doku",
+  "security-button": "Sicherheit",
+  "traces-button": "Traces",
+};
+
+function updateSidebarToolSummary() {
+  const activeId = Object.keys(sidebarToolLabels).find((id) => elements[id]?.classList.contains("active"));
+  elements["sidebar-tools-current"].textContent = activeId ? sidebarToolLabels[activeId] : "Dateien";
+  elements["sidebar-tools"].classList.toggle("has-active-tool", Boolean(activeId));
+}
+
+function collapseSidebarTools() {
+  elements["sidebar-tools"].removeAttribute("open");
+  requestAnimationFrame(updateSidebarToolSummary);
+}
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -1372,6 +1401,7 @@ function closePages() {
   ["dashboard-button", "review-button", "git-page-button", "objects-button", "blueprints-button", "documentation-button", "security-button", "entity-health-button", "graph-button", "lint-button", "compatibility-button", "refactor-button", "secrets-button", "preflight-button", "traces-button"].forEach((id) => {
     elements[id].classList.remove("active");
   });
+  requestAnimationFrame(updateSidebarToolSummary);
 }
 
 async function openDashboard() {
@@ -3717,6 +3747,9 @@ elements["validation-status"].addEventListener("click", jumpToValidationError);
 elements["file-ha-check"].addEventListener("click", jumpToFileHomeAssistantError);
 elements["sidebar-toggle"].addEventListener("click", () => elements.sidebar.classList.add("open"));
 elements["sidebar-close"].addEventListener("click", () => elements.sidebar.classList.remove("open"));
+document.querySelectorAll(".sidebar-primary-nav .sidebar-nav-item").forEach((button) => {
+  button.addEventListener("click", collapseSidebarTools);
+});
 elements["helpers-toggle"].addEventListener("click", () => elements.helpers.classList.add("open"));
 elements["helpers-close"].addEventListener("click", () => elements.helpers.classList.remove("open"));
 document.querySelectorAll(".action-menu").forEach((menu) => menu.addEventListener("click", (event) => {
@@ -3747,4 +3780,5 @@ window.addEventListener("beforeunload", (event) => {
 });
 
 renderSnippets();
+updateSidebarToolSummary();
 Promise.all([loadSettings(), refreshFiles(), loadHelpers(), loadDashboard()]).catch((error) => toast(error.message, "error"));

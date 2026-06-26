@@ -2,6 +2,8 @@
 
 ## 1.4.0 - 2026-06-26
 
+- Sidebar-Navigation überarbeitet: Werkzeugseiten sind jetzt in einem einklappbaren Bereich gebündelt, damit Suche, Filter und Dateiliste dauerhaft sichtbar bleiben
+- Aktives Werkzeug wird in der Sidebar-Zusammenfassung angezeigt und der Werkzeugbereich klappt nach der Auswahl automatisch wieder ein
 - Entity-Refactoring-Seite mit exakter Entity-ID-Vorschau und geschützter Anwendung über alle verwalteten YAML-Dateien ergänzt
 - Secrets-Manager für maskiertes Anlegen, Aktualisieren und Löschen von `secrets.yaml`-Einträgen ergänzt
 - Klartextwerte können in `!secret`-Referenzen plus `secrets.yaml`-Eintrag umgewandelt werden

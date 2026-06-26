@@ -57,72 +57,75 @@
           </label>
           <button class="icon-button mobile-only" id="sidebar-close" aria-label="Dateiliste schließen">×</button>
         </div>
-        <nav class="sidebar-primary-nav" aria-label="Hauptbereiche">
-          <button class="sidebar-nav-item dashboard-nav active" id="dashboard-button" type="button" aria-label="Qualitätsdashboard">
-            <span class="sidebar-nav-icon" aria-hidden="true">Q</span>
-            <span><strong>Dashboard</strong><small>Qualität und Übersicht</small></span>
-          </button>
-          <button class="sidebar-nav-item review-nav" id="review-button" type="button" aria-label="Review-Modus">
-            <span class="sidebar-nav-icon" aria-hidden="true">RV</span>
-            <span><strong>Review</strong><small>Änderungspaket prüfen</small></span>
-          </button>
-          <button class="sidebar-nav-item git-nav" id="git-page-button" type="button" aria-label="Git-Verwaltung">
-            <span class="sidebar-nav-icon" aria-hidden="true">G</span>
-            <span><strong>Git</strong><small>Branches und Remote</small></span>
-          </button>
-          <button class="sidebar-nav-item object-nav" id="objects-button" type="button" aria-label="Home-Assistant-Objekte">
-            <span class="sidebar-nav-icon" aria-hidden="true">HA</span>
-            <span><strong>HA-Objekte</strong><small>Automationen, Scripts, Szenen</small></span>
-          </button>
-          <button class="sidebar-nav-item entity-health-nav" id="entity-health-button" type="button" aria-label="Entity-Health">
-            <span class="sidebar-nav-icon" aria-hidden="true">EH</span>
-            <span><strong>Entity-Health</strong><small>Status und Nutzung</small></span>
-          </button>
-          <button class="sidebar-nav-item graph-nav" id="graph-button" type="button" aria-label="Gesamtgraph">
-            <span class="sidebar-nav-icon" aria-hidden="true">GR</span>
-            <span><strong>Graph</strong><small>Objekte und Bezüge</small></span>
-          </button>
-          <button class="sidebar-nav-item lint-nav" id="lint-button" type="button" aria-label="Lint-Regeln">
-            <span class="sidebar-nav-icon" aria-hidden="true">LN</span>
-            <span><strong>Lint</strong><small>Regeln konfigurieren</small></span>
-          </button>
-          <button class="sidebar-nav-item compatibility-nav" id="compatibility-button" type="button" aria-label="Kompatibilität">
-            <span class="sidebar-nav-icon" aria-hidden="true">CP</span>
-            <span><strong>Kompatibilität</strong><small>HA-Syntax prüfen</small></span>
-          </button>
-          <button class="sidebar-nav-item refactor-nav" id="refactor-button" type="button" aria-label="Entity-Refactoring">
-            <span class="sidebar-nav-icon" aria-hidden="true">RF</span>
-            <span><strong>Refactor</strong><small>Objekte und IDs ändern</small></span>
-          </button>
-          <button class="sidebar-nav-item secrets-nav" id="secrets-button" type="button" aria-label="Secrets">
-            <span class="sidebar-nav-icon" aria-hidden="true">SK</span>
-            <span><strong>Secrets</strong><small>Maskiert verwalten</small></span>
-          </button>
-          <button class="sidebar-nav-item preflight-nav" id="preflight-button" type="button" aria-label="Preflight">
-            <span class="sidebar-nav-icon" aria-hidden="true">PF</span>
-            <span><strong>Preflight</strong><small>Bereit zum Push</small></span>
-          </button>
-          <button class="sidebar-nav-item blueprint-nav" id="blueprints-button" type="button" aria-label="Blueprints">
-            <span class="sidebar-nav-icon" aria-hidden="true">BP</span>
-            <span><strong>Blueprints</strong><small>Anzeigen und nutzen</small></span>
-          </button>
-          <button class="sidebar-nav-item documentation-nav" id="documentation-button" type="button" aria-label="Dokumentation">
-            <span class="sidebar-nav-icon" aria-hidden="true">DOC</span>
-            <span><strong>Doku</strong><small>Übersicht erzeugen</small></span>
-          </button>
-          <button class="sidebar-nav-item security-nav" id="security-button" type="button" aria-label="Sicherheit">
-            <span class="sidebar-nav-icon" aria-hidden="true">SEC</span>
-            <span><strong>Sicherheit</strong><small>Secrets und Tokens</small></span>
-          </button>
-          <button class="sidebar-nav-item traces-nav" id="traces-button" type="button" aria-label="Traces">
-            <span class="sidebar-nav-icon" aria-hidden="true">TR</span>
-            <span><strong>Traces</strong><small>Ausführungen debuggen</small></span>
-          </button>
-          <button class="sidebar-nav-item search-nav" id="search-replace-button" type="button" aria-label="Mehrere Dateien durchsuchen">
-            <span class="sidebar-nav-icon" aria-hidden="true">⌕</span>
-            <span><strong>Suchen &amp; Ersetzen</strong><small>Mehrere Dateien ändern</small></span>
-          </button>
-        </nav>
+        <details class="sidebar-section sidebar-tools" id="sidebar-tools">
+          <summary><span>Werkzeuge</span><span class="section-summary" id="sidebar-tools-current">Dashboard</span></summary>
+          <nav class="sidebar-primary-nav" aria-label="Hauptbereiche">
+            <button class="sidebar-nav-item dashboard-nav active" id="dashboard-button" type="button" aria-label="Qualitätsdashboard">
+              <span class="sidebar-nav-icon" aria-hidden="true">Q</span>
+              <span><strong>Dashboard</strong><small>Qualität und Übersicht</small></span>
+            </button>
+            <button class="sidebar-nav-item review-nav" id="review-button" type="button" aria-label="Review-Modus">
+              <span class="sidebar-nav-icon" aria-hidden="true">RV</span>
+              <span><strong>Review</strong><small>Änderungspaket prüfen</small></span>
+            </button>
+            <button class="sidebar-nav-item git-nav" id="git-page-button" type="button" aria-label="Git-Verwaltung">
+              <span class="sidebar-nav-icon" aria-hidden="true">G</span>
+              <span><strong>Git</strong><small>Branches und Remote</small></span>
+            </button>
+            <button class="sidebar-nav-item object-nav" id="objects-button" type="button" aria-label="Home-Assistant-Objekte">
+              <span class="sidebar-nav-icon" aria-hidden="true">HA</span>
+              <span><strong>HA-Objekte</strong><small>Automationen, Scripts, Szenen</small></span>
+            </button>
+            <button class="sidebar-nav-item entity-health-nav" id="entity-health-button" type="button" aria-label="Entity-Health">
+              <span class="sidebar-nav-icon" aria-hidden="true">EH</span>
+              <span><strong>Entity-Health</strong><small>Status und Nutzung</small></span>
+            </button>
+            <button class="sidebar-nav-item graph-nav" id="graph-button" type="button" aria-label="Gesamtgraph">
+              <span class="sidebar-nav-icon" aria-hidden="true">GR</span>
+              <span><strong>Graph</strong><small>Objekte und Bezüge</small></span>
+            </button>
+            <button class="sidebar-nav-item lint-nav" id="lint-button" type="button" aria-label="Lint-Regeln">
+              <span class="sidebar-nav-icon" aria-hidden="true">LN</span>
+              <span><strong>Lint</strong><small>Regeln konfigurieren</small></span>
+            </button>
+            <button class="sidebar-nav-item compatibility-nav" id="compatibility-button" type="button" aria-label="Kompatibilität">
+              <span class="sidebar-nav-icon" aria-hidden="true">CP</span>
+              <span><strong>Kompatibilität</strong><small>HA-Syntax prüfen</small></span>
+            </button>
+            <button class="sidebar-nav-item refactor-nav" id="refactor-button" type="button" aria-label="Entity-Refactoring">
+              <span class="sidebar-nav-icon" aria-hidden="true">RF</span>
+              <span><strong>Refactor</strong><small>Objekte und IDs ändern</small></span>
+            </button>
+            <button class="sidebar-nav-item secrets-nav" id="secrets-button" type="button" aria-label="Secrets">
+              <span class="sidebar-nav-icon" aria-hidden="true">SK</span>
+              <span><strong>Secrets</strong><small>Maskiert verwalten</small></span>
+            </button>
+            <button class="sidebar-nav-item preflight-nav" id="preflight-button" type="button" aria-label="Preflight">
+              <span class="sidebar-nav-icon" aria-hidden="true">PF</span>
+              <span><strong>Preflight</strong><small>Bereit zum Push</small></span>
+            </button>
+            <button class="sidebar-nav-item blueprint-nav" id="blueprints-button" type="button" aria-label="Blueprints">
+              <span class="sidebar-nav-icon" aria-hidden="true">BP</span>
+              <span><strong>Blueprints</strong><small>Anzeigen und nutzen</small></span>
+            </button>
+            <button class="sidebar-nav-item documentation-nav" id="documentation-button" type="button" aria-label="Dokumentation">
+              <span class="sidebar-nav-icon" aria-hidden="true">DOC</span>
+              <span><strong>Doku</strong><small>Übersicht erzeugen</small></span>
+            </button>
+            <button class="sidebar-nav-item security-nav" id="security-button" type="button" aria-label="Sicherheit">
+              <span class="sidebar-nav-icon" aria-hidden="true">SEC</span>
+              <span><strong>Sicherheit</strong><small>Secrets und Tokens</small></span>
+            </button>
+            <button class="sidebar-nav-item traces-nav" id="traces-button" type="button" aria-label="Traces">
+              <span class="sidebar-nav-icon" aria-hidden="true">TR</span>
+              <span><strong>Traces</strong><small>Ausführungen debuggen</small></span>
+            </button>
+            <button class="sidebar-nav-item search-nav" id="search-replace-button" type="button" aria-label="Mehrere Dateien durchsuchen">
+              <span class="sidebar-nav-icon" aria-hidden="true">⌕</span>
+              <span><strong>Suchen &amp; Ersetzen</strong><small>Mehrere Dateien ändern</small></span>
+            </button>
+          </nav>
+        </details>
         <details class="sidebar-section system-section">
           <summary>
             <span>Systemstatus</span>
