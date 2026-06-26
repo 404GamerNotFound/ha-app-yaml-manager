@@ -20,7 +20,7 @@ def create_handler(backend: Any) -> type[BaseHTTPRequestHandler]:
     """Bind the transport layer to a backend module with the service functions."""
 
     class Handler(BaseHTTPRequestHandler):
-        server_version = "YamlScriptManager/1.2"
+        server_version = "YamlScriptManager/1.4"
 
         def log_message(self, format_string: str, *args: Any) -> None:
             print(f"{self.address_string()} - {format_string % args}", flush=True)
@@ -139,8 +139,20 @@ def create_handler(backend: Any) -> type[BaseHTTPRequestHandler]:
                     self.send_json(HTTPStatus.OK, backend.documentation_overview())
                 elif path == "/api/security":
                     self.send_json(HTTPStatus.OK, backend.security_scan())
+                elif path == "/api/lint":
+                    self.send_json(HTTPStatus.OK, backend.lint_scan())
+                elif path == "/api/compatibility":
+                    self.send_json(HTTPStatus.OK, backend.compatibility_scan())
+                elif path == "/api/graph":
+                    self.send_json(HTTPStatus.OK, backend.global_graph())
                 elif path == "/api/security/push-warning":
                     self.send_json(HTTPStatus.OK, backend.security_push_warning())
+                elif path == "/api/secrets":
+                    self.send_json(HTTPStatus.OK, backend.secrets_overview())
+                elif path == "/api/preflight":
+                    self.send_json(HTTPStatus.OK, backend.preflight())
+                elif path == "/api/entity-health":
+                    self.send_json(HTTPStatus.OK, backend.entity_health())
                 elif path == "/api/traces":
                     self.send_json(HTTPStatus.OK, backend.trace_index())
                 elif path == "/api/trace":
@@ -225,6 +237,14 @@ def create_handler(backend: Any) -> type[BaseHTTPRequestHandler]:
                         HTTPStatus.OK,
                         backend.analyze_yaml(body.get("content", ""), body.get("path", "")),
                     )
+                elif path == "/api/flow":
+                    self.send_json(HTTPStatus.OK, backend.flow_analysis(body))
+                elif path == "/api/impact":
+                    self.send_json(HTTPStatus.OK, backend.save_impact(body))
+                elif path == "/api/review/preview":
+                    self.send_json(HTTPStatus.OK, backend.review_preview(body))
+                elif path == "/api/review/apply":
+                    self.send_json(HTTPStatus.OK, backend.apply_review(body))
                 elif path == "/api/script/rename-preview":
                     self.send_json(
                         HTTPStatus.OK,
@@ -263,8 +283,48 @@ def create_handler(backend: Any) -> type[BaseHTTPRequestHandler]:
                             body.get("stateVersion"),
                         ),
                     )
+                elif path == "/api/entity-refactor/preview":
+                    self.send_json(
+                        HTTPStatus.OK,
+                        backend.entity_refactor_preview(
+                            body.get("oldEntity", ""),
+                            body.get("newEntity", ""),
+                        ),
+                    )
+                elif path == "/api/entity-refactor/apply":
+                    self.send_json(
+                        HTTPStatus.OK,
+                        backend.apply_entity_refactor(
+                            body.get("oldEntity", ""),
+                            body.get("newEntity", ""),
+                            body.get("stateVersion"),
+                        ),
+                    )
+                elif path == "/api/refactor/preview":
+                    self.send_json(
+                        HTTPStatus.OK,
+                        backend.refactor_preview(
+                            body.get("kind", ""),
+                            body.get("oldValue", ""),
+                            body.get("newValue", ""),
+                        ),
+                    )
+                elif path == "/api/refactor/apply":
+                    self.send_json(
+                        HTTPStatus.OK,
+                        backend.apply_refactor(
+                            body.get("kind", ""),
+                            body.get("oldValue", ""),
+                            body.get("newValue", ""),
+                            body.get("stateVersion"),
+                        ),
+                    )
                 elif path == "/api/template/render":
                     self.send_json(HTTPStatus.OK, backend.render_template(body))
+                elif path == "/api/secrets":
+                    self.send_json(HTTPStatus.OK, backend.upsert_secret(body))
+                elif path == "/api/secrets/convert":
+                    self.send_json(HTTPStatus.OK, backend.convert_plaintext_secret(body))
                 elif path == "/api/blueprints/import":
                     self.send_json(
                         HTTPStatus.CREATED,
@@ -393,6 +453,8 @@ def create_handler(backend: Any) -> type[BaseHTTPRequestHandler]:
                 elif path == "/api/reload":
                     backend.home_assistant_request("services/script/reload", method="POST")
                     self.send_json(HTTPStatus.OK, {"message": "Skripte wurden neu geladen."})
+                elif path == "/api/ha-object/run":
+                    self.send_json(HTTPStatus.OK, backend.run_home_assistant_object(body))
                 else:
                     raise ApiError(HTTPStatus.NOT_FOUND, "Unbekannter Endpunkt.")
             except ApiError as exc:
@@ -436,6 +498,10 @@ def create_handler(backend: Any) -> type[BaseHTTPRequestHandler]:
                 path, _ = self.route()
                 if path == "/api/git/remote":
                     self.send_json(HTTPStatus.OK, backend.remove_git_remote())
+                    return
+                if path == "/api/secrets":
+                    body = self.read_json()
+                    self.send_json(HTTPStatus.OK, backend.delete_secret(body.get("name", "")))
                     return
                 if path == "/api/trash":
                     body = self.read_json()

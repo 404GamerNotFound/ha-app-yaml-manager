@@ -10,8 +10,10 @@ from typing import Any
 
 try:
     from .errors import ApiError
+    from .lint import DEFAULT_LINT_RULES, sanitize_lint_rules
 except ImportError:  # pragma: no cover - direct execution in the app container
     from errors import ApiError
+    from lint import DEFAULT_LINT_RULES, sanitize_lint_rules
 
 
 DEFAULT_SETTINGS: dict[str, Any] = {
@@ -25,6 +27,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "defaultBranchPrefix": "feature/",
     "theme": "system",
     "afterSave": "stay",
+    "lintRules": DEFAULT_LINT_RULES,
 }
 
 
@@ -96,6 +99,7 @@ def sanitize_settings(raw: Any) -> dict[str, Any]:
         "defaultBranchPrefix": prefix,
         "theme": theme,
         "afterSave": after_save,
+        "lintRules": sanitize_lint_rules(source.get("lintRules", DEFAULT_SETTINGS["lintRules"])),
     }
 
 

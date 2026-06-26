@@ -62,6 +62,10 @@
             <span class="sidebar-nav-icon" aria-hidden="true">Q</span>
             <span><strong>Dashboard</strong><small>Qualität und Übersicht</small></span>
           </button>
+          <button class="sidebar-nav-item review-nav" id="review-button" type="button" aria-label="Review-Modus">
+            <span class="sidebar-nav-icon" aria-hidden="true">RV</span>
+            <span><strong>Review</strong><small>Änderungspaket prüfen</small></span>
+          </button>
           <button class="sidebar-nav-item git-nav" id="git-page-button" type="button" aria-label="Git-Verwaltung">
             <span class="sidebar-nav-icon" aria-hidden="true">G</span>
             <span><strong>Git</strong><small>Branches und Remote</small></span>
@@ -69,6 +73,34 @@
           <button class="sidebar-nav-item object-nav" id="objects-button" type="button" aria-label="Home-Assistant-Objekte">
             <span class="sidebar-nav-icon" aria-hidden="true">HA</span>
             <span><strong>HA-Objekte</strong><small>Automationen, Scripts, Szenen</small></span>
+          </button>
+          <button class="sidebar-nav-item entity-health-nav" id="entity-health-button" type="button" aria-label="Entity-Health">
+            <span class="sidebar-nav-icon" aria-hidden="true">EH</span>
+            <span><strong>Entity-Health</strong><small>Status und Nutzung</small></span>
+          </button>
+          <button class="sidebar-nav-item graph-nav" id="graph-button" type="button" aria-label="Gesamtgraph">
+            <span class="sidebar-nav-icon" aria-hidden="true">GR</span>
+            <span><strong>Graph</strong><small>Objekte und Bezüge</small></span>
+          </button>
+          <button class="sidebar-nav-item lint-nav" id="lint-button" type="button" aria-label="Lint-Regeln">
+            <span class="sidebar-nav-icon" aria-hidden="true">LN</span>
+            <span><strong>Lint</strong><small>Regeln konfigurieren</small></span>
+          </button>
+          <button class="sidebar-nav-item compatibility-nav" id="compatibility-button" type="button" aria-label="Kompatibilität">
+            <span class="sidebar-nav-icon" aria-hidden="true">CP</span>
+            <span><strong>Kompatibilität</strong><small>HA-Syntax prüfen</small></span>
+          </button>
+          <button class="sidebar-nav-item refactor-nav" id="refactor-button" type="button" aria-label="Entity-Refactoring">
+            <span class="sidebar-nav-icon" aria-hidden="true">RF</span>
+            <span><strong>Refactor</strong><small>Objekte und IDs ändern</small></span>
+          </button>
+          <button class="sidebar-nav-item secrets-nav" id="secrets-button" type="button" aria-label="Secrets">
+            <span class="sidebar-nav-icon" aria-hidden="true">SK</span>
+            <span><strong>Secrets</strong><small>Maskiert verwalten</small></span>
+          </button>
+          <button class="sidebar-nav-item preflight-nav" id="preflight-button" type="button" aria-label="Preflight">
+            <span class="sidebar-nav-icon" aria-hidden="true">PF</span>
+            <span><strong>Preflight</strong><small>Bereit zum Push</small></span>
           </button>
           <button class="sidebar-nav-item blueprint-nav" id="blueprints-button" type="button" aria-label="Blueprints">
             <span class="sidebar-nav-icon" aria-hidden="true">BP</span>
@@ -214,6 +246,7 @@
         <div class="helper-tabs" role="tablist">
           <button class="helper-tab active" data-tab="analysis" role="tab" aria-selected="true">Prüfung</button>
           <button class="helper-tab" data-tab="dependencies" role="tab" aria-selected="false">Bezüge</button>
+          <button class="helper-tab" data-tab="flow" role="tab" aria-selected="false">Flow</button>
           <button class="helper-tab" data-tab="outline" role="tab" aria-selected="false">Struktur</button>
           <button class="helper-tab" data-tab="blocks" role="tab" aria-selected="false">Bausteine</button>
           <button class="helper-tab" data-tab="entities" role="tab" aria-selected="false">Entitäten</button>
@@ -235,6 +268,14 @@
             <span>Öffne eine Datei, um Bezüge zu analysieren.</span>
           </div>
           <div class="dependency-list" id="dependency-list"></div>
+        </div>
+
+        <div class="helper-view hidden" id="tab-flow">
+          <div class="analysis-summary checking" id="flow-summary">
+            <strong>Ablaufdiagramm</strong>
+            <span>Öffne eine Automation oder ein Script.</span>
+          </div>
+          <div class="flow-diagram" id="flow-diagram"></div>
         </div>
 
         <div class="helper-view hidden" id="tab-blocks">
@@ -445,6 +486,139 @@
               <button class="button secondary" id="dashboard-refresh" type="button">Aktualisieren</button>
             </div>
             <div class="dashboard-findings" id="dashboard-findings"></div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <section class="review-page hidden" id="review-page">
+      <div class="review-page-content">
+        <div class="dialog-header admin-dialog-header">
+          <div>
+            <h2>Review-Modus</h2>
+            <p>Mehrere geplante Änderungen als Paket prüfen, vergleichen und gemeinsam anwenden.</p>
+          </div>
+          <button class="button primary" id="review-close" type="button">Scripts öffnen</button>
+        </div>
+        <div class="review-body">
+          <section class="admin-section">
+            <div class="admin-section-heading">
+              <div><h3>Änderungspaket</h3><p id="review-summary">Noch keine Änderung im Paket.</p></div>
+              <div class="documentation-actions">
+                <button class="button secondary" id="review-add-current" type="button">Aktuelle Datei vormerken</button>
+                <button class="button secondary" id="review-clear" type="button">Leeren</button>
+                <button class="button secondary" id="review-preview" type="button">Prüfen</button>
+                <button class="button warning" id="review-apply" type="button" disabled>Anwenden</button>
+              </div>
+            </div>
+            <div class="import-preview-list" id="review-list"></div>
+          </section>
+          <section class="admin-section">
+            <div class="admin-section-heading">
+              <div><h3>Gesamt-Diff</h3><p>Die Vorschau läuft gegen YAML, Package-Konflikte, Lint und Kompatibilität.</p></div>
+            </div>
+            <pre class="branch-diff review-diff" id="review-diff">Noch keine Vorschau erstellt.</pre>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <section class="lint-page hidden" id="lint-page">
+      <div class="lint-page-content">
+        <div class="dialog-header admin-dialog-header">
+          <div>
+            <h2>Lint-Regeln</h2>
+            <p>Projektregeln für IDs, Pflichtfelder, Domains, Klartextmuster und Tags.</p>
+          </div>
+          <button class="button primary" id="lint-close" type="button">Scripts öffnen</button>
+        </div>
+        <div class="lint-body">
+          <section class="admin-section">
+            <div class="admin-section-heading">
+              <div><h3>Regeln</h3><p id="lint-summary">Lint wurde noch nicht geladen.</p></div>
+              <div class="documentation-actions">
+                <button class="button secondary" id="lint-refresh" type="button">Aktualisieren</button>
+                <button class="button primary" id="lint-save" type="button">Regeln speichern</button>
+              </div>
+            </div>
+            <div class="settings-grid lint-grid">
+              <label class="settings-check"><input id="lint-require-alias" type="checkbox"> Alias oder Name verlangen</label>
+              <label class="settings-check"><input id="lint-require-script-mode" type="checkbox"> Script-mode verlangen</label>
+              <label class="settings-check"><input id="lint-require-automation-id" type="checkbox"> Automation-ID verlangen</label>
+              <label><span>Script-ID-Muster</span><input id="lint-script-pattern" placeholder="^[a-z0-9_]+$"></label>
+              <label><span>Entity-ID-Muster</span><input id="lint-entity-pattern" placeholder="^[a-z0-9_]+\.[a-z0-9_]+$"></label>
+              <label><span>Erlaubte Entity-Domains</span><input id="lint-allowed-domains" placeholder="light,switch,sensor"></label>
+              <label><span>Verbotene Klartextmuster</span><input id="lint-forbidden-plaintext" placeholder="password:,token:"></label>
+              <label><span>Pflicht-Tags</span><input id="lint-required-tags" placeholder="produktiv,reviewed"></label>
+            </div>
+            <div class="security-stats" id="lint-stats"></div>
+          </section>
+          <section class="admin-section">
+            <div class="admin-section-heading">
+              <div><h3>Hinweise</h3><p>Dieselben Findings erscheinen in Editor, Dashboard und Preflight.</p></div>
+            </div>
+            <div class="security-list" id="lint-list"></div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <section class="graph-page hidden" id="graph-page">
+      <div class="graph-page-content">
+        <div class="dialog-header admin-dialog-header">
+          <div>
+            <h2>Gesamtgraph</h2>
+            <p>Packages, Automationen, Scripts, Szenen, Entities, Secrets und Blueprints in einem Netz.</p>
+          </div>
+          <button class="button primary" id="graph-close" type="button">Scripts öffnen</button>
+        </div>
+        <div class="graph-body">
+          <section class="admin-section">
+            <div class="admin-section-heading">
+              <div><h3>Filter</h3><p id="graph-summary">Graph wurde noch nicht geladen.</p></div>
+              <button class="button secondary" id="graph-refresh" type="button">Aktualisieren</button>
+            </div>
+            <div class="object-toolbar">
+              <label class="search-field"><span aria-hidden="true">⌕</span><input id="graph-search" type="search" placeholder="Knoten oder Pfad suchen"></label>
+              <select id="graph-type"><option value="">Alle Knoten</option><option value="object">Objekte</option><option value="entity">Entities</option><option value="file">Dateien</option><option value="secret">Secrets</option><option value="blueprint">Blueprints</option></select>
+            </div>
+          </section>
+          <div class="graph-layout">
+            <section class="admin-section">
+              <div class="admin-section-heading"><div><h3>Knoten</h3><p>Ein Klick öffnet die bekannte Fundstelle, wenn vorhanden.</p></div></div>
+              <div class="security-list graph-list" id="graph-nodes"></div>
+            </section>
+            <section class="admin-section">
+              <div class="admin-section-heading"><div><h3>Beziehungen</h3><p>Definitionen, Referenzen, Secrets und Blueprint-Nutzung.</p></div></div>
+              <div class="security-list graph-list" id="graph-edges"></div>
+            </section>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="compatibility-page hidden" id="compatibility-page">
+      <div class="compatibility-page-content">
+        <div class="dialog-header admin-dialog-header">
+          <div>
+            <h2>HA-Kompatibilität</h2>
+            <p>Historische Schlüssel, alte Dienste und migrationsverdächtige Syntax erkennen.</p>
+          </div>
+          <button class="button primary" id="compatibility-close" type="button">Scripts öffnen</button>
+        </div>
+        <div class="compatibility-body">
+          <section class="admin-section">
+            <div class="admin-section-heading">
+              <div><h3>Status</h3><p id="compatibility-summary">Kompatibilitätsprüfung wurde noch nicht geladen.</p></div>
+              <button class="button secondary" id="compatibility-refresh" type="button">Aktualisieren</button>
+            </div>
+            <div class="security-stats" id="compatibility-stats"></div>
+          </section>
+          <section class="admin-section">
+            <div class="admin-section-heading">
+              <div><h3>Hinweise</h3><p>Warnungen sind bewusst konservativ und werden im Preflight mitgezählt.</p></div>
+            </div>
+            <div class="security-list" id="compatibility-list"></div>
           </section>
         </div>
       </div>
@@ -742,6 +916,137 @@
       </div>
     </section>
 
+    <section class="entity-health-page hidden" id="entity-health-page">
+      <div class="entity-health-page-content">
+        <div class="dialog-header admin-dialog-header">
+          <div>
+            <h2>Entity-Health</h2>
+            <p>Unbekannte, nicht verfügbare, deaktivierte und ungenutzte Entities prüfen.</p>
+          </div>
+          <button class="button primary" id="entity-health-close" type="button">Scripts öffnen</button>
+        </div>
+        <div class="entity-health-body">
+          <section class="admin-section">
+            <div class="admin-section-heading">
+              <div><h3>Status</h3><p id="entity-health-summary">Entity-Health wurde noch nicht geladen.</p></div>
+              <button class="button secondary" id="entity-health-refresh" type="button">Aktualisieren</button>
+            </div>
+            <div class="security-stats" id="entity-health-stats"></div>
+          </section>
+          <section class="admin-section">
+            <div class="admin-section-heading">
+              <div><h3>Entities</h3><p>Aus verwalteten YAML-Bezügen und aktuellen Home-Assistant-States.</p></div>
+              <select id="entity-health-filter">
+                <option value="unknown">Unbekannt</option>
+                <option value="unavailable">Unavailable/Unknown</option>
+                <option value="disabled">Deaktiviert</option>
+                <option value="unused">Nicht in YAML genutzt</option>
+              </select>
+            </div>
+            <div class="security-list" id="entity-health-list"></div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <section class="refactor-page hidden" id="refactor-page">
+      <div class="refactor-page-content">
+        <div class="dialog-header admin-dialog-header">
+          <div>
+            <h2>Refactoring</h2>
+            <p>Entities, Helper, Szenen, Automationen, Geräte, Bereiche und Package-Pfade geschützt ändern.</p>
+          </div>
+          <button class="button primary" id="refactor-close" type="button">Scripts öffnen</button>
+        </div>
+        <div class="refactor-body">
+          <section class="admin-section">
+            <div class="admin-section-heading">
+              <div><h3>Refactoring vorbereiten</h3><p id="refactor-summary">Noch keine Vorschau erstellt.</p></div>
+            </div>
+            <div class="branch-controls">
+              <label><span>Typ</span><select id="refactor-kind"><option value="entity">Entity-ID</option><option value="helper_entity">Helper-Entity</option><option value="scene">Szene</option><option value="automation">Automation</option><option value="device_id">Device-ID</option><option value="area_id">Area-ID</option><option value="package">Package verschieben</option></select></label>
+              <label><span>Von</span><input id="refactor-old" placeholder="light.alt"></label>
+              <label><span>Nach</span><input id="refactor-new" placeholder="light.neu"></label>
+              <button class="button secondary" id="refactor-preview" type="button">Vorschau</button>
+              <button class="button warning" id="refactor-apply" type="button" disabled>Anwenden</button>
+            </div>
+            <div class="import-preview-list" id="refactor-list"></div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <section class="secrets-page hidden" id="secrets-page">
+      <div class="secrets-page-content">
+        <div class="dialog-header admin-dialog-header">
+          <div>
+            <h2>Secrets</h2>
+            <p>`secrets.yaml` maskiert verwalten und Klartextwerte auslagern.</p>
+          </div>
+          <button class="button primary" id="secrets-close" type="button">Scripts öffnen</button>
+        </div>
+        <div class="secrets-body">
+          <section class="admin-section">
+            <div class="admin-section-heading">
+              <div><h3>Secret anlegen oder aktualisieren</h3><p id="secrets-summary">Secrets wurden noch nicht geladen.</p></div>
+              <button class="button secondary" id="secrets-refresh" type="button">Aktualisieren</button>
+            </div>
+            <div class="branch-controls">
+              <label><span>Name</span><input id="secret-name" placeholder="mein_token"></label>
+              <label><span>Wert</span><input id="secret-value" type="password" autocomplete="new-password"></label>
+              <button class="button primary" id="secret-save" type="button">Speichern</button>
+            </div>
+          </section>
+          <section class="admin-section">
+            <div class="admin-section-heading">
+              <div><h3>Klartext umwandeln</h3><p>Pfad, Zeile, Schlüssel und Wert werden in `!secret` plus `secrets.yaml` geschrieben.</p></div>
+            </div>
+            <div class="branch-controls secrets-convert-controls">
+              <label><span>Pfad</span><input id="secret-convert-path" placeholder="packages/demo.yaml"></label>
+              <label><span>Zeile</span><input id="secret-convert-line" type="number" min="1" step="1"></label>
+              <label><span>YAML-Schlüssel</span><input id="secret-convert-key" placeholder="api_key"></label>
+              <label><span>Secret-Name</span><input id="secret-convert-name" placeholder="api_key"></label>
+              <label><span>Secret-Wert</span><input id="secret-convert-value" type="password" autocomplete="new-password"></label>
+              <button class="button warning" id="secret-convert" type="button">Umwandeln</button>
+            </div>
+          </section>
+          <section class="admin-section">
+            <div class="admin-section-heading">
+              <div><h3>Vorhandene Secrets</h3><p>Werte werden nie angezeigt.</p></div>
+            </div>
+            <div class="security-list" id="secrets-list"></div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <section class="preflight-page hidden" id="preflight-page">
+      <div class="preflight-page-content">
+        <div class="dialog-header admin-dialog-header">
+          <div>
+            <h2>Preflight</h2>
+            <p>YAML, HA-Check, Security, Entity-Health, Dokumentation und Git vor dem Push prüfen.</p>
+          </div>
+          <button class="button primary" id="preflight-close" type="button">Scripts öffnen</button>
+        </div>
+        <div class="preflight-body">
+          <section class="admin-section">
+            <div class="admin-section-heading">
+              <div><h3>Bereitschaft</h3><p id="preflight-summary">Preflight wurde noch nicht ausgeführt.</p></div>
+              <button class="button secondary" id="preflight-run" type="button">Prüfen</button>
+            </div>
+            <div class="security-stats" id="preflight-stats"></div>
+          </section>
+          <section class="admin-section">
+            <div class="admin-section-heading">
+              <div><h3>Checks</h3><p>Blocker müssen vor dem Push geklärt werden.</p></div>
+            </div>
+            <div class="security-list" id="preflight-list"></div>
+          </section>
+        </div>
+      </div>
+    </section>
+
     <section class="traces-page hidden" id="traces-page">
       <div class="traces-page-content">
         <div class="dialog-header admin-dialog-header">
@@ -762,6 +1067,7 @@
               <select id="trace-domain"><option value="">Alle Typen</option><option value="automation">Automationen</option><option value="script">Scripts</option></select>
               <button class="button secondary" id="trace-clear-detail" type="button">Detail leeren</button>
             </div>
+            <div class="trace-run-list" id="trace-run-list"></div>
             <div class="trace-list" id="trace-list"></div>
           </section>
           <section class="admin-section trace-detail-section">
@@ -815,6 +1121,21 @@
           </div>
           <div class="import-summary" id="replace-summary">Noch keine Vorschau erstellt.</div>
           <div class="import-preview-list" id="replace-file-list"></div>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="impact-dialog" class="transfer-dialog">
+      <div class="transfer-dialog-content impact-dialog-content">
+        <div class="dialog-header admin-dialog-header">
+          <div><h2>Impact vor dem Speichern</h2><p id="impact-summary">Änderungen werden geprüft.</p></div>
+          <button class="icon-button" id="impact-cancel" type="button" aria-label="Speichern abbrechen">×</button>
+        </div>
+        <div class="impact-body" id="impact-body"></div>
+        <div class="dialog-actions history-actions">
+          <span id="impact-risk">Keine Änderung geprüft</span>
+          <button class="button secondary" id="impact-back" type="button">Zurück</button>
+          <button class="button primary" id="impact-confirm" type="button">Trotzdem speichern</button>
         </div>
       </div>
     </dialog>

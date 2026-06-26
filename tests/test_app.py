@@ -577,6 +577,74 @@ class FileApiTests(unittest.TestCase):
 
         self.assertEqual(raised.exception.status, 409)
 
+    def test_entity_refactor_updates_exact_entity_references(self):
+        app.write_file(
+            "refactor.yaml",
+            "script:\n"
+            "  refactor:\n"
+            "    sequence:\n"
+            "      - action: light.turn_on\n"
+            "        target:\n"
+            "          entity_id: light.alt\n"
+            "      - action: light.turn_on\n"
+            "        target:\n"
+            "          entity_id: light.alt_extra\n",
+            None,
+            "Tests",
+            create=True,
+        )
+
+        preview = app.entity_refactor_preview("light.alt", "light.neu")
+        result = app.apply_entity_refactor("light.alt", "light.neu", preview["stateVersion"])
+        content = app.read_file("refactor.yaml")["content"]
+
+        self.assertEqual(preview["matches"], 1)
+        self.assertEqual(result["matches"], 1)
+        self.assertIn("entity_id: light.neu", content)
+        self.assertIn("entity_id: light.alt_extra", content)
+
+    def test_secrets_manager_masks_values_and_converts_plaintext(self):
+        overview = app.upsert_secret({"name": "api_token", "value": "super-secret-value"})
+
+        self.assertEqual(overview["items"][0]["name"], "api_token")
+        self.assertEqual(overview["items"][0]["masked"], "••••••••")
+        self.assertNotIn("super-secret-value", str(overview))
+
+        app.write_file(
+            "secret_convert.yaml",
+            "rest_command:\n  webhook:\n    api_key: plaintext-token-123456\n",
+            None,
+            "Tests",
+            create=True,
+        )
+        converted = app.convert_plaintext_secret(
+            {
+                "path": "packages/secret_convert.yaml",
+                "line": 3,
+                "key": "api_key",
+                "name": "webhook_key",
+                "value": "plaintext-token-123456",
+            }
+        )
+        content = app.read_file("secret_convert.yaml")["content"]
+        secrets = (app.PACKAGES_ROOT.parent / "secrets.yaml").read_text(encoding="utf-8")
+
+        self.assertIn("api_key: !secret webhook_key", content)
+        self.assertIn("webhook_key:", secrets)
+        self.assertNotIn("plaintext-token-123456", str(converted))
+
+    def test_preflight_collects_checks(self):
+        app.write_file("preflight.yaml", "script:\n  preflight:\n    sequence: []\n", None, "Tests", create=True)
+
+        result = app.preflight()
+        check_ids = {item["id"] for item in result["checks"]}
+
+        self.assertIn("yaml", check_ids)
+        self.assertIn("security", check_ids)
+        self.assertIn("entity-health", check_ids)
+        self.assertIn("git", check_ids)
+        self.assertIn("blockers", result)
+
     def test_configuration_editor_reads_writes_and_backs_up(self):
         configuration = app.PACKAGES_ROOT.parent / "configuration.yaml"
         configuration.write_text("default_config:\n", encoding="utf-8")
@@ -804,6 +872,124 @@ class FileApiTests(unittest.TestCase):
         self.assertEqual(index["summary"]["traces"], 1)
         self.assertEqual(index["entries"][0]["runId"], "run-1")
         self.assertEqual(detail["trace"], {"trace": {"last_step": "sequence/0"}})
+
+    def test_flow_analysis_builds_script_branches(self):
+        result = app.flow_analysis(
+            {
+                "path": "flow.yaml",
+                "content": (
+                    "script:\n"
+                    "  flow_test:\n"
+                    "    alias: Flow Test\n"
+                    "    sequence:\n"
+                    "      - choose:\n"
+                    "          - conditions:\n"
+                    "              - condition: state\n"
+                    "                entity_id: binary_sensor.tuer\n"
+                    "                state: 'on'\n"
+                    "            sequence:\n"
+                    "              - action: light.turn_on\n"
+                    "                target:\n"
+                    "                  entity_id: light.flur\n"
+                    "        default:\n"
+                    "          - delay: '00:00:05'\n"
+                    "      - repeat:\n"
+                    "          count: 2\n"
+                    "          sequence:\n"
+                    "            - action: light.toggle\n"
+                    "              target:\n"
+                    "                entity_id: light.flur\n"
+                ),
+            }
+        )
+
+        types = {node["type"] for flow in result["flows"] for node in flow["nodes"]}
+
+        self.assertTrue(result["valid"])
+        self.assertEqual(result["summary"]["flows"], 1)
+        self.assertIn("choose", types)
+        self.assertIn("repeat", types)
+        self.assertIn("service", types)
+
+    def test_save_impact_reports_removed_referenced_script(self):
+        app.write_file(
+            "target.yaml",
+            "script:\n  target:\n    alias: Target\n    sequence: []\n",
+            None,
+            "Tests",
+            create=True,
+        )
+        app.write_file(
+            "caller.yaml",
+            "script:\n  caller:\n    sequence:\n      - action: script.target\n",
+            None,
+            "Tests",
+            create=True,
+        )
+
+        impact = app.save_impact({"path": "target.yaml", "content": "script: {}\n"})
+
+        self.assertEqual(impact["risk"], "error")
+        self.assertEqual(impact["summary"]["removedScripts"], 1)
+        self.assertEqual(impact["summary"]["incomingReferences"], 1)
+        self.assertEqual(impact["scripts"]["removed"], ["script.target"])
+
+    def test_entity_health_reports_unknown_unavailable_disabled_and_unused(self):
+        app.write_file(
+            "health.yaml",
+            "script:\n"
+            "  health:\n"
+            "    sequence:\n"
+            "      - action: light.turn_on\n"
+            "        target:\n"
+            "          entity_id:\n"
+            "            - light.missing\n"
+            "            - light.bad\n"
+            "            - light.disabled\n",
+            None,
+            "Tests",
+            create=True,
+        )
+        helpers = {
+            "available": True,
+            "entities": [
+                {"entity_id": "light.bad", "name": "Bad", "state": "unavailable"},
+                {"entity_id": "light.unused", "name": "Unused", "state": "on"},
+            ],
+            "services": [],
+            "serviceDetails": {},
+            "devices": [],
+            "areas": [],
+            "entityRegistry": [{"entity_id": "light.disabled", "disabled_by": "user"}],
+        }
+
+        with patch.object(app, "cached_helper_data", return_value=helpers):
+            result = app.entity_health()
+
+        self.assertEqual(result["summary"]["unknown"], 1)
+        self.assertEqual(result["summary"]["unavailable"], 1)
+        self.assertEqual(result["summary"]["disabled"], 1)
+        self.assertGreaterEqual(result["summary"]["unused"], 1)
+        self.assertEqual(result["unknown"][0]["entityId"], "light.missing")
+
+    def test_run_home_assistant_object_calls_script_and_automation_services(self):
+        calls = []
+
+        def fake_request(path, method="GET", payload=None):
+            calls.append((path, method, payload))
+            return {"ok": True}
+
+        with patch.object(app, "home_assistant_request", side_effect=fake_request):
+            script = app.run_home_assistant_object({"domain": "script", "entityId": "script.test"})
+            automation = app.run_home_assistant_object({"domain": "automation", "entityId": "automation.test", "skipCondition": True})
+
+        self.assertEqual(script["traceHint"], {"domain": "script", "itemId": "test"})
+        self.assertEqual(automation["traceHint"], {"domain": "automation", "itemId": "test"})
+        self.assertEqual(calls[0], ("services/script/turn_on", "POST", {"target": {"entity_id": "script.test"}}))
+        self.assertEqual(
+            calls[1],
+            ("services/automation/trigger", "POST", {"target": {"entity_id": "automation.test"}, "skip_condition": True}),
+        )
 
     def test_documentation_overview_contains_html_page_data(self):
         app.write_file(
@@ -1374,6 +1560,163 @@ class FileApiTests(unittest.TestCase):
         result = app.package_conflict_analysis()
 
         self.assertFalse(any(item["code"] == "duplicate-integration" for item in result["findings"]))
+
+    def test_lint_rules_are_configurable_and_feed_preflight_dashboard(self):
+        app.update_settings(
+            {
+                "lintRules": {
+                    "requireAlias": True,
+                    "requireScriptMode": True,
+                    "requireAutomationId": True,
+                    "allowedEntityDomains": ["light"],
+                    "requiredTags": ["reviewed"],
+                }
+            }
+        )
+        app.write_file(
+            "lint.yaml",
+            "script:\n"
+            "  lint_test:\n"
+            "    sequence:\n"
+            "      - action: switch.turn_on\n"
+            "        target:\n"
+            "          entity_id: switch.steckdose\n",
+            None,
+            "Tests",
+            create=True,
+        )
+
+        lint = app.lint_scan()
+        preflight = app.preflight()
+        dashboard = app.configuration_quality_dashboard()
+        codes = {finding["code"] for finding in lint["findings"]}
+
+        self.assertIn("lint-missing-alias", codes)
+        self.assertIn("lint-missing-script-mode", codes)
+        self.assertIn("lint-entity-domain", codes)
+        self.assertIn("lint-missing-required-tag", codes)
+        self.assertIn("lint", {check["id"] for check in preflight["checks"]})
+        self.assertTrue(any(finding["code"].startswith("lint-") for finding in dashboard["findings"]))
+
+    def test_review_preview_and_apply_grouped_changes(self):
+        created = app.write_file(
+            "review.yaml",
+            "script:\n  review:\n    alias: Alt\n    mode: single\n    sequence: []\n",
+            None,
+            "Tests",
+            create=True,
+        )
+        body = {
+            "changes": [
+                {
+                    "path": "packages/review.yaml",
+                    "content": created["content"].replace("alias: Alt", "alias: Neu"),
+                    "category": "Review",
+                    "tags": ["checked"],
+                }
+            ]
+        }
+        preview = app.review_preview(body)
+
+        result = app.apply_review({**body, "stateVersion": preview["stateVersion"]})
+
+        saved = app.read_file("review.yaml")
+        self.assertTrue(preview["ready"])
+        self.assertIn("alias: Neu", saved["content"])
+        self.assertEqual(saved["category"], "Review")
+        self.assertEqual(saved["tags"], ["checked"])
+        self.assertEqual(result["summary"]["updates"], 1)
+
+    def test_typed_refactor_updates_scene_device_and_package_paths(self):
+        created = app.write_file(
+            "typed_refactor.yaml",
+            "scene:\n"
+            "  old_scene:\n"
+            "    name: Old Scene\n"
+            "    entities: {}\n"
+            "script:\n"
+            "  caller:\n"
+            "    alias: Caller\n"
+            "    mode: single\n"
+            "    sequence:\n"
+            "      - action: scene.old_scene\n"
+            "      - device_id: device_old\n"
+            "        domain: light\n",
+            None,
+            "Refactor",
+            create=True,
+            tags=["move"],
+        )
+
+        scene_preview = app.refactor_preview("scene", "scene.old_scene", "scene.new_scene")
+        app.apply_refactor("scene", "scene.old_scene", "scene.new_scene", scene_preview["stateVersion"])
+        device_preview = app.refactor_preview("device_id", "device_old", "device_new")
+        app.apply_refactor("device_id", "device_old", "device_new", device_preview["stateVersion"])
+        move_preview = app.refactor_preview("package", created["path"], "archiv/typed_refactor.yaml")
+        move = app.apply_refactor("package", created["path"], "archiv/typed_refactor.yaml", move_preview["stateVersion"])
+
+        content = app.read_file("archiv/typed_refactor.yaml")["content"]
+        self.assertIn("new_scene:", content)
+        self.assertIn("action: scene.new_scene", content)
+        self.assertIn("device_id: device_new", content)
+        self.assertEqual(app.read_file("archiv/typed_refactor.yaml")["category"], "Refactor")
+        self.assertEqual(move["newValue"], "archiv/typed_refactor.yaml")
+
+    def test_compatibility_scan_detects_legacy_keys_and_services(self):
+        app.write_file(
+            "compat.yaml",
+            "script:\n"
+            "  compat:\n"
+            "    alias: Compat\n"
+            "    mode: single\n"
+            "    sequence:\n"
+            "      - service: homeassistant.reload_core_config\n"
+            "        data_template:\n"
+            "          value: \"{{ 1 }}\"\n",
+            None,
+            "Tests",
+            create=True,
+        )
+
+        result = app.compatibility_scan()
+        codes = {finding["code"] for finding in result["findings"]}
+
+        self.assertIn("compat-legacy-key", codes)
+        self.assertIn("compat-deprecated-service", codes)
+        self.assertIn("compat-service-action-alias", codes)
+
+    def test_global_graph_connects_objects_entities_secrets_and_blueprints(self):
+        app.write_file(
+            "graph.yaml",
+            "script:\n"
+            "  graph_test:\n"
+            "    alias: Graph Test\n"
+            "    mode: single\n"
+            "    use_blueprint:\n"
+            "      path: local/test.yaml\n"
+            "    sequence:\n"
+            "      - action: light.turn_on\n"
+            "        target:\n"
+            "          entity_id: light.graph\n"
+            "        data:\n"
+            "          token: !secret graph_token\n",
+            None,
+            "Tests",
+            create=True,
+        )
+
+        result = app.global_graph()
+        node_types = {node["type"] for node in result["nodes"]}
+        relations = {edge["relation"] for edge in result["edges"]}
+
+        self.assertIn("object", node_types)
+        self.assertIn("entity", node_types)
+        self.assertIn("secret", node_types)
+        self.assertIn("blueprint", node_types)
+        self.assertIn("defines", relations)
+        self.assertIn("entity", relations)
+        self.assertIn("secret", relations)
+        self.assertIn("blueprint", relations)
 
 
 if __name__ == "__main__":

@@ -85,6 +85,17 @@ Die Backend-Verantwortlichkeiten sind getrennt aufgebaut:
 - `documentation.py`: Markdown- und HTML-Dokumentationsdaten
 - `security.py`: Secret-Referenzen, Klartext-Heuristiken und Push-Warnungen
 - `traces.py`: Home-Assistant-Trace-Index und Trace-Detaildaten
+- `flow.py`: Ablaufgraphen für Scripts und Automationen
+- `impact.py`: Vor-Speichern-Vergleich und Risikoübersicht
+- `review.py`: Änderungspakete mit Overlay-Prüfung, Gesamt-Diff und gemeinsamer Anwendung
+- `lint.py`: konfigurierbare Projektregeln für HA-YAML
+- `compatibility.py`: HA-Kompatibilitäts- und Deprecation-Hinweise
+- `refactor.py`: typisiertes Refactoring für Objekte, IDs und Package-Pfade
+- `graph.py`: globaler Objekt-, Entity-, Secret- und Blueprint-Graph
+- `entity_health.py`: Entity-Status aus YAML-Referenzen, States und Registry
+- `entity_refactor.py`: entity-exakte Multi-Datei-Umbenennungen
+- `secrets_manager.py`: maskierte `secrets.yaml`-Verwaltung
+- `preflight.py`: gebündelte Push-Bereitschaftsprüfung
 - `errors.py`: gemeinsamer erwarteter API-Fehlertyp
 
 ## Home-Assistant-Objektbrowser
@@ -139,6 +150,64 @@ API-Endpunkte:
 
 - `POST /api/search-replace/preview`
 - `POST /api/search-replace/apply`
+
+## Review-Modus
+
+**Review** sammelt mehrere geplante Dateiänderungen in einem stateless
+Änderungspaket. Die Vorschau erzeugt pro Datei einen Unified Diff und prüft den
+Overlay-Stand gegen YAML-Syntax, Package-Konflikte, konfigurierbare Lint-Regeln
+und HA-Kompatibilitätsregeln. Die Vorschau enthält einen SHA-256-Zustandshash
+über alle verwalteten YAML-Dateien.
+
+Beim Anwenden wird derselbe Hash erneut geprüft. Danach werden alle betroffenen
+Dateien gesichert, atomar geschrieben, gemeinsam in Git versioniert und durch
+Home Assistant geprüft. Bei einem Schreibfehler wird der gesamte Dateisatz auf
+den vorherigen Stand zurückgerollt.
+
+API-Endpunkte:
+
+- `POST /api/review/preview`
+- `POST /api/review/apply`
+
+## Lint-Regeln und Kompatibilität
+
+**Lint** verwendet Regeln aus den normalen App-Einstellungen. Unterstützt werden
+Pflichten für Alias beziehungsweise Name, Script-`mode`, Automation-`id`,
+Regex-Muster für Script- und Entity-IDs, erlaubte Entity-Domains, verbotene
+Klartextmuster sowie Pflicht-Tags für Package-Dateien. Die Findings erscheinen
+in der Live-Editoranalyse, im Dashboard, im Preflight und auf der eigenen
+Lint-Seite.
+
+**HA-Kompatibilität** prüft konservativ auf historische Schlüssel wie
+`data_template`, alte Dienste aus der lokalen Regelbasis und Syntaxstellen, die
+bei einer späteren Migration geprüft werden sollten. Wenn die Supervisor-API
+verfügbar ist, wird zusätzlich die laufende Home-Assistant-Version angezeigt.
+
+API-Endpunkte:
+
+- `GET /api/lint`
+- `GET /api/compatibility`
+- `PUT /api/settings` mit `lintRules`
+
+## Refactoring und Gesamtgraph
+
+Der neue Refactor-Bereich nutzt `POST /api/refactor/preview` und
+`POST /api/refactor/apply`. Unterstützt werden Entity-IDs, Helper-Entities,
+Szenen, Automationen, `device_id`, `area_id` und Package-Verschiebungen. Alle
+Inhaltsänderungen laufen mit YAML-Prüfung, Zustandshash, Backup, atomarem Write,
+Package-Konfliktprüfung, Git-Commit und Home-Assistant-Check. Package-
+Verschiebungen übernehmen zusätzlich Kategorie und Tags aus den Metadaten.
+
+**Graph** baut aus dem HA-Objektindex, den erkannten Referenzen, `!secret`-
+Verwendungen und `use_blueprint`-Blöcken eine globale Knoten-/Kantenliste. Die
+Oberfläche filtert nach Knotenart und Suchtext; Fundstellen öffnen direkt den
+Package-, Konfigurations- oder Ressourceneditor.
+
+API-Endpunkte:
+
+- `GET /api/graph`
+- `POST /api/refactor/preview`
+- `POST /api/refactor/apply`
 
 ## Git-Branch-Verwaltung
 
@@ -349,9 +418,10 @@ Ein Klick auf eine Datei öffnet sie unmittelbar im Script-Editor; der Eintrag
 Dashboard kombiniert die
 globale Package-Konfliktprüfung mit Betriebs-, Objekt-, Blueprint-, Security-,
 Trace- und Semantikdaten. Angezeigt werden Package-Dateien, Automationen,
-Scripts, Szenen, Bezüge, Blueprints, Security-Hinweise, Trace-Status, Fehler,
-Warnungen, Backups und ein daraus berechneter Qualitätswert. Git-Branches und
-Remote-Sync sind bewusst auf die eigene Seite **Git** verschoben.
+Scripts, Szenen, Bezüge, Blueprints, Security-Hinweise, Entity-Health,
+Trace-Status, Fehler, Warnungen, Backups und ein daraus berechneter
+Qualitätswert. Git-Branches und Remote-Sync sind bewusst auf die eigene Seite
+**Git** verschoben.
 
 Findings können ein `action`-Objekt enthalten. Das Frontend öffnet damit je nach
 Hinweis die Konfliktübersicht, die Blueprint-Seite, die Sicherheitsprüfung, die
@@ -470,10 +540,152 @@ Die Trace-Ansicht ist ein Best-effort-Debugwerkzeug. Ohne Supervisor-Token oder
 ohne verfügbare Trace-API bleibt die Seite erreichbar und zeigt die
 Nichtverfügbarkeit an, statt die übrige App zu blockieren.
 
+Unter **Testlauf** startet die Seite erkannte Scripts und Automationen direkt
+über Home Assistant. Scripts verwenden `script.turn_on`, Automationen
+`automation.trigger` mit `skip_condition: true`. Nach einem erfolgreichen
+Serviceaufruf lädt die Oberfläche den Trace-Index neu und öffnet den neuesten
+passenden Trace, sobald Home Assistant ihn bereitstellt.
+
 API-Endpunkte:
 
 - `GET /api/traces`
 - `GET /api/trace?domain=<automation|script>&itemId=<id>&runId=<run>`
+- `POST /api/ha-object/run`
+
+## Visuelle Flow-Ansicht
+
+Der Hilfebereich enthält den Tab **Flow**. Die Analyse läuft auf dem aktuell im
+Editor stehenden YAML und muss nicht gespeichert sein. Serverseitig wird der
+YAML-Knotenbaum verarbeitet, damit Zeilennummern erhalten bleiben.
+
+Erkannt werden:
+
+- Script-Start und Automation-Start,
+- Automation-Trigger und globale Bedingungen,
+- Serviceaufrufe unter `action:` beziehungsweise `service:`,
+- Bedingungen,
+- `choose`-Zweige inklusive `default`,
+- `repeat`,
+- `if`/`then`/`else`,
+- `delay`, `wait_template`, `wait_for_trigger`,
+- Events, Variablen und `stop`.
+
+Jeder Knoten im Frontend springt per Klick zur Quellzeile. Die Ansicht ist eine
+Orientierungshilfe und ersetzt nicht Home Assistants eigene Trace-Engine.
+
+API-Endpunkt:
+
+- `POST /api/flow`
+
+## Impact-Analyse vor dem Speichern
+
+Vor dem Speichern einer Package-Datei fragt das Frontend `POST /api/impact` ab.
+Das Backend vergleicht die gespeicherte Datei mit dem Editorinhalt und baut
+zusätzlich einen Dependency-Graph vor und nach der Änderung auf.
+
+Der Dialog zeigt:
+
+- hinzugefügte und entfernte Entities,
+- geänderte Script- und Entity-Referenzen,
+- entfernte Script-Definitionen mit eingehenden Bezügen,
+- neue oder entfernte `!secret`-Referenzen,
+- neue oder entfernte Blueprint-Pfade,
+- betroffene Script-Entities, deren Traces nach einem Testlauf relevant wären.
+
+Ein erkannter Fehler verhindert das Speichern nicht technisch, erzwingt aber
+eine bewusste Bestätigung. Danach läuft der normale geschützte Schreibpfad mit
+Versionsvergleich, YAML-Prüfung, Backup, Git-Commit und HA-Konfigurationsprüfung.
+
+API-Endpunkt:
+
+- `POST /api/impact`
+
+## Entity-Health
+
+**Entity-Health** ist eine eigene Inhaltsseite in der linken Navigation. Sie
+kombiniert erkannte YAML-Entity-Referenzen mit Home Assistants `states` und dem
+Entity-Registry-Listing.
+
+Kategorien:
+
+- **Unbekannt**: referenziert, aber weder State noch deaktivierter Registry-Eintrag vorhanden.
+- **Unavailable/Unknown**: referenziert und in HA bekannt, aber mit problematischem Zustand.
+- **Deaktiviert**: referenziert, aber laut Entity Registry deaktiviert.
+- **Nicht in YAML genutzt**: in HA bekannt, aber in verwaltetem YAML nicht referenziert.
+
+Die letzten drei Werte werden nur innerhalb der verfügbaren Home-Assistant-Daten
+bewertet. Ohne Supervisor-Token zeigt die Seite die Nichtverfügbarkeit an und
+blockiert keine anderen Funktionen.
+
+API-Endpunkt:
+
+- `GET /api/entity-health`
+
+## Entity-Refactoring
+
+Die Seite **Refactor** ersetzt eine Entity-ID über alle verwalteten YAML-Dateien:
+Packages, `configuration.yaml` und erkannte HA-Includes. Die Suche ist
+entity-exakt und nutzt Grenzen um die Entity-ID, damit ähnlich benannte Entities
+nicht berührt werden.
+
+Die Vorschau enthält Trefferzahl, Dateien und Zeilen. Beim Anwenden gelten:
+
+- Zustandshash über den verwalteten YAML-Bestand,
+- YAML-Validierung jeder geänderten Datei,
+- Package-Konfliktprüfung für betroffene Packages,
+- Backups vor dem Schreiben,
+- atomarer Austausch mit Rollback bei Schreibfehlern,
+- Git-Commit und optional geschützter Auto-Push,
+- Home-Assistant-Konfigurationsprüfung nach dem Schreiben.
+
+API-Endpunkte:
+
+- `POST /api/entity-refactor/preview`
+- `POST /api/entity-refactor/apply`
+
+## Secrets-Manager
+
+Die Seite **Secrets** verwaltet `/config/secrets.yaml` maskiert. Das Backend
+gibt Secret-Werte nie zurück, sondern nur Name, Maske und Referenzanzahl.
+
+Unterstützte Aktionen:
+
+- Secret anlegen oder aktualisieren,
+- Secret löschen,
+- Klartext-Zeile in einer verwalteten YAML-Datei durch `!secret <name>` ersetzen
+  und den Wert gleichzeitig in `secrets.yaml` speichern.
+
+Die Umwandlung prüft Pfad, Zeile und YAML-Schlüssel. Danach werden sowohl die
+YAML-Datei als auch `secrets.yaml` gesichert, atomar geschrieben und gemeinsam
+versioniert.
+
+API-Endpunkte:
+
+- `GET /api/secrets`
+- `POST /api/secrets`
+- `DELETE /api/secrets`
+- `POST /api/secrets/convert`
+
+## Preflight
+
+**Preflight** ist die zusammengefasste Prüfung vor einem Push. Die Seite ruft
+serverseitig folgende Checks auf:
+
+- YAML-Syntax aller verwalteten Dateien,
+- Package-Konflikte,
+- Security- und Secret-Scan,
+- Entity-Health,
+- Home-Assistant-Konfigurationsprüfung,
+- Dokumentationsstatus,
+- Git-Remote-Status.
+
+Die Antwort enthält `blockers`, `warnings`, `ready` und eine Checkliste mit
+Details. Blocker sind harte Probleme wie ungültiges YAML, Package-Fehler,
+Security-Fehler oder ein fehlgeschlagener Home-Assistant-Check.
+
+API-Endpunkt:
+
+- `GET /api/preflight`
 
 ## Package-Import und -Export
 
@@ -570,6 +782,7 @@ für diese Aktion.
 ## Hilfsfunktionen
 
 - **Bausteine** fügt häufige Script-Strukturen an der Cursorposition ein.
+- **Flow** zeigt ein klickbares Ablaufdiagramm für Scripts und Automationen.
 - **Entitäten** durchsucht die aktuellen Home-Assistant-Zustände und fügt eine
   `entity_id` ein.
 - **Dienste** durchsucht verfügbare Aktionen und fügt einen Aktionsblock ein.

@@ -31,6 +31,8 @@ const state = {
   history: { scope: "", path: "", currentVersion: "", selectedId: "", diffResult: null },
   gitHistory: { scope: "", path: "", currentVersion: "", selectedCommit: "", diffResult: null },
   dashboard: null,
+  reviewChanges: [],
+  reviewPreview: null,
   dependencies: null,
   branches: null,
   branchPreview: null,
@@ -39,6 +41,14 @@ const state = {
   documentation: null,
   documentationTab: "overview",
   security: null,
+  lint: null,
+  graph: null,
+  compatibility: null,
+  secrets: null,
+  refactorPreview: null,
+  preflight: null,
+  entityHealth: null,
+  flow: null,
   traces: null,
   settings: null,
   trash: null,
@@ -48,6 +58,7 @@ const state = {
   searchPreview: null,
   importArchive: "",
   importPreview: null,
+  impactResolver: null,
 };
 
 const elements = Object.fromEntries([
@@ -55,7 +66,7 @@ const elements = Object.fromEntries([
   "empty-state", "empty-new-button", "editor-content", "document-name", "document-path", "dirty-dot", "category-select", "tag-input",
   "rename-button", "duplicate-button", "delete-button", "editor", "highlighting", "line-numbers", "completion-popover", "validation-status", "file-ha-check", "cursor-status",
   "save-button", "new-button", "reload-button", "helpers", "helpers-toggle", "helpers-close", "snippet-list", "analysis-summary", "analysis-list", "api-notice",
-  "dependency-summary", "dependency-list", "outline-summary", "outline-list",
+  "dependency-summary", "dependency-list", "flow-summary", "flow-diagram", "outline-summary", "outline-list",
   "entity-search", "entity-list", "service-search", "service-list", "new-dialog", "new-form", "new-path", "new-script-id",
   "new-category", "new-tags", "category-options", "create-button", "toast-region",
   "configuration-button", "configuration-dialog", "configuration-close", "configuration-editor", "configuration-highlighting",
@@ -67,6 +78,11 @@ const elements = Object.fromEntries([
   "package-conflicts-button", "conflict-dialog", "conflict-close", "conflict-summary", "conflict-list",
   "dashboard-button", "dashboard-dialog", "dashboard-close", "dashboard-refresh", "quality-score", "quality-stats", "dashboard-findings",
   "health-badge", "health-grid",
+  "review-button", "review-page", "review-close", "review-add-current", "review-clear", "review-preview", "review-apply", "review-summary", "review-list", "review-diff",
+  "lint-button", "lint-page", "lint-close", "lint-refresh", "lint-save", "lint-summary", "lint-stats", "lint-list",
+  "lint-require-alias", "lint-require-script-mode", "lint-require-automation-id", "lint-script-pattern", "lint-entity-pattern", "lint-allowed-domains", "lint-forbidden-plaintext", "lint-required-tags",
+  "graph-button", "graph-page", "graph-close", "graph-refresh", "graph-search", "graph-type", "graph-summary", "graph-nodes", "graph-edges",
+  "compatibility-button", "compatibility-page", "compatibility-close", "compatibility-refresh", "compatibility-summary", "compatibility-stats", "compatibility-list",
   "git-page-button", "git-page", "git-page-close",
   "remote-status", "remote-badge", "remote-url", "remote-branch", "remote-username", "remote-token", "remote-auto-push", "remote-clear-token", "remote-save", "remote-fetch", "remote-pull", "remote-push", "remote-sync", "remote-remove", "remote-resolution", "remote-merge", "remote-force-push",
   "transfer-button", "transfer-dialog", "transfer-close", "export-scope", "export-category", "export-start", "import-file", "import-strategy", "import-preview", "import-apply", "import-summary", "import-preview-list",
@@ -78,14 +94,20 @@ const elements = Object.fromEntries([
   "blueprint-import-path", "blueprint-import-content", "blueprint-import", "blueprint-from-domain", "blueprint-from-name", "blueprint-from-path", "blueprint-from-content", "blueprint-from-create",
   "documentation-button", "documentation-page", "documentation-close", "documentation-refresh", "documentation-save", "documentation-summary", "documentation-search", "documentation-html", "documentation-preview",
   "security-button", "security-page", "security-close", "security-refresh", "security-summary", "security-stats", "security-list",
-  "traces-button", "traces-page", "traces-close", "traces-refresh", "traces-summary", "trace-search", "trace-domain", "trace-clear-detail", "trace-list", "trace-detail-summary", "trace-detail",
+  "refactor-button", "refactor-page", "refactor-close", "refactor-kind", "refactor-old", "refactor-new", "refactor-preview", "refactor-apply", "refactor-summary", "refactor-list",
+  "secrets-button", "secrets-page", "secrets-close", "secrets-refresh", "secrets-summary", "secret-name", "secret-value", "secret-save", "secret-convert-path", "secret-convert-line", "secret-convert-key", "secret-convert-name", "secret-convert-value", "secret-convert", "secrets-list",
+  "preflight-button", "preflight-page", "preflight-close", "preflight-run", "preflight-summary", "preflight-stats", "preflight-list",
+  "entity-health-button", "entity-health-page", "entity-health-close", "entity-health-refresh", "entity-health-summary", "entity-health-stats", "entity-health-filter", "entity-health-list",
+  "traces-button", "traces-page", "traces-close", "traces-refresh", "traces-summary", "trace-search", "trace-domain", "trace-clear-detail", "trace-run-list", "trace-list", "trace-detail-summary", "trace-detail",
   "resource-dialog", "resource-close", "resource-title", "resource-path", "resource-save", "resource-editor", "resource-highlighting", "resource-line-numbers", "resource-validation", "resource-cursor",
   "template-input", "template-render", "template-result", "template-entities",
+  "impact-dialog", "impact-summary", "impact-body", "impact-risk", "impact-cancel", "impact-back", "impact-confirm",
   "search-replace-button", "search-replace-dialog", "search-replace-close", "replace-search", "replace-value", "replace-case-sensitive", "replace-preview", "replace-apply", "replace-summary", "replace-file-list",
   "branch-status", "branch-current", "branch-new-name", "branch-create", "branch-select", "branch-switch", "branch-compare", "branch-merge", "branch-summary", "branch-diff",
 ].map((id) => [id, document.getElementById(id)]));
 
 let validationTimer;
+let flowTimer;
 let configurationValidationTimer;
 let resourceValidationTimer;
 
@@ -1010,6 +1032,9 @@ function renderDashboard(result) {
     [result.summary.references || 0, "Bezüge"],
     [result.summary.blueprints || 0, "Blueprints"],
     [result.summary.security || 0, "Security-Hinweise"],
+    [result.summary.lint || 0, "Lint-Hinweise"],
+    [result.summary.compatibility || 0, "Kompatibilität"],
+    [result.summary.entityHealth || 0, "Entity-Health"],
     [result.summary.traces || 0, "Traces"],
     [result.summary.unusedScripts, "Möglicherweise ungenutzt"],
     [result.summary.errors, "Fehler"],
@@ -1055,11 +1080,296 @@ async function loadDashboard() {
   }
 }
 
+function reviewRequestBody() {
+  return {
+    changes: state.reviewChanges.map((change) => ({
+      path: change.path,
+      content: change.content,
+      category: change.category,
+      tags: change.tags,
+    })),
+  };
+}
+
+function renderReviewBundle() {
+  state.reviewPreview = null;
+  elements["review-apply"].disabled = true;
+  elements["review-diff"].textContent = "Noch keine Vorschau erstellt.";
+  if (!state.reviewChanges.length) {
+    elements["review-summary"].textContent = "Noch keine Änderung im Paket.";
+    elements["review-list"].replaceChildren(emptyBlock("Aktuelle Datei vormerken, um ein Review-Paket zu starten."));
+    return;
+  }
+  elements["review-summary"].textContent = `${state.reviewChanges.length} Dateien vorgemerkt.`;
+  elements["review-list"].replaceChildren(...state.reviewChanges.map((change, index) => {
+    const item = document.createElement("div");
+    item.className = "import-preview-item";
+    item.innerHTML = `<strong>${escapeHtml(change.path)}</strong><span>${change.content.length} Zeichen · ${escapeHtml(change.category || DEFAULT_CATEGORY)}</span>`;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "dependency-action dashboard-action";
+    button.textContent = "Entfernen";
+    button.addEventListener("click", () => {
+      state.reviewChanges.splice(index, 1);
+      renderReviewBundle();
+    });
+    item.append(button);
+    return item;
+  }));
+}
+
+function addCurrentToReview() {
+  if (!state.selected) {
+    toast("Keine Package-Datei geöffnet.", "error");
+    return;
+  }
+  const change = {
+    path: `packages/${state.selected.path}`,
+    content: elements.editor.value,
+    category: elements["category-select"].value === NEW_CATEGORY ? state.originalCategory : elements["category-select"].value,
+    tags: parseTags(elements["tag-input"].value),
+  };
+  const existing = state.reviewChanges.findIndex((item) => item.path === change.path);
+  if (existing >= 0) state.reviewChanges[existing] = change;
+  else state.reviewChanges.push(change);
+  renderReviewBundle();
+  toast(`${state.selected.path} wurde vorgemerkt.`, "success");
+}
+
+function renderReviewPreview(result) {
+  state.reviewPreview = result;
+  elements["review-summary"].textContent = `${result.summary.changes} Änderungen · ${result.summary.additions} hinzugefügt · ${result.summary.deletions} entfernt · Status ${result.status}`;
+  elements["review-apply"].disabled = !result.ready;
+  elements["review-list"].replaceChildren(...result.files.map((file) => {
+    const item = document.createElement("div");
+    item.className = `dashboard-finding ${file.validation?.valid === false ? "error" : file.action === "create" ? "tip" : "warning"}`;
+    item.innerHTML = `<span class="finding-dot"></span><div><strong>${escapeHtml(file.path)}</strong><small>${escapeHtml(file.action)} · +${file.additions} / -${file.deletions}</small><small>${escapeHtml(file.validation?.message || "")}</small></div>`;
+    return item;
+  }));
+  const checks = result.checks || {};
+  const lint = checks.lint?.counts || {};
+  const compat = checks.compatibility?.counts || {};
+  const conflicts = checks.conflicts?.counts || {};
+  const header = [
+    `Blocker: ${result.blockers}`,
+    `Warnungen: ${result.warnings}`,
+    `Konflikte: ${conflicts.error || 0}/${conflicts.warning || 0}`,
+    `Lint: ${lint.error || 0}/${lint.warning || 0}`,
+    `Kompatibilität: ${compat.error || 0}/${compat.warning || 0}`,
+  ].join(" · ");
+  elements["review-diff"].textContent = `${header}\n\n${result.files.map((file) => file.diff || `# ${file.path}: keine Textänderung`).join("\n\n")}`;
+}
+
+async function previewReview() {
+  if (!state.reviewChanges.length) {
+    toast("Das Änderungspaket ist leer.", "error");
+    return;
+  }
+  elements["review-preview"].disabled = true;
+  try {
+    const result = await api("api/review/preview", {
+      method: "POST",
+      body: JSON.stringify(reviewRequestBody()),
+    });
+    renderReviewPreview(result);
+  } catch (error) { toast(error.message, "error"); }
+  finally { elements["review-preview"].disabled = false; }
+}
+
+async function applyReview() {
+  const preview = state.reviewPreview;
+  if (!preview || !preview.ready) return;
+  if (!confirm(`${preview.summary.changes} Dateien als Review-Paket anwenden?`)) return;
+  elements["review-apply"].disabled = true;
+  try {
+    const result = await api("api/review/apply", {
+      method: "POST",
+      body: JSON.stringify({ ...reviewRequestBody(), stateVersion: preview.stateVersion }),
+    });
+    state.reviewChanges = [];
+    state.reviewPreview = null;
+    await refreshFiles();
+    if (state.selected) await openFile(state.selected.path, true);
+    renderReviewBundle();
+    toast(result.message, "success");
+  } catch (error) {
+    elements["review-apply"].disabled = false;
+    toast(error.message, "error");
+  }
+}
+
+function openReviewPage() {
+  closePages();
+  elements["review-page"].classList.remove("hidden");
+  elements["review-button"].classList.add("active");
+  renderReviewBundle();
+}
+
+function commaList(value) {
+  return String(value || "").split(",").map((item) => item.trim()).filter(Boolean);
+}
+
+function lintRulesFromForm() {
+  return {
+    requireAlias: elements["lint-require-alias"].checked,
+    requireScriptMode: elements["lint-require-script-mode"].checked,
+    requireAutomationId: elements["lint-require-automation-id"].checked,
+    scriptIdPattern: elements["lint-script-pattern"].value.trim(),
+    entityIdPattern: elements["lint-entity-pattern"].value.trim(),
+    allowedEntityDomains: commaList(elements["lint-allowed-domains"].value),
+    forbiddenPlaintext: commaList(elements["lint-forbidden-plaintext"].value),
+    requiredTags: commaList(elements["lint-required-tags"].value),
+  };
+}
+
+function fillLintRules(rules = {}) {
+  elements["lint-require-alias"].checked = rules.requireAlias !== false;
+  elements["lint-require-script-mode"].checked = rules.requireScriptMode !== false;
+  elements["lint-require-automation-id"].checked = rules.requireAutomationId !== false;
+  elements["lint-script-pattern"].value = rules.scriptIdPattern || "^[a-z0-9_]+$";
+  elements["lint-entity-pattern"].value = rules.entityIdPattern || "^[a-z0-9_]+\\.[a-z0-9_]+$";
+  elements["lint-allowed-domains"].value = (rules.allowedEntityDomains || []).join(", ");
+  elements["lint-forbidden-plaintext"].value = (rules.forbiddenPlaintext || []).join(", ");
+  elements["lint-required-tags"].value = (rules.requiredTags || []).join(", ");
+}
+
+function renderFindingList(target, findings, emptyMessage) {
+  if (!findings?.length) {
+    target.replaceChildren(emptyBlock(emptyMessage));
+    return;
+  }
+  target.replaceChildren(...findings.map((finding) => {
+    const item = document.createElement("div");
+    item.className = `dashboard-finding ${finding.severity}`;
+    item.innerHTML = `<span class="finding-dot"></span><div><strong>${escapeHtml(finding.title)}</strong><small>${escapeHtml(finding.message)}</small><small>${escapeHtml((finding.files || []).join(" · "))}${finding.line ? ` · Zeile ${finding.line}` : ""}</small></div>`;
+    if (finding.files?.[0]) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "dependency-action dashboard-action";
+      button.textContent = "Öffnen";
+      button.addEventListener("click", () => openManagedPath(finding.files[0], finding.line));
+      item.append(button);
+    }
+    return item;
+  }));
+}
+
+function renderLint(result) {
+  state.lint = result;
+  fillLintRules(result.rules || {});
+  elements["lint-summary"].textContent = `${result.summary.files} Dateien · ${result.counts.warning} Warnungen · ${result.counts.tip} Tipps`;
+  const stats = [
+    [result.counts.error || 0, "Fehler"],
+    [result.counts.warning || 0, "Warnungen"],
+    [result.counts.tip || 0, "Tipps"],
+    [(result.rules?.allowedEntityDomains || []).length || "Alle", "Domains"],
+  ];
+  elements["lint-stats"].innerHTML = stats.map(([value, label]) => `<div class="quality-stat"><strong>${escapeHtml(String(value))}</strong><span>${escapeHtml(label)}</span></div>`).join("");
+  renderFindingList(elements["lint-list"], result.findings, "Keine Lint-Hinweise gefunden.");
+}
+
+async function loadLint() {
+  const result = await api("api/lint");
+  renderLint(result);
+  return result;
+}
+
+async function saveLintRules() {
+  try {
+    const settings = await api("api/settings", {
+      method: "PUT",
+      body: JSON.stringify({ lintRules: lintRulesFromForm() }),
+    });
+    state.settings = settings;
+    toast("Lint-Regeln gespeichert.", "success");
+    await loadLint();
+  } catch (error) { toast(error.message, "error"); }
+}
+
+async function openLintPage() {
+  closePages();
+  elements["lint-page"].classList.remove("hidden");
+  elements["lint-button"].classList.add("active");
+  try { await loadLint(); } catch (error) { toast(error.message, "error"); }
+}
+
+function renderGraph(result) {
+  state.graph = result;
+  const term = elements["graph-search"].value.trim().toLocaleLowerCase("de");
+  const type = elements["graph-type"].value;
+  const nodes = (result.nodes || []).filter((node) => {
+    if (type && node.type !== type) return false;
+    const haystack = `${node.label} ${node.key} ${node.path || ""} ${node.entityId || ""}`.toLocaleLowerCase("de");
+    return !term || haystack.includes(term);
+  }).slice(0, 300);
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  const edges = (result.edges || []).filter((edge) => (!term && !type) || nodeIds.has(edge.source) || nodeIds.has(edge.target)).slice(0, 300);
+  elements["graph-summary"].textContent = `${result.summary.nodes} Knoten · ${result.summary.edges} Beziehungen`;
+  elements["graph-nodes"].replaceChildren(...(nodes.length ? nodes.map((node) => {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "dashboard-finding tip graph-item";
+    item.innerHTML = `<span class="finding-dot"></span><div><strong>${escapeHtml(node.label)}</strong><small>${escapeHtml(node.type)}${node.domain ? ` · ${escapeHtml(node.domain)}` : ""}</small><small>${escapeHtml(node.path || node.key)}</small></div>`;
+    if (node.path) item.addEventListener("click", () => openManagedPath(node.path, node.line));
+    return item;
+  }) : [emptyBlock("Keine Knoten für den Filter gefunden.")]));
+  elements["graph-edges"].replaceChildren(...(edges.length ? edges.map((edge) => {
+    const source = result.nodes.find((node) => node.id === edge.source);
+    const target = result.nodes.find((node) => node.id === edge.target);
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "dashboard-finding warning graph-item";
+    item.innerHTML = `<span class="finding-dot"></span><div><strong>${escapeHtml(source?.label || edge.source)} → ${escapeHtml(target?.label || edge.target)}</strong><small>${escapeHtml(edge.relation)}</small><small>${escapeHtml(edge.path || "")}${edge.line ? ` · Zeile ${edge.line}` : ""}</small></div>`;
+    if (edge.path) item.addEventListener("click", () => openManagedPath(edge.path, edge.line));
+    return item;
+  }) : [emptyBlock("Keine Beziehungen für den Filter gefunden.")]));
+}
+
+async function loadGraph() {
+  const result = await api("api/graph");
+  renderGraph(result);
+  return result;
+}
+
+async function openGraphPage() {
+  closePages();
+  elements["graph-page"].classList.remove("hidden");
+  elements["graph-button"].classList.add("active");
+  try { await loadGraph(); } catch (error) { toast(error.message, "error"); }
+}
+
+function renderCompatibility(result) {
+  state.compatibility = result;
+  const ha = result.homeAssistant || {};
+  elements["compatibility-summary"].textContent = ha.available ? `Home Assistant ${ha.version || ""} · ${result.counts.warning} Warnungen · ${result.counts.tip} Tipps` : `${ha.message || "HA-Version nicht verfügbar"} · ${result.counts.warning} Warnungen`;
+  const stats = [
+    [ha.available ? ha.version || "Ja" : "Nein", "HA-Version"],
+    [result.counts.error || 0, "Fehler"],
+    [result.counts.warning || 0, "Warnungen"],
+    [result.counts.tip || 0, "Tipps"],
+  ];
+  elements["compatibility-stats"].innerHTML = stats.map(([value, label]) => `<div class="quality-stat"><strong>${escapeHtml(String(value))}</strong><span>${escapeHtml(label)}</span></div>`).join("");
+  renderFindingList(elements["compatibility-list"], result.findings, "Keine Kompatibilitäts-Hinweise gefunden.");
+}
+
+async function loadCompatibility() {
+  const result = await api("api/compatibility");
+  renderCompatibility(result);
+  return result;
+}
+
+async function openCompatibilityPage() {
+  closePages();
+  elements["compatibility-page"].classList.remove("hidden");
+  elements["compatibility-button"].classList.add("active");
+  try { await loadCompatibility(); } catch (error) { toast(error.message, "error"); }
+}
+
 function closePages() {
-  ["dashboard-dialog", "git-page", "objects-dialog", "blueprints-page", "documentation-page", "security-page", "traces-page"].forEach((id) => {
+  ["dashboard-dialog", "review-page", "git-page", "objects-dialog", "blueprints-page", "documentation-page", "security-page", "entity-health-page", "graph-page", "lint-page", "compatibility-page", "refactor-page", "secrets-page", "preflight-page", "traces-page"].forEach((id) => {
     elements[id].classList.add("hidden");
   });
-  ["dashboard-button", "git-page-button", "objects-button", "blueprints-button", "documentation-button", "security-button", "traces-button"].forEach((id) => {
+  ["dashboard-button", "review-button", "git-page-button", "objects-button", "blueprints-button", "documentation-button", "security-button", "entity-health-button", "graph-button", "lint-button", "compatibility-button", "refactor-button", "secrets-button", "preflight-button", "traces-button"].forEach((id) => {
     elements[id].classList.remove("active");
   });
 }
@@ -1638,6 +1948,14 @@ async function runDashboardAction(action) {
     await openBlueprintsPage();
   } else if (action.type === "security") {
     await openSecurityPage();
+  } else if (action.type === "entity-health") {
+    await openEntityHealthPage();
+  } else if (action.type === "lint") {
+    await openLintPage();
+  } else if (action.type === "compatibility") {
+    await openCompatibilityPage();
+  } else if (action.type === "graph") {
+    await openGraphPage();
   } else if (action.type === "traces") {
     await openTracesPage();
   } else if (action.type === "open-managed") {
@@ -1925,11 +2243,235 @@ async function openSecurityPage() {
   try { await loadSecurity(); } catch (error) { toast(error.message, "error"); }
 }
 
+function renderRefactorPreview(result) {
+  state.refactorPreview = result;
+  elements["refactor-summary"].textContent = `${result.matches} Treffer in ${result.files.length} Dateien.`;
+  elements["refactor-apply"].disabled = result.matches === 0;
+  elements["refactor-list"].replaceChildren(...result.files.map((file) => {
+    const item = document.createElement("div");
+    item.className = "import-preview-item";
+    const target = file.newPath ? ` → ${escapeHtml(file.newPath)}` : "";
+    const lines = file.lines?.length ? ` · Zeilen ${file.lines.join(", ")}` : "";
+    item.innerHTML = `<strong>${escapeHtml(file.path)}${target}</strong><span>${file.matches} Treffer${lines}</span>`;
+    return item;
+  }));
+  if (!result.files.length) elements["refactor-list"].replaceChildren(emptyBlock("Keine Treffer gefunden."));
+}
+
+async function previewRefactor() {
+  try {
+    const result = await api("api/refactor/preview", {
+      method: "POST",
+      body: JSON.stringify({
+        kind: elements["refactor-kind"].value,
+        oldValue: elements["refactor-old"].value.trim(),
+        newValue: elements["refactor-new"].value.trim(),
+      }),
+    });
+    renderRefactorPreview(result);
+  } catch (error) { toast(error.message, "error"); }
+}
+
+async function applyRefactor() {
+  const preview = state.refactorPreview;
+  if (!preview || !confirm(`${preview.matches} Treffer in ${preview.files.length} Dateien ändern?`)) return;
+  elements["refactor-apply"].disabled = true;
+  try {
+    const result = await api("api/refactor/apply", {
+      method: "POST",
+      body: JSON.stringify({
+        kind: preview.kind,
+        oldValue: preview.oldValue,
+        newValue: preview.newValue,
+        stateVersion: preview.stateVersion,
+      }),
+    });
+    state.refactorPreview = null;
+    await refreshFiles();
+    if (state.selected) await openFile(state.selected.path, true);
+    elements["refactor-summary"].textContent = result.message;
+    elements["refactor-list"].replaceChildren();
+    toast(result.message, "success");
+  } catch (error) {
+    elements["refactor-apply"].disabled = false;
+    toast(error.message, "error");
+  }
+}
+
+function openRefactorPage() {
+  closePages();
+  elements["refactor-page"].classList.remove("hidden");
+  elements["refactor-button"].classList.add("active");
+}
+
+function renderSecrets(result) {
+  state.secrets = result;
+  elements["secrets-summary"].textContent = `${result.count || 0} Secrets · ${result.summary?.references || 0} Referenzen · ${result.summary?.missing || 0} fehlend`;
+  if (!result.items?.length) {
+    elements["secrets-list"].replaceChildren(emptyBlock("Keine Secrets angelegt."));
+    return;
+  }
+  elements["secrets-list"].replaceChildren(...result.items.map((secret) => {
+    const item = document.createElement("div");
+    item.className = `dashboard-finding ${secret.referenced ? "tip" : "warning"}`;
+    item.innerHTML = `<span class="finding-dot"></span><div><strong>${escapeHtml(secret.name)}</strong><small>${escapeHtml(secret.masked)} · ${secret.referenceCount} Referenzen</small></div>`;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "dependency-action dashboard-action";
+    button.textContent = "Löschen";
+    button.addEventListener("click", () => deleteSecret(secret.name));
+    item.append(button);
+    return item;
+  }));
+}
+
+async function loadSecrets() {
+  const result = await api("api/secrets");
+  renderSecrets(result);
+  return result;
+}
+
+async function openSecretsPage() {
+  closePages();
+  elements["secrets-page"].classList.remove("hidden");
+  elements["secrets-button"].classList.add("active");
+  try { await loadSecrets(); } catch (error) { toast(error.message, "error"); }
+}
+
+async function saveSecret() {
+  try {
+    const result = await api("api/secrets", {
+      method: "POST",
+      body: JSON.stringify({ name: elements["secret-name"].value.trim(), value: elements["secret-value"].value }),
+    });
+    elements["secret-value"].value = "";
+    renderSecrets(result);
+    toast(result.message, "success");
+  } catch (error) { toast(error.message, "error"); }
+}
+
+async function deleteSecret(name) {
+  if (!confirm(`Secret ${name} löschen? Bestehende !secret-Referenzen können danach brechen.`)) return;
+  try {
+    const result = await api("api/secrets", { method: "DELETE", body: JSON.stringify({ name }) });
+    renderSecrets(result);
+    toast(result.message, "success");
+  } catch (error) { toast(error.message, "error"); }
+}
+
+async function convertSecret() {
+  try {
+    const result = await api("api/secrets/convert", {
+      method: "POST",
+      body: JSON.stringify({
+        path: elements["secret-convert-path"].value.trim(),
+        line: Number(elements["secret-convert-line"].value),
+        key: elements["secret-convert-key"].value.trim(),
+        name: elements["secret-convert-name"].value.trim(),
+        value: elements["secret-convert-value"].value,
+      }),
+    });
+    elements["secret-convert-value"].value = "";
+    renderSecrets(result);
+    await refreshFiles();
+    if (state.selected) await openFile(state.selected.path, true);
+    toast(result.message, "success");
+  } catch (error) { toast(error.message, "error"); }
+}
+
+function renderPreflight(result) {
+  state.preflight = result;
+  elements["preflight-summary"].textContent = result.ready
+    ? `Bereit · ${result.warnings} Warnungen`
+    : `${result.blockers} Blocker · ${result.warnings} Warnungen`;
+  const stats = [
+    [result.blockers || 0, "Blocker"],
+    [result.warnings || 0, "Warnungen"],
+    [result.summary?.yamlErrors || 0, "YAML-Fehler"],
+    [result.summary?.securityErrors || 0, "Security-Fehler"],
+    [result.summary?.remoteConfigured ? "Ja" : "Nein", "Remote"],
+  ];
+  elements["preflight-stats"].innerHTML = stats.map(([value, label]) => `<div class="quality-stat"><strong>${escapeHtml(String(value))}</strong><span>${escapeHtml(label)}</span></div>`).join("");
+  elements["preflight-list"].replaceChildren(...(result.checks || []).map((check) => {
+    const item = document.createElement("div");
+    item.className = `dashboard-finding ${check.status === "error" ? "error" : check.status === "warning" ? "warning" : "tip"}`;
+    item.innerHTML = `<span class="finding-dot"></span><div><strong>${escapeHtml(check.title)}</strong><small>${escapeHtml(check.message || "")}</small></div>`;
+    return item;
+  }));
+}
+
+async function loadPreflight() {
+  elements["preflight-summary"].textContent = "Preflight läuft …";
+  const result = await api("api/preflight");
+  renderPreflight(result);
+  return result;
+}
+
+async function openPreflightPage() {
+  closePages();
+  elements["preflight-page"].classList.remove("hidden");
+  elements["preflight-button"].classList.add("active");
+  try { await loadPreflight(); } catch (error) { toast(error.message, "error"); }
+}
+
+function renderEntityHealth(result) {
+  if (!result) return;
+  state.entityHealth = result;
+  const summary = result.summary || {};
+  elements["entity-health-summary"].textContent = result.available
+    ? `${summary.referenced} referenziert · ${summary.unknown} unbekannt · ${summary.unavailable} unavailable · ${summary.disabled} deaktiviert`
+    : result.message || "Home-Assistant-States sind lokal nicht verfügbar.";
+  const stats = [
+    [summary.referenced || 0, "Referenziert"],
+    [summary.known || 0, "HA-States"],
+    [summary.unknown || 0, "Unbekannt"],
+    [summary.unavailable || 0, "Unavailable"],
+    [summary.unused || 0, "Nicht genutzt"],
+  ];
+  elements["entity-health-stats"].innerHTML = stats.map(([value, label]) => `<div class="quality-stat"><strong>${escapeHtml(String(value))}</strong><span>${escapeHtml(label)}</span></div>`).join("");
+  const filter = elements["entity-health-filter"].value;
+  const items = result[filter] || [];
+  if (!items.length) {
+    elements["entity-health-list"].replaceChildren(emptyBlock("Keine Entities in dieser Kategorie."));
+    return;
+  }
+  elements["entity-health-list"].replaceChildren(...items.map((entity) => {
+    const item = document.createElement("div");
+    item.className = `dashboard-finding ${filter === "unknown" || filter === "unavailable" ? "warning" : "tip"}`;
+    const uses = entity.uses || [];
+    item.innerHTML = `<span class="finding-dot"></span><div><strong>${escapeHtml(entity.entityId)}</strong><small>${escapeHtml(entity.name || entity.state || `${entity.count || 0} Verwendungen`)}</small><small>${escapeHtml(uses.slice(0, 3).map((use) => `${use.path || ""}${use.line ? `:${use.line}` : ""}`).join(" · "))}</small></div>`;
+    if (uses[0]?.path) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "dependency-action dashboard-action";
+      button.textContent = "Öffnen";
+      button.addEventListener("click", () => openManagedPath(uses[0].path, uses[0].line));
+      item.append(button);
+    }
+    return item;
+  }));
+}
+
+async function loadEntityHealth() {
+  elements["entity-health-summary"].textContent = "Entity-Health wird geladen …";
+  const result = await api("api/entity-health");
+  renderEntityHealth(result);
+  return result;
+}
+
+async function openEntityHealthPage() {
+  closePages();
+  elements["entity-health-page"].classList.remove("hidden");
+  elements["entity-health-button"].classList.add("active");
+  try { await loadEntityHealth(); } catch (error) { toast(error.message, "error"); }
+}
+
 function renderTraces(result) {
   if (!result) return;
   state.traces = result;
   if (!result.available) {
     elements["traces-summary"].textContent = result.message || "Trace-API ist nicht verfügbar.";
+    elements["trace-run-list"].replaceChildren();
     elements["trace-list"].replaceChildren(emptyBlock(elements["traces-summary"].textContent));
     return;
   }
@@ -1940,6 +2482,18 @@ function renderTraces(result) {
     return (!domain || item.domain === domain) && (!term || haystack.includes(term));
   });
   elements["traces-summary"].textContent = `${result.summary.objects} Objekte · ${result.summary.traces} Traces · ${result.summary.errors} Fehler`;
+  elements["trace-run-list"].replaceChildren(...(result.objects || []).slice(0, 80).map((object) => {
+    const item = document.createElement("div");
+    item.className = "trace-run-item";
+    item.innerHTML = `<span><strong>${escapeHtml(object.alias || object.entityId)}</strong><small>${escapeHtml(object.entityId)} · ${escapeHtml(object.path || "")}</small></span>`;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "dependency-action";
+    button.textContent = "Testlauf";
+    button.addEventListener("click", () => runHaObjectTest(object));
+    item.append(button);
+    return item;
+  }));
   if (!entries.length) {
     elements["trace-list"].replaceChildren(emptyBlock("Keine Trace-Einträge gefunden."));
     return;
@@ -1966,6 +2520,24 @@ async function openTracesPage() {
   elements["traces-page"].classList.remove("hidden");
   elements["traces-button"].classList.add("active");
   try { await loadTraces(); } catch (error) { toast(error.message, "error"); }
+}
+
+async function runHaObjectTest(object) {
+  try {
+    const result = await api("api/ha-object/run", {
+      method: "POST",
+      body: JSON.stringify({
+        domain: object.domain,
+        entityId: object.entityId,
+        skipCondition: true,
+      }),
+    });
+    toast(result.message, "success");
+    await new Promise((resolve) => setTimeout(resolve, 900));
+    const traces = await loadTraces();
+    const latest = traces.entries?.find((entry) => entry.entityId === object.entityId);
+    if (latest) await loadTraceDetail(latest);
+  } catch (error) { toast(error.message, "error"); }
 }
 
 async function loadTraceDetail(entry) {
@@ -2204,16 +2776,104 @@ async function openFile(path, force = false) {
     setDirty();
     updateEditorRendering();
     scheduleValidation();
+    scheduleFlow();
     loadDependencies().catch((error) => toast(error.message, "error"));
     renderFiles();
     elements.sidebar.classList.remove("open");
   } catch (error) { toast(error.message, "error"); }
 }
 
+function impactCodes(values = []) {
+  if (!values.length) return document.createTextNode("Keine");
+  const fragment = document.createDocumentFragment();
+  values.slice(0, 20).forEach((value) => {
+    const code = document.createElement("code");
+    code.textContent = value;
+    fragment.append(code);
+  });
+  if (values.length > 20) fragment.append(document.createTextNode(` +${values.length - 20} weitere`));
+  return fragment;
+}
+
+function impactSection(title, values) {
+  const section = document.createElement("section");
+  section.className = "impact-section";
+  const heading = document.createElement("h3");
+  heading.textContent = title;
+  const body = document.createElement("div");
+  body.append(impactCodes(values));
+  section.append(heading, body);
+  return section;
+}
+
+function renderImpact(impact) {
+  const summary = impact.summary || {};
+  const cards = [
+    [summary.addedEntities || 0, "Entities hinzu"],
+    [summary.removedEntities || 0, "Entities weg"],
+    [summary.addedScripts || 0, "Scripts hinzu"],
+    [summary.removedScripts || 0, "Scripts weg"],
+    [summary.incomingReferences || 0, "Eingehende Bezüge"],
+    [summary.addedSecrets || 0, "Secrets hinzu"],
+    [summary.addedBlueprints || 0, "Blueprints"],
+    [summary.traceCandidates || 0, "Trace-Kandidaten"],
+  ];
+  const grid = document.createElement("div");
+  grid.className = "impact-grid";
+  grid.innerHTML = cards.map(([value, label]) => `<div class="impact-card"><strong>${escapeHtml(String(value))}</strong><span>${escapeHtml(label)}</span></div>`).join("");
+  const findings = document.createElement("section");
+  findings.className = "impact-section";
+  findings.innerHTML = `<h3>Hinweise</h3>${impact.findings?.length ? impact.findings.map((item) => `<p><strong>${escapeHtml(item.title)}</strong><br><small>${escapeHtml(item.message)}</small></p>`).join("") : "<p><small>Keine riskanten Auswirkungen erkannt.</small></p>"}`;
+  elements["impact-summary"].textContent = `${impact.path} · Risiko: ${impact.risk}`;
+  elements["impact-risk"].textContent = impact.risk === "error" ? "Fehler vor dem Speichern prüfen" : impact.risk === "warning" ? "Warnungen prüfen" : "Impact geprüft";
+  elements["impact-confirm"].textContent = impact.risk === "error" ? "Trotz Fehler speichern" : "Speichern";
+  elements["impact-body"].replaceChildren(
+    grid,
+    findings,
+    impactSection("Neue Entities", impact.entities?.added || []),
+    impactSection("Entfernte Entities", impact.entities?.removed || []),
+    impactSection("Unbekannte Entities", impact.entities?.unknown || []),
+    impactSection("Betroffene Scripts/Traces", impact.traces || []),
+    impactSection("Secrets", [...(impact.secrets?.added || []).map((item) => `+ ${item}`), ...(impact.secrets?.removed || []).map((item) => `- ${item}`)]),
+    impactSection("Blueprints", [...(impact.blueprints?.added || []).map((item) => `+ ${item}`), ...(impact.blueprints?.removed || []).map((item) => `- ${item}`)]),
+  );
+}
+
+function confirmImpact(impact) {
+  renderImpact(impact);
+  elements["impact-dialog"].showModal();
+  return new Promise((resolve) => {
+    state.impactResolver = resolve;
+  });
+}
+
+function resolveImpact(confirmed) {
+  if (state.impactResolver) state.impactResolver(confirmed);
+  state.impactResolver = null;
+  elements["impact-dialog"].close();
+}
+
+async function previewSaveImpact() {
+  return api("api/impact", {
+    method: "POST",
+    body: JSON.stringify({
+      path: state.selected.path,
+      content: elements.editor.value,
+      version: state.selected.version,
+    }),
+  });
+}
+
 async function saveCurrent() {
   if (!state.selected || !state.dirty) return;
   elements["save-button"].disabled = true;
   try {
+    const impact = await previewSaveImpact();
+    const confirmed = await confirmImpact(impact);
+    if (!confirmed) {
+      elements["save-button"].disabled = false;
+      return;
+    }
     const file = await api("api/file", {
       method: "PUT",
       body: JSON.stringify({
@@ -2230,6 +2890,7 @@ async function saveCurrent() {
     renderFileHomeAssistantCheck(file.configurationCheck);
     await refreshFiles();
     await loadDependencies();
+    scheduleFlow();
     toastSaveResult(file, "Datei gespeichert.");
     if (state.settings?.afterSave === "dashboard") await openDashboard();
   } catch (error) {
@@ -2416,6 +3077,58 @@ async function loadDependencies() {
   elements["dependency-summary"].innerHTML = "<strong>Script-Abhängigkeiten</strong><span>Analyse läuft …</span>";
   const result = await api(`api/dependencies?path=${encodeURIComponent(state.selected.path)}`);
   if (state.selected?.path === result.focus?.path) renderDependencies(result);
+}
+
+function renderFlow(result) {
+  state.flow = result;
+  if (!result.valid) {
+    elements["flow-summary"].className = "analysis-summary invalid";
+    elements["flow-summary"].innerHTML = `<strong>Ablaufdiagramm</strong><span>${escapeHtml(result.message || "YAML ist ungültig.")}</span>`;
+    elements["flow-diagram"].replaceChildren();
+    return;
+  }
+  const summary = result.summary || { flows: 0, nodes: 0, edges: 0 };
+  elements["flow-summary"].className = `analysis-summary ${summary.flows ? "clean" : "checking"}`;
+  elements["flow-summary"].innerHTML = `<strong>${summary.flows} Abläufe</strong><span>${summary.nodes} Knoten · ${summary.edges} Verbindungen</span>`;
+  if (!result.flows?.length) {
+    elements["flow-diagram"].replaceChildren(emptyBlock("Keine Automation- oder Script-Abläufe erkannt."));
+    return;
+  }
+  elements["flow-diagram"].replaceChildren(...result.flows.map((flow) => {
+    const card = document.createElement("div");
+    card.className = "flow-card";
+    const title = document.createElement("strong");
+    title.textContent = `${flow.domain}: ${flow.alias}`;
+    card.append(title);
+    for (const node of flow.nodes) {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = `flow-node ${node.type} depth-${Math.min(Number(node.depth || 0), 4)}`;
+      const indent = Math.min(Number(node.depth || 0), 4) * 14;
+      item.style.marginLeft = `${indent}px`;
+      item.style.width = `calc(100% - ${indent}px)`;
+      item.innerHTML = `<strong>${escapeHtml(node.label || node.type)}</strong><small>${escapeHtml(node.detail || "")}${node.line ? ` · Zeile ${node.line}` : ""}</small>`;
+      item.addEventListener("click", () => jumpToLine(node.line));
+      card.append(item);
+    }
+    return card;
+  }));
+}
+
+function scheduleFlow() {
+  clearTimeout(flowTimer);
+  elements["flow-summary"].className = "analysis-summary checking";
+  elements["flow-summary"].innerHTML = "<strong>Ablaufdiagramm</strong><span>Analyse läuft …</span>";
+  flowTimer = setTimeout(async () => {
+    if (!state.selected) return;
+    try {
+      const result = await api("api/flow", {
+        method: "POST",
+        body: JSON.stringify({ content: elements.editor.value, path: state.selected.path }),
+      });
+      renderFlow(result);
+    } catch (error) { toast(error.message, "error"); }
+  }, 500);
 }
 
 function scheduleValidation() {
@@ -2703,7 +3416,7 @@ async function reloadScripts() {
   } catch (error) { toast(error.message, "error"); }
 }
 
-elements.editor.addEventListener("input", () => { hideCompletion(); updateEditorRendering(); setDirty(); scheduleValidation(); });
+elements.editor.addEventListener("input", () => { hideCompletion(); updateEditorRendering(); setDirty(); scheduleValidation(); scheduleFlow(); });
 elements.editor.addEventListener("scroll", syncScroll);
 elements.editor.addEventListener("click", updateCursor);
 elements.editor.addEventListener("keyup", updateCursor);
@@ -2745,6 +3458,27 @@ elements["file-search"].addEventListener("input", renderFiles);
 elements["dashboard-button"].addEventListener("click", openDashboard);
 elements["dashboard-close"].addEventListener("click", openScriptManager);
 elements["dashboard-refresh"].addEventListener("click", loadDashboard);
+elements["review-button"].addEventListener("click", openReviewPage);
+elements["review-close"].addEventListener("click", openScriptManager);
+elements["review-add-current"].addEventListener("click", addCurrentToReview);
+elements["review-clear"].addEventListener("click", () => {
+  state.reviewChanges = [];
+  renderReviewBundle();
+});
+elements["review-preview"].addEventListener("click", previewReview);
+elements["review-apply"].addEventListener("click", applyReview);
+elements["lint-button"].addEventListener("click", openLintPage);
+elements["lint-close"].addEventListener("click", openScriptManager);
+elements["lint-refresh"].addEventListener("click", () => loadLint().catch((error) => toast(error.message, "error")));
+elements["lint-save"].addEventListener("click", saveLintRules);
+elements["graph-button"].addEventListener("click", openGraphPage);
+elements["graph-close"].addEventListener("click", openScriptManager);
+elements["graph-refresh"].addEventListener("click", () => loadGraph().catch((error) => toast(error.message, "error")));
+elements["graph-search"].addEventListener("input", () => state.graph && renderGraph(state.graph));
+elements["graph-type"].addEventListener("change", () => state.graph && renderGraph(state.graph));
+elements["compatibility-button"].addEventListener("click", openCompatibilityPage);
+elements["compatibility-close"].addEventListener("click", openScriptManager);
+elements["compatibility-refresh"].addEventListener("click", () => loadCompatibility().catch((error) => toast(error.message, "error")));
 elements["git-page-button"].addEventListener("click", openGitPage);
 elements["git-page-close"].addEventListener("click", openScriptManager);
 elements["branch-create"].addEventListener("click", createBranch);
@@ -2803,6 +3537,38 @@ document.querySelectorAll(".documentation-tab").forEach((tab) => tab.addEventLis
 elements["security-button"].addEventListener("click", openSecurityPage);
 elements["security-close"].addEventListener("click", openScriptManager);
 elements["security-refresh"].addEventListener("click", () => loadSecurity().catch((error) => toast(error.message, "error")));
+elements["refactor-button"].addEventListener("click", openRefactorPage);
+elements["refactor-close"].addEventListener("click", openScriptManager);
+elements["refactor-preview"].addEventListener("click", previewRefactor);
+elements["refactor-apply"].addEventListener("click", applyRefactor);
+elements["refactor-kind"].addEventListener("change", () => {
+  const placeholders = {
+    entity: ["light.alt", "light.neu"],
+    helper_entity: ["input_boolean.alt", "input_boolean.neu"],
+    scene: ["scene.abend_alt", "scene.abend_neu"],
+    automation: ["automation.alt", "automation.neu"],
+    device_id: ["device_alt", "device_neu"],
+    area_id: ["kueche_alt", "kueche_neu"],
+    package: ["licht/alt.yaml", "licht/neu.yaml"],
+  };
+  const [oldPlaceholder, newPlaceholder] = placeholders[elements["refactor-kind"].value] || placeholders.entity;
+  elements["refactor-old"].placeholder = oldPlaceholder;
+  elements["refactor-new"].placeholder = newPlaceholder;
+  state.refactorPreview = null;
+  elements["refactor-apply"].disabled = true;
+});
+elements["secrets-button"].addEventListener("click", openSecretsPage);
+elements["secrets-close"].addEventListener("click", openScriptManager);
+elements["secrets-refresh"].addEventListener("click", () => loadSecrets().catch((error) => toast(error.message, "error")));
+elements["secret-save"].addEventListener("click", saveSecret);
+elements["secret-convert"].addEventListener("click", convertSecret);
+elements["preflight-button"].addEventListener("click", openPreflightPage);
+elements["preflight-close"].addEventListener("click", openScriptManager);
+elements["preflight-run"].addEventListener("click", () => loadPreflight().catch((error) => toast(error.message, "error")));
+elements["entity-health-button"].addEventListener("click", openEntityHealthPage);
+elements["entity-health-close"].addEventListener("click", openScriptManager);
+elements["entity-health-refresh"].addEventListener("click", () => loadEntityHealth().catch((error) => toast(error.message, "error")));
+elements["entity-health-filter"].addEventListener("change", () => renderEntityHealth(state.entityHealth));
 elements["traces-button"].addEventListener("click", openTracesPage);
 elements["traces-close"].addEventListener("click", openScriptManager);
 elements["traces-refresh"].addEventListener("click", () => loadTraces().catch((error) => toast(error.message, "error")));
@@ -2927,6 +3693,13 @@ elements["template-input"].addEventListener("keydown", (event) => {
     event.preventDefault();
     renderTemplate();
   }
+});
+elements["impact-confirm"].addEventListener("click", () => resolveImpact(true));
+elements["impact-back"].addEventListener("click", () => resolveImpact(false));
+elements["impact-cancel"].addEventListener("click", () => resolveImpact(false));
+elements["impact-dialog"].addEventListener("cancel", (event) => {
+  event.preventDefault();
+  resolveImpact(false);
 });
 elements["save-button"].addEventListener("click", saveCurrent);
 elements["new-button"].addEventListener("click", openNewDialog);

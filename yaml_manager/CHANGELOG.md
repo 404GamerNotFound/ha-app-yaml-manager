@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.4.0 - 2026-06-26
+
+- Entity-Refactoring-Seite mit exakter Entity-ID-Vorschau und geschützter Anwendung über alle verwalteten YAML-Dateien ergänzt
+- Secrets-Manager für maskiertes Anlegen, Aktualisieren und Löschen von `secrets.yaml`-Einträgen ergänzt
+- Klartextwerte können in `!secret`-Referenzen plus `secrets.yaml`-Eintrag umgewandelt werden
+- Preflight-Seite für YAML, Package-Konflikte, Security, Entity-Health, Home-Assistant-Check, Dokumentation und Git ergänzt
+- Neue Backend-Module `entity_refactor.py`, `secrets_manager.py` und `preflight.py` sowie Tests für die neuen Workflows ergänzt
+
+## 1.3.0 - 2026-06-26
+
+- Visuelle Flow-Ansicht für Scripts und Automationen mit Triggern, Bedingungen, Choose-Zweigen, Wiederholungen, Services und Zeilensprung ergänzt
+- Impact-Analyse vor dem Speichern ergänzt, inklusive geänderter Entities, Referenzen, Scripts, Secrets, Blueprints und Trace-Kandidaten
+- Entity-Health-Seite für unbekannte, unavailable, deaktivierte und nicht in verwaltetem YAML genutzte Entities ergänzt
+- Dashboard um Entity-Health-Kennzahl und direkte Entity-Health-Hinweise erweitert
+- Automation- und Script-Testläufe aus der Trace-Seite über `script.turn_on` und `automation.trigger` ergänzt
+- Neue Backend-Module `flow.py`, `impact.py` und `entity_health.py` sowie Tests für die neuen Analysen ergänzt
+
 ## 1.2.0 - 2026-06-25
 
 - Interaktive interne Doku-Seite mit Übersicht, Objektgraph, Entity-Liste, Änderungsverlauf und Markdown-Ansicht ergänzt

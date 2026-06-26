@@ -271,8 +271,8 @@ button { color: inherit; }
 .helpers-header { display: flex; justify-content: space-between; align-items: center; padding: 17px 15px 12px; }
 .helpers-header div { display: flex; flex-direction: column; }
 .helpers-header span { color: var(--muted); font-size: 11px; }
-.helper-tabs { display: grid; grid-template-columns: repeat(7, 1fr); padding: 0 8px; border-bottom: 1px solid var(--border); }
-.helper-tab { height: 36px; border: 0; border-bottom: 2px solid transparent; color: var(--muted); background: transparent; cursor: pointer; font-size: 11px; font-weight: 650; }
+.helper-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 0 8px; border-bottom: 1px solid var(--border); }
+.helper-tab { min-width: 0; height: 32px; overflow: hidden; border: 0; border-bottom: 2px solid transparent; color: var(--muted); background: transparent; cursor: pointer; font-size: 11px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
 .helper-tab.active { color: var(--primary-dark); border-color: var(--primary); }
 .helper-view { padding: 13px 12px; }
 .helper-intro { margin: 0 2px 12px; color: var(--muted); font-size: 11px; }
@@ -304,6 +304,17 @@ button.analysis-finding:hover { border-color: var(--primary); }
 .dependency-item small { overflow: hidden; color: var(--muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .dependency-actions { display: flex; gap: 4px; flex: none; }
 .dependency-action { padding: 4px 6px; color: var(--primary-dark); background: var(--primary-soft); border: 0; border-radius: 5px; cursor: pointer; font-size: 9px; font-weight: 700; }
+.flow-diagram { display: grid; gap: 8px; }
+.flow-card { padding: 9px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+.flow-card > strong { display: block; margin-bottom: 7px; font-size: 11px; }
+.flow-node { position: relative; width: 100%; box-sizing: border-box; margin-top: 6px; padding: 8px 9px; display: grid; gap: 2px; color: var(--text); background: var(--surface-soft); border: 1px solid var(--border); border-radius: 7px; cursor: pointer; text-align: left; }
+.flow-node::before { content: ""; position: absolute; left: -8px; top: -8px; bottom: 50%; width: 1px; background: var(--border); }
+.flow-node.depth-0::before { display: none; }
+.flow-node strong { font-size: 11px; }
+.flow-node small { color: var(--muted); font-size: 10px; overflow-wrap: anywhere; }
+.flow-node.service { border-color: rgba(46, 155, 97, .35); }
+.flow-node.condition, .flow-node.choose, .flow-node.branch { border-color: rgba(210, 138, 25, .4); }
+.flow-node.repeat, .flow-node.wait, .flow-node.delay { border-color: rgba(79, 139, 190, .35); }
 .dependency-empty { padding: 9px; color: var(--muted); background: var(--surface-soft); border-radius: 8px; font-size: 10px; }
 .outline-list { display: grid; gap: 5px; margin-top: 10px; }
 .outline-item { width: 100%; min-height: 30px; padding: 6px 8px; display: flex; align-items: center; gap: 8px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 7px; cursor: pointer; text-align: left; }
@@ -452,13 +463,13 @@ dialog.history-dialog, dialog.conflict-dialog { width: min(920px, calc(100vw - 2
 .conflict-item small { color: var(--muted); font-size: 10px; }
 .conflict-files { color: var(--primary-dark) !important; font-family: var(--font-code); overflow-wrap: anywhere; }
 
-.dashboard-page, .objects-page, .git-page, .blueprints-page, .documentation-page, .security-page, .traces-page { position: fixed; z-index: 15; top: 64px; right: 0; bottom: 0; left: 270px; min-height: 0; background: var(--surface-soft); }
-.dashboard-page-content, .objects-page-content, .git-page-content, .blueprints-page-content, .documentation-page-content, .security-page-content, .traces-page-content { width: min(1180px, 100%); height: 100%; min-height: 0; margin: 0 auto; display: grid; grid-template-rows: auto minmax(0, 1fr); background: var(--surface); border-inline: 1px solid var(--border); }
+.dashboard-page, .review-page, .objects-page, .git-page, .blueprints-page, .documentation-page, .security-page, .entity-health-page, .graph-page, .lint-page, .compatibility-page, .refactor-page, .secrets-page, .preflight-page, .traces-page { position: fixed; z-index: 15; top: 64px; right: 0; bottom: 0; left: 270px; min-height: 0; background: var(--surface-soft); }
+.dashboard-page-content, .review-page-content, .objects-page-content, .git-page-content, .blueprints-page-content, .documentation-page-content, .security-page-content, .entity-health-page-content, .graph-page-content, .lint-page-content, .compatibility-page-content, .refactor-page-content, .secrets-page-content, .preflight-page-content, .traces-page-content { width: min(1180px, 100%); height: 100%; min-height: 0; margin: 0 auto; display: grid; grid-template-rows: auto minmax(0, 1fr); background: var(--surface); border-inline: 1px solid var(--border); }
 dialog.transfer-dialog { width: min(1040px, calc(100vw - 28px)); height: min(820px, calc(100vh - 28px)); max-width: none; max-height: none; }
 .transfer-dialog[open] { display: block; }
 .transfer-dialog-content { height: 100%; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); }
 .admin-dialog-header { margin: 0; padding: 16px 18px 12px; border-bottom: 1px solid var(--border); }
-.dashboard-body, .transfer-body, .git-body, .blueprint-body, .documentation-body, .security-body, .traces-body { min-height: 0; padding: 16px; overflow-y: auto; display: grid; align-content: start; gap: 14px; background: var(--surface-soft); }
+.dashboard-body, .review-body, .transfer-body, .git-body, .blueprint-body, .documentation-body, .security-body, .entity-health-body, .graph-body, .lint-body, .compatibility-body, .refactor-body, .secrets-body, .preflight-body, .traces-body { min-height: 0; padding: 16px; overflow-y: auto; display: grid; align-content: start; gap: 14px; background: var(--surface-soft); }
 .quality-overview { display: grid; grid-template-columns: 145px minmax(0, 1fr); gap: 14px; }
 .quality-score { min-height: 125px; display: grid; place-content: center; justify-items: center; color: var(--primary-dark); background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
 .quality-score strong { font-size: 38px; line-height: 1; }
@@ -544,8 +555,21 @@ dialog.transfer-dialog { width: min(1040px, calc(100vw - 28px)); height: min(820
 .security-stats { margin-top: 12px; display: grid; grid-template-columns: repeat(5, minmax(100px, 1fr)); gap: 9px; }
 .security-list { margin-top: 12px; display: grid; gap: 7px; }
 .security-list .dashboard-finding { grid-template-columns: 8px minmax(0, 1fr) auto; align-items: center; background: var(--surface-soft); }
+.review-diff { min-height: 240px; max-height: 460px; overflow: auto; }
+.lint-grid { margin-top: 12px; }
+.graph-layout { min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+.graph-list { max-height: 520px; overflow-y: auto; }
+.graph-item { width: 100%; color: var(--text); text-align: left; background: var(--surface-soft); cursor: pointer; }
+.graph-item:hover { border-color: var(--primary); background: var(--primary-soft); }
+.entity-health-body select { min-width: 170px; height: 34px; padding: 0 8px; color: var(--text); background: var(--surface-soft); border: 1px solid var(--border); border-radius: 7px; }
+.secrets-convert-controls { grid-template-columns: minmax(150px, 1fr) 90px minmax(120px, .8fr) minmax(130px, .8fr) minmax(150px, 1fr) auto; }
 .traces-body { grid-template-columns: minmax(360px, .9fr) minmax(360px, 1.1fr); align-content: stretch; }
-.traces-body > .admin-section { min-height: 0; display: grid; grid-template-rows: auto auto minmax(0, 1fr); }
+.traces-body > .admin-section { min-height: 0; display: grid; grid-template-rows: auto auto auto minmax(0, 1fr); }
+.trace-run-list { display: grid; gap: 6px; }
+.trace-run-item { padding: 8px 9px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; background: var(--surface-soft); border: 1px solid var(--border); border-radius: 8px; }
+.trace-run-item strong, .trace-run-item small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trace-run-item strong { font-size: 11px; }
+.trace-run-item small { color: var(--muted); font-size: 10px; }
 .trace-list { min-height: 0; max-height: calc(100vh - 270px); overflow-y: auto; display: grid; align-content: start; gap: 7px; }
 .trace-item { width: 100%; min-height: 58px; padding: 9px 10px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; color: var(--text); background: var(--surface-soft); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; text-align: left; }
 .trace-item:hover { border-color: var(--primary); background: var(--primary-soft); }
@@ -557,6 +581,15 @@ dialog.transfer-dialog { width: min(1040px, calc(100vw - 28px)); height: min(820
 .trace-item small { grid-column: 1 / -1; color: var(--muted); font-size: 10px; }
 .trace-detail-section { grid-template-rows: auto minmax(0, 1fr) !important; }
 .trace-detail { min-height: 0; margin: 0; padding: 13px; overflow: auto; color: #d9e4e8; background: #131c20; border: 1px solid #2d3d44; border-radius: 8px; font: 11px/1.5 var(--font-code); white-space: pre-wrap; overflow-wrap: anywhere; }
+.impact-dialog-content { grid-template-rows: auto minmax(0, 1fr) auto; }
+.impact-body { min-height: 0; padding: 14px; overflow-y: auto; display: grid; align-content: start; gap: 10px; background: var(--surface-soft); }
+.impact-grid { display: grid; grid-template-columns: repeat(4, minmax(110px, 1fr)); gap: 8px; }
+.impact-card { padding: 11px; display: grid; gap: 2px; color: var(--muted); background: var(--surface); border: 1px solid var(--border); border-radius: 9px; }
+.impact-card strong { color: var(--text); font-size: 20px; }
+.impact-card span { font-size: 10px; }
+.impact-section { padding: 11px; display: grid; gap: 7px; background: var(--surface); border: 1px solid var(--border); border-radius: 9px; }
+.impact-section h3 { margin: 0; font-size: 12px; }
+.impact-section code { display: inline-block; margin: 2px 4px 2px 0; padding: 3px 5px; color: var(--primary-dark); background: var(--primary-soft); border-radius: 5px; font-size: 10px; }
 .transfer-body { grid-template-columns: 1fr; }
 .settings-body { min-height: 0; padding: 16px; overflow-y: auto; display: grid; align-content: start; gap: 14px; background: var(--surface-soft); }
 .settings-section h3 { margin-bottom: 11px; }
@@ -633,7 +666,7 @@ dialog.transfer-dialog { width: min(1040px, calc(100vw - 28px)); height: min(820
   .helpers { position: fixed; top: 64px; right: 0; bottom: 0; width: 310px; box-shadow: var(--shadow); transform: translateX(105%); transition: transform .2s ease; }
   .helpers.open { transform: translateX(0); }
   .mobile-only#helpers-toggle, .helpers .mobile-only { display: grid; }
-  .dashboard-page, .objects-page, .git-page, .blueprints-page, .documentation-page, .security-page, .traces-page { left: 245px; }
+  .dashboard-page, .review-page, .objects-page, .git-page, .blueprints-page, .documentation-page, .security-page, .entity-health-page, .graph-page, .lint-page, .compatibility-page, .refactor-page, .secrets-page, .preflight-page, .traces-page { left: 245px; }
   .documentation-html { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .traces-body { grid-template-columns: 1fr; }
 }
@@ -668,8 +701,9 @@ dialog.transfer-dialog { width: min(1040px, calc(100vw - 28px)); height: min(820
   dialog.history-dialog, dialog.conflict-dialog { width: calc(100vw - 12px); height: calc(100vh - 12px); }
   dialog.transfer-dialog { width: calc(100vw - 12px); height: calc(100vh - 12px); }
   .branch-controls, .search-replace-controls, .object-toolbar { grid-template-columns: 1fr; }
-  .dashboard-page, .objects-page, .git-page, .blueprints-page, .documentation-page, .security-page, .traces-page { top: 56px; left: 0; }
-  .dashboard-page-content, .objects-page-content, .git-page-content, .blueprints-page-content, .documentation-page-content, .security-page-content, .traces-page-content { border-inline: 0; }
+  .secrets-convert-controls { grid-template-columns: 1fr; }
+  .dashboard-page, .review-page, .objects-page, .git-page, .blueprints-page, .documentation-page, .security-page, .entity-health-page, .graph-page, .lint-page, .compatibility-page, .refactor-page, .secrets-page, .preflight-page, .traces-page { top: 56px; left: 0; }
+  .dashboard-page-content, .review-page-content, .objects-page-content, .git-page-content, .blueprints-page-content, .documentation-page-content, .security-page-content, .entity-health-page-content, .graph-page-content, .lint-page-content, .compatibility-page-content, .refactor-page-content, .secrets-page-content, .preflight-page-content, .traces-page-content { border-inline: 0; }
   .object-item { grid-template-columns: minmax(0, 1fr) auto; }
   .object-location, .object-references { grid-column: 1 / -1; }
   .configuration-toolbar { align-items: stretch; flex-wrap: wrap; padding: 8px; }
@@ -683,6 +717,8 @@ dialog.transfer-dialog { width: min(1040px, calc(100vw - 28px)); height: min(820
   .quality-score { min-height: 95px; }
   .quality-stats { grid-template-columns: repeat(2, minmax(90px, 1fr)); }
   .security-stats, .documentation-html { grid-template-columns: 1fr; }
+  .graph-layout { grid-template-columns: 1fr; }
+  .impact-grid { grid-template-columns: repeat(2, minmax(100px, 1fr)); }
   .documentation-toolbar { grid-template-columns: 1fr; }
   .security-list .dashboard-finding { grid-template-columns: 8px minmax(0, 1fr); }
   .security-list .dashboard-action { grid-column: 2; justify-self: start; }

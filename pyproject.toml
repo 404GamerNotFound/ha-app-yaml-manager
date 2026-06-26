@@ -1,6 +1,6 @@
 [project]
 name = "ha-app-yaml-manager"
-version = "1.2.0"
+version = "1.4.0"
 description = "Home Assistant app for managing YAML scripts, automations, scenes, and packages."
 readme = "README.md"
 requires-python = ">=3.10"

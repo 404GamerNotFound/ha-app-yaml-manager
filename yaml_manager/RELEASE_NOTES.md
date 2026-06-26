@@ -1,74 +1,60 @@
-# Release Notes 1.2.0
+# Release Notes 1.4.0
 
-Veröffentlicht am 25. Juni 2026.
+Veröffentlicht am 26. Juni 2026.
 
-## Interaktive Dokumentation
+## Entity-Refactoring
 
-Die Seite **Doku** zeigt die generierte Dokumentation jetzt zusätzlich als
-interne HTML-Ansicht. Tabs trennen Übersicht, Objektgraph, Entitäten,
-Änderungen und Markdown. Der Filter durchsucht die strukturierten Daten direkt
-im Browser.
+Die neue Seite **Refactor** ändert Entity-IDs über alle verwalteten YAML-Dateien
+hinweg. Die Vorschau zeigt Treffer, Dateien und Zeilen. Die Anwendung ist
+entity-exakt, damit `light.alt` nicht versehentlich `light.alt_extra` verändert.
 
-Der Backend-Generator liefert dafür neben der Markdown-Datei ein `data`-Objekt
-mit Package-Dateien, HA-Objekten, Referenzen, Graph-Kanten, Entity-Nutzung,
-Konflikten und letzten Git-Commits.
+Beim Anwenden laufen die bestehenden Schutzmechanismen: Zustandshash,
+YAML-Prüfung, Package-Konfliktprüfung, Backups, atomarer Austausch, Git-Commit,
+Auto-Push-Schutz und Home-Assistant-Konfigurationsprüfung.
 
-## Sicherheit und Git-Push-Warnung
+## Secrets-Manager
 
-Die neue Seite **Sicherheit** scannt alle verwalteten YAML-Dateien auf
-`!secret`-Referenzen, fehlende Einträge in `secrets.yaml`, mögliche Klartext-
-Tokens in URL-Parametern oder typischen Secret-Feldern und wahrscheinlich
-ungenutzte Secrets.
+Die neue Seite **Secrets** verwaltet `/config/secrets.yaml` maskiert. Secret-
+Werte werden nie in API-Antworten zurückgegeben. Unterstützt werden:
 
-Vor Git-Push, sicherer Synchronisation, Merge-Push und Force-Push ruft das
-Frontend dieselbe Prüfung über `/api/security/push-warning` auf. Kritische
-Hinweise müssen bewusst bestätigt werden, bevor die Remote-Aktion startet.
-Automatische Pushes nach Speichervorgängen werden bei riskanten Funden
-serverseitig blockiert und als `gitSync`-Status gemeldet.
+- Secret anlegen oder aktualisieren,
+- Secret löschen,
+- Referenzanzahl anzeigen,
+- Klartext-Zeile in `!secret <name>` umwandeln und den Wert gleichzeitig in
+  `secrets.yaml` schreiben.
 
-## Jinja-Template-Tester
+Auch diese Änderungen erzeugen Backups und Git-Commits. Die bestehende
+Security-Prüfung bleibt die Quelle für fehlende und ungenutzte Secret-Hinweise.
 
-Der rechte Hilfebereich enthält den neuen Tab **Templates**. Dort kann ein
-Jinja-Template gegen Home Assistants `/api/template` gerendert werden. Die App
-zeigt das Ergebnis oder die Fehlermeldung und extrahiert verwendete Entitäten
-aus `states(...)`, `is_state(...)`, `state_attr(...)` und `states.domain.name`.
+## Preflight
 
-Ohne Supervisor-Token bleibt der Tester sichtbar, meldet aber die nicht
-verfügbare Home-Assistant-API.
+Die neue Seite **Preflight** bündelt alle Prüfungen vor dem Push:
 
-## Trace-/Debug-Ansicht
+- YAML-Syntax,
+- Package-Konflikte,
+- Security und Secrets,
+- Entity-Health,
+- Home-Assistant-Konfigurationscheck,
+- Dokumentationsstatus,
+- Git-Remote-Status.
 
-Die neue Seite **Traces** sammelt die letzten Ausführungen erkannter Automationen
-und Scripts über Home Assistants Trace-API. Die Liste zeigt Objekt, Entity-ID,
-Zeitpunkt, Status, letzten Schritt und Fehler. Ein Klick lädt die Detaildaten
-einer Ausführung als JSON, damit Variablen, Trigger und Schritte gezielt
-untersucht werden können.
-
-## Dashboard-Aktionen
-
-Dashboard-Hinweise enthalten nun direkte Aktionen. Je nach Hinweis öffnet die App
-die Konfliktübersicht, die Blueprint-Seite, die Sicherheitsprüfung, die
-Trace-Ansicht oder springt in die betroffene YAML-Datei und Zeile. Dadurch wird
-das Dashboard stärker zu einem Arbeitsbereich statt nur zu einer Übersicht.
+Die Antwort unterscheidet Blocker und Warnungen. Damit gibt es einen klaren
+„bereit zum Push“-Status, ohne die einzelnen Detailseiten öffnen zu müssen.
 
 ## Technische Änderungen
 
-- Neue Backend-Module `security.py` und `traces.py`
-- `documentation.py` liefert strukturierte Daten für HTML-Doku, Objektgraph,
-  Entity-Liste und Änderungsverlauf
-- Neue API-Endpunkte für Security, Push-Warnung, Trace-Index, Trace-Detail und
-  Template-Rendering
-- Dashboard-Antworten enthalten Security- und Trace-Summaries sowie optionale
-  Aktions-Metadaten pro Finding
-- Frontend-Seiten für Sicherheit und Traces sowie Doku-Tabs, Template-Tester und
-  Dashboard-Aktionsbuttons ergänzt
-- Unit-Tests für Security-Scan, Template-Rendering, Trace-API und strukturierte
-  Dokumentationsdaten ergänzt
+- Neue Backend-Module `entity_refactor.py`, `secrets_manager.py` und `preflight.py`
+- Neue API-Endpunkte für Entity-Refactor, Secrets und Preflight
+- Neue Sidebar-Seiten **Refactor**, **Secrets** und **Preflight**
+- Secret-Werte werden serverseitig maskiert und nicht serialisiert
+- Tests für Entity-Refactor, Secrets-Umwandlung und Preflight ergänzt
 
 ## Neue API-Endpunkte
 
-- `GET /api/security`
-- `GET /api/security/push-warning`
-- `GET /api/traces`
-- `GET /api/trace`
-- `POST /api/template/render`
+- `POST /api/entity-refactor/preview`
+- `POST /api/entity-refactor/apply`
+- `GET /api/secrets`
+- `POST /api/secrets`
+- `DELETE /api/secrets`
+- `POST /api/secrets/convert`
+- `GET /api/preflight`

@@ -32,11 +32,22 @@ try:
     from . import backup as backup_service
     from . import blueprints as blueprint_service
     from . import configuration as configuration_service
+    from . import compatibility as compatibility_service
     from . import documentation as documentation_service
+    from . import entity_health as entity_health_service
+    from . import entity_refactor as entity_refactor_service
+    from . import flow as flow_service
     from . import git as git_service
+    from . import graph as graph_service
+    from . import impact as impact_service
+    from . import lint as lint_service
     from . import metadata as metadata_service
+    from . import preflight as preflight_service
+    from . import refactor as refactor_service
     from . import resources as resource_service
+    from . import review as review_service
     from . import security as security_service
+    from . import secrets_manager as secrets_manager_service
     from . import semantic as semantic_service
     from . import settings as settings_service
     from . import traces as trace_service
@@ -54,11 +65,22 @@ except ImportError:  # pragma: no cover - direct execution in the app container
     import backup as backup_service
     import blueprints as blueprint_service
     import configuration as configuration_service
+    import compatibility as compatibility_service
     import documentation as documentation_service
+    import entity_health as entity_health_service
+    import entity_refactor as entity_refactor_service
+    import flow as flow_service
     import git as git_service
+    import graph as graph_service
+    import impact as impact_service
+    import lint as lint_service
     import metadata as metadata_service
+    import preflight as preflight_service
+    import refactor as refactor_service
     import resources as resource_service
+    import review as review_service
     import security as security_service
+    import secrets_manager as secrets_manager_service
     import semantic as semantic_service
     import settings as settings_service
     import traces as trace_service
@@ -679,6 +701,15 @@ def analyze_yaml(content: str, current_path: str = "") -> dict[str, Any]:
             }
         )
 
+    analysis_path = f"packages/{current_path}" if current_path else "<editor>"
+    tags: list[str] = []
+    if current_path:
+        try:
+            tags = file_metadata(load_metadata(), current_path).get("tags", [])
+        except (OSError, json.JSONDecodeError):
+            tags = []
+    findings.extend(lint_service.lint_content(sys.modules[__name__], analysis_path, content, tags=tags))
+    findings.extend(compatibility_service.compatibility_findings(content, analysis_path))
     findings.extend(semantic_service.semantic_findings(content, cached_helper_data()))
 
     return analysis_result(validation, findings)
@@ -1262,8 +1293,48 @@ def apply_search_replace(
     )
 
 
+def entity_refactor_preview(old_entity: Any, new_entity: Any) -> dict[str, Any]:
+    return entity_refactor_service.entity_refactor_preview(sys.modules[__name__], old_entity, new_entity)
+
+
+def apply_entity_refactor(old_entity: Any, new_entity: Any, state_version: Any) -> dict[str, Any]:
+    return entity_refactor_service.apply_entity_refactor(
+        sys.modules[__name__], old_entity, new_entity, state_version
+    )
+
+
 def managed_yaml_files() -> dict[str, str]:
     return resource_service.managed_yaml_files(sys.modules[__name__])
+
+
+def lint_scan(files: dict[str, str] | None = None, rules: dict[str, Any] | None = None) -> dict[str, Any]:
+    return lint_service.lint_scan(sys.modules[__name__], files, rules)
+
+
+def compatibility_scan(files: dict[str, str] | None = None) -> dict[str, Any]:
+    return compatibility_service.compatibility_scan(sys.modules[__name__], files)
+
+
+def global_graph() -> dict[str, Any]:
+    return graph_service.global_graph(sys.modules[__name__])
+
+
+def review_preview(body: dict[str, Any]) -> dict[str, Any]:
+    return review_service.review_preview(sys.modules[__name__], body)
+
+
+def apply_review(body: dict[str, Any]) -> dict[str, Any]:
+    return review_service.apply_review(sys.modules[__name__], body)
+
+
+def refactor_preview(kind: Any, old_value: Any, new_value: Any) -> dict[str, Any]:
+    return refactor_service.refactor_preview(sys.modules[__name__], kind, old_value, new_value)
+
+
+def apply_refactor(kind: Any, old_value: Any, new_value: Any, state_version: Any) -> dict[str, Any]:
+    return refactor_service.apply_refactor(
+        sys.modules[__name__], kind, old_value, new_value, state_version
+    )
 
 
 def semantic_overview() -> dict[str, Any]:
@@ -1336,12 +1407,72 @@ def security_push_warning() -> dict[str, Any]:
     return security_service.security_push_warning(sys.modules[__name__])
 
 
+def secrets_overview() -> dict[str, Any]:
+    return secrets_manager_service.secrets_overview(sys.modules[__name__])
+
+
+def upsert_secret(body: dict[str, Any]) -> dict[str, Any]:
+    return secrets_manager_service.upsert_secret(sys.modules[__name__], body)
+
+
+def delete_secret(name: Any) -> dict[str, Any]:
+    return secrets_manager_service.delete_secret(sys.modules[__name__], name)
+
+
+def convert_plaintext_secret(body: dict[str, Any]) -> dict[str, Any]:
+    return secrets_manager_service.convert_plaintext_secret(sys.modules[__name__], body)
+
+
 def trace_index() -> dict[str, Any]:
     return trace_service.trace_index(sys.modules[__name__])
 
 
 def trace_detail(domain: Any, item_id: Any, run_id: Any) -> dict[str, Any]:
     return trace_service.trace_detail(sys.modules[__name__], domain, item_id, run_id)
+
+
+def flow_analysis(body: dict[str, Any]) -> dict[str, Any]:
+    return flow_service.flow_analysis(sys.modules[__name__], body)
+
+
+def save_impact(body: dict[str, Any]) -> dict[str, Any]:
+    return impact_service.save_impact(sys.modules[__name__], body)
+
+
+def entity_health() -> dict[str, Any]:
+    return entity_health_service.entity_health(sys.modules[__name__])
+
+
+def preflight() -> dict[str, Any]:
+    return preflight_service.preflight(sys.modules[__name__])
+
+
+def run_home_assistant_object(body: dict[str, Any]) -> dict[str, Any]:
+    domain = body.get("domain")
+    entity_id = body.get("entityId")
+    if domain not in {"script", "automation"} or not isinstance(entity_id, str) or "." not in entity_id:
+        raise ApiError(HTTPStatus.BAD_REQUEST, "Automation oder Script mit Entity-ID ist erforderlich.")
+    if domain == "script":
+        service_domain, service = "script", "turn_on"
+        payload = {"target": {"entity_id": entity_id}}
+    else:
+        service_domain, service = "automation", "trigger"
+        payload = {
+            "target": {"entity_id": entity_id},
+            "skip_condition": bool(body.get("skipCondition", True)),
+        }
+    response = home_assistant_request(f"services/{service_domain}/{service}", method="POST", payload=payload)
+    return {
+        "available": True,
+        "domain": domain,
+        "entityId": entity_id,
+        "message": f"{entity_id} wurde gestartet.",
+        "response": response,
+        "traceHint": {
+            "domain": domain,
+            "itemId": entity_id.split(".", 1)[1],
+        },
+    }
 
 
 def script_dependency_analysis(raw_path: str = "") -> dict[str, Any]:
@@ -1537,7 +1668,7 @@ def add_integration_records(
     return True
 
 
-def package_conflict_analysis(overlay: dict[str, str] | None = None) -> dict[str, Any]:
+def package_conflict_analysis(overlay: dict[str, str | None] | None = None) -> dict[str, Any]:
     packages_root = PACKAGES_ROOT.resolve()
     findings: list[dict[str, Any]] = []
     records: dict[str, list[dict[str, Any]]] = {}
@@ -1572,7 +1703,11 @@ def package_conflict_analysis(overlay: dict[str, str] | None = None) -> dict[str
                     }
                 )
     if overlay:
-        sources.update(overlay)
+        for relative, content in overlay.items():
+            if content is None:
+                sources.pop(relative, None)
+            else:
+                sources[relative] = content
 
     for relative, source_content in sorted(sources.items()):
         source_path = Path(relative)
@@ -1754,6 +1889,12 @@ def dashboard_action_for_finding(finding: dict[str, Any]) -> dict[str, Any] | No
         "plaintext-secret-url",
     }:
         return {"type": "security", "label": "Sicherheit öffnen"}
+    if code.startswith("entity-health"):
+        return {"type": "entity-health", "label": "Entity-Health öffnen"}
+    if code.startswith("lint-"):
+        return {"type": "lint", "label": "Lint öffnen"}
+    if code.startswith("compat-"):
+        return {"type": "compatibility", "label": "Kompatibilität öffnen"}
     if files:
         return {
             "type": "open-managed",
@@ -1812,6 +1953,9 @@ def configuration_quality_dashboard() -> dict[str, Any]:
     docs = documentation_status()
     security = security_scan()
     traces = trace_index()
+    entities = entity_health()
+    lint = lint_scan()
+    compatibility = compatibility_scan()
     semantic_findings = [
         {
             **finding,
@@ -1838,20 +1982,73 @@ def configuration_quality_dashboard() -> dict[str, Any]:
         }
         for item in blueprints.get("invalidFiles", [])[:20]
     ]
-    findings = [*conflicts["findings"], *semantic_findings, *security_findings, *blueprint_findings, *unused_findings]
+    entity_findings = [
+        {
+            "severity": "warning",
+            "code": "entity-health",
+            "title": f'Entity-Health: „{item["entityId"]}“ unbekannt',
+            "message": "Diese Entity wird in verwaltetem YAML referenziert, ist aber nicht in den aktuellen HA-States sichtbar.",
+            "files": [item["uses"][0]["path"]] if item.get("uses") else [],
+            "line": item["uses"][0].get("line") if item.get("uses") else None,
+            "action": {"type": "entity-health", "label": "Entity-Health öffnen"},
+        }
+        for item in entities.get("unknown", [])[:10]
+    ] + [
+        {
+            "severity": "warning",
+            "code": "entity-health",
+            "title": f'Entity-Health: „{item["entityId"]}“ ist {item.get("state", "unavailable")}',
+            "message": "Diese Entity wird verwendet, meldet aber aktuell keinen brauchbaren Zustand.",
+            "files": [item["uses"][0]["path"]] if item.get("uses") else [],
+            "line": item["uses"][0].get("line") if item.get("uses") else None,
+            "action": {"type": "entity-health", "label": "Entity-Health öffnen"},
+        }
+        for item in entities.get("unavailable", [])[:10]
+    ]
+    lint_findings = [
+        {
+            **finding,
+            "title": f"Lint: {finding['title']}",
+        }
+        for finding in lint.get("findings", [])
+    ]
+    compatibility_findings = [
+        {
+            **finding,
+            "title": f"Kompatibilität: {finding['title']}",
+        }
+        for finding in compatibility.get("findings", [])
+    ]
+    findings = [
+        *conflicts["findings"],
+        *semantic_findings,
+        *lint_findings,
+        *compatibility_findings,
+        *security_findings,
+        *blueprint_findings,
+        *entity_findings,
+        *unused_findings,
+    ]
     for finding in findings:
         finding.setdefault("action", dashboard_action_for_finding(finding))
     errors = (
         conflicts["counts"]["error"]
         + semantic.get("counts", {}).get("error", 0)
+        + lint.get("counts", {}).get("error", 0)
+        + compatibility.get("counts", {}).get("error", 0)
         + security.get("counts", {}).get("error", 0)
     )
     warnings = (
         conflicts["counts"]["warning"]
         + semantic.get("counts", {}).get("warning", 0)
+        + lint.get("counts", {}).get("warning", 0)
+        + compatibility.get("counts", {}).get("warning", 0)
         + security.get("counts", {}).get("warning", 0)
         + len(unused_findings)
         + blueprints["summary"].get("invalid", 0)
+        + entities["summary"].get("unknown", 0)
+        + entities["summary"].get("unavailable", 0)
+        + entities["summary"].get("disabled", 0)
     )
     score = max(0, 100 - errors * 10 - warnings * 2)
     backups_root = DATA_ROOT / "backups"
@@ -1870,7 +2067,10 @@ def configuration_quality_dashboard() -> dict[str, Any]:
             "backups": backup_count,
             "blueprints": blueprints["summary"].get("total", 0),
             "security": security["counts"].get("error", 0) + security["counts"].get("warning", 0),
+            "lint": lint["counts"].get("error", 0) + lint["counts"].get("warning", 0),
+            "compatibility": compatibility["counts"].get("warning", 0) + compatibility["counts"].get("tip", 0),
             "traces": traces.get("summary", {}).get("traces", 0),
+            "entityHealth": entities["summary"].get("unknown", 0) + entities["summary"].get("unavailable", 0) + entities["summary"].get("disabled", 0),
             "semanticErrors": semantic.get("counts", {}).get("error", 0),
             "semanticWarnings": semantic.get("counts", {}).get("warning", 0),
         },
@@ -1880,7 +2080,10 @@ def configuration_quality_dashboard() -> dict[str, Any]:
         "blueprints": blueprints["summary"],
         "semantic": semantic,
         "security": security["summary"],
+        "lint": lint["summary"],
+        "compatibility": compatibility["summary"],
         "traces": traces.get("summary", {}),
+        "entityHealth": entities["summary"],
         "documentation": docs,
         "health": system_health(include_git=False),
     }
@@ -2288,11 +2491,13 @@ def _fresh_helper_data() -> dict[str, Any]:
             "serviceDetails": {},
             "devices": [],
             "areas": [],
+            "entityRegistry": [],
         }
     states = states if isinstance(states, list) else []
     services_data = services_data if isinstance(services_data, list) else []
     devices = _optional_home_assistant_request("config/device_registry/list")
     areas = _optional_home_assistant_request("config/area_registry/list")
+    entity_registry = _optional_home_assistant_request("config/entity_registry/list")
     entities = [
         {
             "entity_id": item.get("entity_id", ""),
@@ -2324,6 +2529,7 @@ def _fresh_helper_data() -> dict[str, Any]:
         "serviceDetails": service_details,
         "devices": devices if isinstance(devices, list) else [],
         "areas": areas if isinstance(areas, list) else [],
+        "entityRegistry": entity_registry if isinstance(entity_registry, list) else [],
     }
 
 

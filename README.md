@@ -18,8 +18,19 @@ Automationen, Szenen und zugehörigen YAML-Ressourcen.
 - Markdown-Dokumentationsgenerator für Packages, HA-Objekte, Bezüge, Entitäten und Git-Historie
 - Interaktive HTML-Doku mit Filter, Objektgraph, Entity-Liste und Änderungsverlauf
 - Secret- und Sicherheitsprüfung für `!secret`, Klartext-Tokens und Git-Push-Warnungen
+- Visuelle Flow-Ansicht für Scripts und Automationen mit Zeilensprung
+- Impact-Analyse vor dem Speichern für Entities, Scripts, Secrets, Blueprints und Trace-Kandidaten
+- Review-Modus für mehrere vorgemerkte Änderungen mit Gesamt-Diff, Overlay-Prüfung und gemeinsamem Commit
+- Konfigurierbare HA-Lint-Regeln für Aliase, Script-Modi, IDs, erlaubte Entity-Domains, Klartextmuster und Pflicht-Tags
+- Typisiertes Refactoring für Entities, Helper-Entities, Szenen, Automationen, `device_id`, `area_id` und Package-Pfade
+- Globaler Objektgraph für Dateien, Automationen, Scripts, Szenen, Entities, Secrets und Blueprints
+- HA-Kompatibilitätsprüfung für historische Schlüssel, alte Dienste und migrationsverdächtige Syntax
+- Entity-Health-Dashboard für unbekannte, unavailable, deaktivierte und ungenutzte Entities
+- Entity-Refactoring mit exakter Vorschau und geschützter Multi-Datei-Anwendung
+- Maskierter Secrets-Manager inklusive Klartext-zu-`!secret`-Umwandlung
+- Preflight-Seite für den kompletten „bereit zum Push“-Check
 - Jinja-Template-Tester mit Home-Assistant-Rendering und Entity-Erkennung
-- Trace-/Debug-Ansicht für letzte Automation- und Script-Ausführungen
+- Trace-/Debug-Ansicht mit Testläufen für Automationen und Scripts
 - Geschützter Editor für `automations.yaml`, `scripts.yaml`, `scenes.yaml` und Include-Verzeichnisse
 - Multi-Datei-Suche und Ersetzung mit Vorschau, Backups und gemeinsamem Git-Commit
 - Schutz vor dem Überschreiben parallel geänderter Dateien
@@ -93,6 +104,21 @@ Die neuen Prüf- und Diagnosefunktionen sind ebenfalls serverseitig gekapselt:
 prüft `!secret`-Referenzen, heuristische Klartext-Tokens und ungenutzte Secrets.
 `traces.py` übersetzt erkannte Automation- und Script-Definitionen in
 Home-Assistant-Trace-Endpunkte und normalisiert die Antwort für die Oberfläche.
+`flow.py` erzeugt aus YAML-Knoten einen linearen, verzweigten Ablaufgraphen für
+Scripts und Automationen. `impact.py` vergleicht gespeicherte und geänderte
+Package-Inhalte vor dem Speichern. `entity_health.py` verbindet YAML-Referenzen
+mit aktuellen HA-States und dem Entity-Registry-Listing. `entity_refactor.py`
+führt entity-exakte Multi-Datei-Änderungen mit Zustandshash, YAML-Prüfung und
+Rollback-Schutz aus. `refactor.py` erweitert dieses Muster auf Szenen,
+Automationen, Helper-Entities, Geräte, Bereiche und Package-Verschiebungen.
+`review.py` prüft vorgemerkte Mehrdatei-Änderungen gegen einen temporären
+Overlay-Stand und schreibt sie erst nach unverändertem Zustandshash atomar als
+gemeinsames Änderungspaket. `lint.py` liefert konfigurierbare Projektregeln,
+deren Findings in Editor, Dashboard und Preflight einfließen. `compatibility.py`
+erkennt konservative HA-Migrationshinweise und fragt optional die laufende
+Home-Assistant-Version ab. `graph.py` baut aus Objektindex, Referenzen, Secrets
+und Blueprints einen globalen Beziehungsgraphen. `secrets_manager.py` verwaltet `secrets.yaml`, ohne Werte
+in API-Antworten preiszugeben. `preflight.py` bündelt alle Push-Vorprüfungen.
 Das Template-Rendering bleibt in `app.py`, weil es nur einen schmalen
 Supervisor-API-Aufruf an `POST /api/template` sowie die lokale Entity-Erkennung
 benötigt.
@@ -124,7 +150,9 @@ Die kontextbezogene Analyse verarbeitet das aktuell im Editor stehende YAML und
 gleicht Script-IDs zusätzlich mit den übrigen Package-Dateien ab. Doppelte
 YAML-Schlüssel, wiederholte Entitätsreferenzen, unausgeglichene Jinja-Klammern
 und fehlende Script-Felder werden als priorisierte Hinweise ausgegeben. Hinweise
-mit Zeilennummer können direkt angeklickt werden.
+mit Zeilennummer können direkt angeklickt werden. Zusätzlich werden die
+konfigurierten Lint-Regeln und die Kompatibilitätsprüfung auf den aktuellen
+Editorinhalt angewendet, ohne dass dafür gespeichert werden muss.
 
 Die globale Abhängigkeitsanalyse ordnet Referenzen innerhalb jeder
 Script-Definition ihrem Quell-Script zu. Sie erkennt direkte Script- und
@@ -247,13 +275,14 @@ Das bestehende Datei-Backup wird dabei weiterhin zusätzlich angelegt.
 Das Qualitätsdashboard ist der erste Eintrag links oben und fasst Package-Konflikte,
 mögliche ungenutzte Scripts, Backup-Anzahl, HA-Objekte, Blueprint-Bestand,
 semantische Live-HA-Hinweise, Sicherheitsfunde, Trace-Verfügbarkeit und den
-Dokumentationsstatus zusammen. Findings enthalten optional Aktions-Metadaten,
-damit das Frontend direkt die passende Detailseite oder die betroffene Datei
-öffnen kann. Git-Branches und Git-Remote-Aktionen sind aus dem Dashboard in eine
-eigene Inhaltsseite verschoben. Ein optionaler HTTPS-Remote für GitHub.com oder
-GitLab.com kann dort manuell per Fetch, Pull, Push oder sicherer Synchronisation
-bedient werden. Das Token wird mit Dateimodus `0600` unter `/data` gespeichert,
-nie an das Frontend zurückgesendet und nicht in `.git/config` geschrieben.
+Entity-Health und den Dokumentationsstatus zusammen. Findings enthalten optional
+Aktions-Metadaten, damit das Frontend direkt die passende Detailseite oder die
+betroffene Datei öffnen kann. Git-Branches und Git-Remote-Aktionen sind aus dem
+Dashboard in eine eigene Inhaltsseite verschoben. Ein optionaler HTTPS-Remote
+für GitHub.com oder GitLab.com kann dort manuell per Fetch, Pull, Push oder
+sicherer Synchronisation bedient werden. Das Token wird mit Dateimodus `0600`
+unter `/data` gespeichert, nie an das Frontend zurückgesendet und nicht in
+`.git/config` geschrieben.
 
 Die Live-HA-Semantikprüfung verwendet gecachte Daten aus `states`, `services`,
 `config/device_registry/list` und `config/area_registry/list`. Während die
@@ -295,6 +324,28 @@ Die Trace-Seite basiert auf dem HA-Objektindex und fragt für Automationen und
 Scripts die Home-Assistant-Trace-API ab. Die App speichert keine Trace-Daten,
 sondern normalisiert die letzten Ausführungen nur für die aktuelle Ansicht und
 lädt Detail-JSON bei Auswahl einer konkreten Run-ID nach.
+Von derselben Seite können Scripts und Automationen testweise gestartet werden;
+anschließend lädt die App die Traces neu und öffnet den neuesten passenden Lauf,
+falls Home Assistant bereits einen Trace bereitstellt.
+
+Die Flow-Ansicht ist eine clientnahe Strukturhilfe für aktuell geöffnetes YAML.
+Das Backend arbeitet auf dem YAML-Knotenbaum, behält Zeilennummern und erkennt
+Trigger, Bedingungen, Services, Verzweigungen, Wiederholungen und Warte- oder
+Stop-Schritte. Die Darstellung ist bewusst kompakt und dient der Navigation in
+großen Automationen.
+
+Vor dem Speichern einer Package-Datei erzeugt die Impact-Analyse einen Vergleich
+zwischen aktuellem Dateistand und Editorinhalt. Sie meldet geänderte Entities,
+Script-Referenzen, entfernte Script-Definitionen mit eingehenden Bezügen,
+Secret- und Blueprint-Änderungen sowie Trace-Kandidaten. Erst nach Bestätigung
+wird der bestehende geschützte Schreibpfad ausgeführt.
+
+Die Refactor-Seite nutzt eine entity-spezifische Suche mit Wortgrenzen und
+wendet Änderungen über Packages, `configuration.yaml` und erkannte Includes an.
+Die Secrets-Seite schreibt Werte nur nach `secrets.yaml`; Antworten enthalten
+stattdessen Masken und Referenzzähler. Preflight ruft YAML-, Konflikt-, Security-,
+Entity-Health-, HA-, Doku- und Git-Prüfungen zusammen und trennt Blocker von
+Warnungen.
 
 Der Systemstatus im Dashboard ergänzt diese Qualitätswerte um konkrete
 Betriebsinformationen: Home-Assistant-Token und letzte Konfigurationsprüfung,
