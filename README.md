@@ -53,6 +53,7 @@ Automationen, Szenen und zugehörigen YAML-Ressourcen.
 - Globale Package-Konfliktprüfung nach den Home-Assistant-Merge-Regeln
 - Qualitätsdashboard für Konflikte, Warnungen, Script-Nutzung und Backups
 - Erweitertes Dashboard für HA-Objekte, Referenzen, Blueprints, Live-HA-Semantik und Dokumentationsstatus
+- Dashboard-Hinweise können ausgeblendet oder als gegenstandslos markiert und wieder eingeblendet werden
 - Direkte Dashboard-Aktionen zum Öffnen betroffener Dateien, Konflikte, Blueprints, Security und Traces
 - Systemstatus im Dashboard für Home Assistant, Backups, Papierkorb und Importlimits
 - Einstellungsdialog für Aufbewahrung, Importlimits, Dashboard-Regeln, Theme und Speicherverhalten

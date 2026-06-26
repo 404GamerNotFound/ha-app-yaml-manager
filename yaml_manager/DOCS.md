@@ -429,6 +429,13 @@ Trace-Ansicht oder eine konkrete Datei mit Zeilensprung. Das Dashboard bleibt
 dadurch der Einstiegspunkt zur Behebung, ohne Git-Bedienelemente wieder in die
 Qualitätsseite zu mischen.
 
+Jeder Dashboard-Hinweis erhält serverseitig einen stabilen Schlüssel aus Code,
+Schwere, Text, Datei und Zeile. Über die Oberfläche kann ein Hinweis
+ausgeblendet oder als gegenstandslos markiert werden. Diese Markierungen werden
+unter `/data/dashboard_findings.json` gespeichert, aus der aktiven Hinweis- und
+Score-Berechnung entfernt und über **Ausgeblendete anzeigen** wieder sichtbar.
+Von dort kann ein Hinweis erneut eingeblendet werden.
+
 Für die Nutzungsanalyse werden Script-Definitionen mit `script.<id>`-Referenzen
 in allen lesbaren YAML-Dateien unterhalb des Konfigurationsverzeichnisses
 verglichen. Nicht gefundene Referenzen werden bewusst nur als **möglicherweise
@@ -542,9 +549,13 @@ Nichtverfügbarkeit an, statt die übrige App zu blockieren.
 
 Unter **Testlauf** startet die Seite erkannte Scripts und Automationen direkt
 über Home Assistant. Scripts verwenden `script.turn_on`, Automationen
-`automation.trigger` mit `skip_condition: true`. Nach einem erfolgreichen
-Serviceaufruf lädt die Oberfläche den Trace-Index neu und öffnet den neuesten
-passenden Trace, sobald Home Assistant ihn bereitstellt.
+`automation.trigger` mit `skip_condition: true`; die Entity-ID wird dabei als
+Servicedatum gesendet, damit der REST-Serviceaufruf auch ohne UI-Target-Schema
+funktioniert. Nach einem erfolgreichen Serviceaufruf fragt die Oberfläche den
+Trace-Index mehrmals kurz nach und öffnet den neuesten passenden Trace, sobald
+Home Assistant ihn bereitstellt. Lehnt Home Assistant den Serviceaufruf ab,
+liest das Backend die konkrete HTTP-Fehlermeldung aus und zeigt sie im
+Trace-Detailbereich an.
 
 API-Endpunkte:
 
@@ -716,6 +727,8 @@ Die zugehörigen Endpunkte sind:
 - `POST /api/import/preview`
 - `POST /api/import/apply`
 - `GET /api/dashboard`
+- `POST /api/dashboard/finding`
+- `DELETE /api/dashboard/finding`
 
 ## Globale Package-Konfliktprüfung
 

@@ -31,6 +31,7 @@ const state = {
   history: { scope: "", path: "", currentVersion: "", selectedId: "", diffResult: null },
   gitHistory: { scope: "", path: "", currentVersion: "", selectedCommit: "", diffResult: null },
   dashboard: null,
+  dashboardShowSuppressed: false,
   reviewChanges: [],
   reviewPreview: null,
   dependencies: null,
@@ -76,7 +77,7 @@ const elements = Object.fromEntries([
   "history-dialog", "history-close", "history-path", "history-list", "diff-placeholder", "diff-view", "diff-changed-only", "history-summary", "history-restore",
   "git-dialog", "git-history-close", "git-history-path", "git-history-list", "git-diff-placeholder", "git-diff-view", "git-diff-changed-only", "git-history-summary", "git-history-restore",
   "package-conflicts-button", "conflict-dialog", "conflict-close", "conflict-summary", "conflict-list",
-  "dashboard-button", "dashboard-dialog", "dashboard-close", "dashboard-refresh", "quality-score", "quality-stats", "dashboard-findings",
+  "dashboard-button", "dashboard-dialog", "dashboard-close", "dashboard-refresh", "dashboard-show-suppressed", "quality-score", "quality-stats", "dashboard-findings",
   "health-badge", "health-grid",
   "review-button", "review-page", "review-close", "review-add-current", "review-clear", "review-preview", "review-apply", "review-summary", "review-list", "review-diff",
   "lint-button", "lint-page", "lint-close", "lint-refresh", "lint-save", "lint-summary", "lint-stats", "lint-list",
@@ -1048,7 +1049,56 @@ function renderRemoteStatus(remote) {
   });
 }
 
+function dashboardFindingActionButton(label, handler) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "dependency-action dashboard-action";
+  button.textContent = label;
+  button.addEventListener("click", handler);
+  return button;
+}
+
+async function setDashboardFindingStatus(finding, status) {
+  await api("api/dashboard/finding", {
+    method: "POST",
+    body: JSON.stringify({ key: finding.key, status, finding }),
+  });
+  toast(status === "irrelevant" ? "Hinweis als gegenstandslos markiert." : "Hinweis ausgeblendet.", "success");
+  await loadDashboard();
+}
+
+async function restoreDashboardFinding(finding) {
+  await api("api/dashboard/finding", {
+    method: "DELETE",
+    body: JSON.stringify({ key: finding.key }),
+  });
+  toast("Hinweis wird wieder angezeigt.", "success");
+  await loadDashboard();
+}
+
+function dashboardFindingElement(finding, suppressedView) {
+  const item = document.createElement("div");
+  item.className = `dashboard-finding ${finding.severity} ${suppressedView ? "suppressed" : ""}`;
+  const files = `${(finding.files || []).join(" · ")}${finding.line ? ` · Zeile ${finding.line}` : ""}`;
+  const status = suppressedView
+    ? `<small><span class="finding-status">${escapeHtml(finding.suppressionLabel || "ausgeblendet")}</span>${finding.suppressedAt ? ` · ${escapeHtml(finding.suppressedAt)}` : ""}</small>`
+    : "";
+  item.innerHTML = `<span class="finding-dot"></span><div><strong>${escapeHtml(finding.title)}</strong><small>${escapeHtml(finding.message)}</small><small>${escapeHtml(files)}</small>${status}</div><div class="dashboard-finding-actions"></div>`;
+  const actions = item.querySelector(".dashboard-finding-actions");
+  if (finding.action) {
+    actions.append(dashboardFindingActionButton(finding.action.label || "Öffnen", () => runDashboardAction(finding.action)));
+  }
+  if (finding.key && suppressedView) {
+    actions.append(dashboardFindingActionButton("Wieder anzeigen", () => restoreDashboardFinding(finding).catch((error) => toast(error.message, "error"))));
+  } else if (finding.key) {
+    actions.append(dashboardFindingActionButton("Ausblenden", () => setDashboardFindingStatus(finding, "hidden").catch((error) => toast(error.message, "error"))));
+    actions.append(dashboardFindingActionButton("Gegenstandslos", () => setDashboardFindingStatus(finding, "irrelevant").catch((error) => toast(error.message, "error"))));
+  }
+  return item;
+}
+
 function renderDashboard(result) {
+  if (!result) return;
   state.dashboard = result;
   const scoreClass = result.score < 60 ? "error" : result.score < 85 ? "warning" : "";
   elements["quality-score"].className = `quality-score ${scoreClass}`;
@@ -1066,31 +1116,21 @@ function renderDashboard(result) {
     [result.summary.entityHealth || 0, "Entity-Health"],
     [result.summary.traces || 0, "Traces"],
     [result.summary.unusedScripts, "Möglicherweise ungenutzt"],
+    [result.summary.suppressedFindings || 0, "Ausgeblendet"],
     [result.summary.errors, "Fehler"],
     [result.summary.warnings, "Warnungen"],
     [result.summary.backups, "Backups"],
   ];
   elements["quality-stats"].innerHTML = stats.map(([value, label]) => `<div class="quality-stat"><strong>${value}</strong><span>${escapeHtml(label)}</span></div>`).join("");
-  if (!result.findings.length) {
+  elements["dashboard-show-suppressed"].checked = state.dashboardShowSuppressed;
+  const findings = state.dashboardShowSuppressed ? (result.suppressedFindings || []) : (result.findings || []);
+  if (!findings.length) {
     const empty = document.createElement("div");
     empty.className = "history-empty";
-    empty.textContent = "Keine Qualitätsprobleme gefunden.";
+    empty.textContent = state.dashboardShowSuppressed ? "Keine ausgeblendeten Hinweise." : "Keine Qualitätsprobleme gefunden.";
     elements["dashboard-findings"].replaceChildren(empty);
   } else {
-    elements["dashboard-findings"].replaceChildren(...result.findings.map((finding) => {
-      const item = document.createElement("div");
-      item.className = `dashboard-finding ${finding.severity}`;
-      item.innerHTML = `<span class="finding-dot"></span><div><strong>${escapeHtml(finding.title)}</strong><small>${escapeHtml(finding.message)}</small><small>${escapeHtml((finding.files || []).join(" · "))}</small></div>`;
-      if (finding.action) {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "dependency-action dashboard-action";
-        button.textContent = finding.action.label || "Öffnen";
-        button.addEventListener("click", () => runDashboardAction(finding.action));
-        item.append(button);
-      }
-      return item;
-    }));
+    elements["dashboard-findings"].replaceChildren(...findings.map((finding) => dashboardFindingElement(finding, state.dashboardShowSuppressed)));
   }
   renderHealth(result.health);
 }
@@ -2520,7 +2560,7 @@ function renderTraces(result) {
     button.type = "button";
     button.className = "dependency-action";
     button.textContent = "Testlauf";
-    button.addEventListener("click", () => runHaObjectTest(object));
+    button.addEventListener("click", () => runHaObjectTest(object, button));
     item.append(button);
     return item;
   }));
@@ -2552,7 +2592,14 @@ async function openTracesPage() {
   try { await loadTraces(); } catch (error) { toast(error.message, "error"); }
 }
 
-async function runHaObjectTest(object) {
+async function runHaObjectTest(object, button) {
+  const originalLabel = button?.textContent || "Testlauf";
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Läuft…";
+  }
+  elements["trace-detail-summary"].textContent = `${object.entityId} wird gestartet …`;
+  elements["trace-detail"].textContent = "";
   try {
     const result = await api("api/ha-object/run", {
       method: "POST",
@@ -2563,11 +2610,28 @@ async function runHaObjectTest(object) {
       }),
     });
     toast(result.message, "success");
-    await new Promise((resolve) => setTimeout(resolve, 900));
-    const traces = await loadTraces();
-    const latest = traces.entries?.find((entry) => entry.entityId === object.entityId);
-    if (latest) await loadTraceDetail(latest);
-  } catch (error) { toast(error.message, "error"); }
+    let latest = null;
+    for (let attempt = 0; attempt < 4 && !latest; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, attempt === 0 ? 700 : 1000));
+      const traces = await loadTraces();
+      latest = traces.entries?.find((entry) => entry.entityId === object.entityId);
+    }
+    if (latest) {
+      await loadTraceDetail(latest);
+    } else {
+      elements["trace-detail-summary"].textContent = "Testlauf gestartet, aber noch kein neuer Trace gefunden.";
+      elements["trace-detail"].textContent = JSON.stringify(result.traceHint || result, null, 2);
+    }
+  } catch (error) {
+    elements["trace-detail-summary"].textContent = error.message;
+    elements["trace-detail"].textContent = JSON.stringify(error.details || { error: error.message }, null, 2);
+    toast(error.message, "error");
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = originalLabel;
+    }
+  }
 }
 
 async function loadTraceDetail(entry) {
@@ -3488,6 +3552,10 @@ elements["file-search"].addEventListener("input", renderFiles);
 elements["dashboard-button"].addEventListener("click", openDashboard);
 elements["dashboard-close"].addEventListener("click", openScriptManager);
 elements["dashboard-refresh"].addEventListener("click", loadDashboard);
+elements["dashboard-show-suppressed"].addEventListener("change", () => {
+  state.dashboardShowSuppressed = elements["dashboard-show-suppressed"].checked;
+  renderDashboard(state.dashboard);
+});
 elements["review-button"].addEventListener("click", openReviewPage);
 elements["review-close"].addEventListener("click", openScriptManager);
 elements["review-add-current"].addEventListener("click", addCurrentToReview);

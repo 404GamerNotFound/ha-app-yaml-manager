@@ -245,6 +245,8 @@ def create_handler(backend: Any) -> type[BaseHTTPRequestHandler]:
                     self.send_json(HTTPStatus.OK, backend.review_preview(body))
                 elif path == "/api/review/apply":
                     self.send_json(HTTPStatus.OK, backend.apply_review(body))
+                elif path == "/api/dashboard/finding":
+                    self.send_json(HTTPStatus.OK, backend.update_dashboard_finding_state(body))
                 elif path == "/api/script/rename-preview":
                     self.send_json(
                         HTTPStatus.OK,
@@ -509,6 +511,10 @@ def create_handler(backend: Any) -> type[BaseHTTPRequestHandler]:
                         HTTPStatus.OK,
                         backend.purge_trash(body.get("id", ""), body.get("path", "")),
                     )
+                    return
+                if path == "/api/dashboard/finding":
+                    body = self.read_json()
+                    self.send_json(HTTPStatus.OK, backend.restore_dashboard_finding_state(body))
                     return
                 if path != "/api/file":
                     raise ApiError(HTTPStatus.NOT_FOUND, "Unbekannter Endpunkt.")

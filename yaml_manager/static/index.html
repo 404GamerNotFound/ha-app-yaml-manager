@@ -486,7 +486,10 @@
           <section class="admin-section">
             <div class="admin-section-heading">
               <div><h3>Hinweise</h3><p>Globale Package-Prüfung und möglicherweise ungenutzte Scripts.</p></div>
-              <button class="button secondary" id="dashboard-refresh" type="button">Aktualisieren</button>
+              <div class="dashboard-heading-actions">
+                <label class="compact-toggle"><input id="dashboard-show-suppressed" type="checkbox"><span>Ausgeblendete anzeigen</span></label>
+                <button class="button secondary" id="dashboard-refresh" type="button">Aktualisieren</button>
+              </div>
             </div>
             <div class="dashboard-findings" id="dashboard-findings"></div>
           </section>

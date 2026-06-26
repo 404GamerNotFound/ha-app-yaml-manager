@@ -1454,11 +1454,11 @@ def run_home_assistant_object(body: dict[str, Any]) -> dict[str, Any]:
         raise ApiError(HTTPStatus.BAD_REQUEST, "Automation oder Script mit Entity-ID ist erforderlich.")
     if domain == "script":
         service_domain, service = "script", "turn_on"
-        payload = {"target": {"entity_id": entity_id}}
+        payload = {"entity_id": entity_id}
     else:
         service_domain, service = "automation", "trigger"
         payload = {
-            "target": {"entity_id": entity_id},
+            "entity_id": entity_id,
             "skip_condition": bool(body.get("skipCondition", True)),
         }
     response = home_assistant_request(f"services/{service_domain}/{service}", method="POST", payload=payload)
@@ -1905,6 +1905,124 @@ def dashboard_action_for_finding(finding: dict[str, Any]) -> dict[str, Any] | No
     return None
 
 
+DASHBOARD_FINDING_STATUSES = {
+    "hidden": "ausgeblendet",
+    "irrelevant": "gegenstandslos",
+}
+
+
+def dashboard_findings_file() -> Path:
+    return DATA_ROOT / "dashboard_findings.json"
+
+
+def dashboard_finding_signature(finding: dict[str, Any]) -> dict[str, Any]:
+    action = finding.get("action") if isinstance(finding.get("action"), dict) else {}
+    files = finding.get("files", [])
+    files = files if isinstance(files, list) else []
+    return {
+        "code": str(finding.get("code", "")),
+        "severity": str(finding.get("severity", "")),
+        "title": str(finding.get("title", "")),
+        "message": str(finding.get("message", "")),
+        "files": [str(item) for item in files if isinstance(item, str)],
+        "line": finding.get("line") if isinstance(finding.get("line"), int) else None,
+        "actionType": str(action.get("type", "")),
+        "actionPath": str(action.get("path", "")),
+    }
+
+
+def dashboard_finding_key(finding: dict[str, Any]) -> str:
+    signature = json.dumps(
+        dashboard_finding_signature(finding),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(signature.encode("utf-8")).hexdigest()[:24]
+
+
+def finding_snapshot(raw: Any) -> dict[str, Any]:
+    finding = raw if isinstance(raw, dict) else {}
+    files = finding.get("files", [])
+    files = files if isinstance(files, list) else []
+    snapshot: dict[str, Any] = {
+        "severity": str(finding.get("severity", ""))[:32],
+        "code": str(finding.get("code", ""))[:120],
+        "title": str(finding.get("title", ""))[:240],
+        "message": str(finding.get("message", ""))[:500],
+        "files": [str(item)[:240] for item in files[:10] if isinstance(item, str)],
+    }
+    if isinstance(finding.get("line"), int):
+        snapshot["line"] = finding["line"]
+    return snapshot
+
+
+def load_dashboard_finding_state() -> dict[str, Any]:
+    try:
+        raw = json.loads(dashboard_findings_file().read_text(encoding="utf-8"))
+    except (FileNotFoundError, OSError, json.JSONDecodeError):
+        raw = {}
+    items = raw.get("items") if isinstance(raw, dict) else {}
+    cleaned: dict[str, dict[str, Any]] = {}
+    if isinstance(items, dict):
+        for key, item in items.items():
+            if not isinstance(key, str) or not re.fullmatch(r"[a-f0-9]{16,64}", key):
+                continue
+            if not isinstance(item, dict) or item.get("status") not in DASHBOARD_FINDING_STATUSES:
+                continue
+            cleaned[key] = {
+                "key": key,
+                "status": item["status"],
+                "label": DASHBOARD_FINDING_STATUSES[item["status"]],
+                "createdAt": str(item.get("createdAt") or ""),
+                "updatedAt": str(item.get("updatedAt") or item.get("createdAt") or ""),
+                "finding": finding_snapshot(item.get("finding")),
+            }
+    return {"items": cleaned}
+
+
+def save_dashboard_finding_state(state: dict[str, Any]) -> None:
+    atomic_write_path(
+        dashboard_findings_file(),
+        json.dumps(state, ensure_ascii=False, indent=2).encode("utf-8") + b"\n",
+        0o600,
+    )
+
+
+def update_dashboard_finding_state(body: dict[str, Any]) -> dict[str, Any]:
+    key = body.get("key")
+    status = body.get("status")
+    if not isinstance(key, str) or not re.fullmatch(r"[a-f0-9]{16,64}", key):
+        raise ApiError(HTTPStatus.BAD_REQUEST, "Ein gültiger Hinweis-Schlüssel ist erforderlich.")
+    if status not in DASHBOARD_FINDING_STATUSES:
+        raise ApiError(HTTPStatus.BAD_REQUEST, "Der Hinweis-Status ist ungültig.")
+    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    with file_lock:
+        state = load_dashboard_finding_state()
+        existing = state["items"].get(key, {})
+        state["items"][key] = {
+            "key": key,
+            "status": status,
+            "label": DASHBOARD_FINDING_STATUSES[status],
+            "createdAt": existing.get("createdAt") or now,
+            "updatedAt": now,
+            "finding": finding_snapshot(body.get("finding")),
+        }
+        save_dashboard_finding_state(state)
+    return {"key": key, "status": status, "label": DASHBOARD_FINDING_STATUSES[status]}
+
+
+def restore_dashboard_finding_state(body: dict[str, Any]) -> dict[str, Any]:
+    key = body.get("key")
+    if not isinstance(key, str) or not re.fullmatch(r"[a-f0-9]{16,64}", key):
+        raise ApiError(HTTPStatus.BAD_REQUEST, "Ein gültiger Hinweis-Schlüssel ist erforderlich.")
+    with file_lock:
+        state = load_dashboard_finding_state()
+        removed = state["items"].pop(key, None) is not None
+        save_dashboard_finding_state(state)
+    return {"key": key, "restored": removed}
+
+
 def configuration_quality_dashboard() -> dict[str, Any]:
     settings = load_settings()
     conflicts = package_conflict_analysis()
@@ -2030,26 +2148,31 @@ def configuration_quality_dashboard() -> dict[str, Any]:
         *unused_findings,
     ]
     for finding in findings:
+        finding["key"] = dashboard_finding_key(finding)
         finding.setdefault("action", dashboard_action_for_finding(finding))
-    errors = (
-        conflicts["counts"]["error"]
-        + semantic.get("counts", {}).get("error", 0)
-        + lint.get("counts", {}).get("error", 0)
-        + compatibility.get("counts", {}).get("error", 0)
-        + security.get("counts", {}).get("error", 0)
-    )
-    warnings = (
-        conflicts["counts"]["warning"]
-        + semantic.get("counts", {}).get("warning", 0)
-        + lint.get("counts", {}).get("warning", 0)
-        + compatibility.get("counts", {}).get("warning", 0)
-        + security.get("counts", {}).get("warning", 0)
-        + len(unused_findings)
-        + blueprints["summary"].get("invalid", 0)
-        + entities["summary"].get("unknown", 0)
-        + entities["summary"].get("unavailable", 0)
-        + entities["summary"].get("disabled", 0)
-    )
+
+    suppression_state = load_dashboard_finding_state()
+    suppressed_items = suppression_state["items"]
+    active_findings: list[dict[str, Any]] = []
+    suppressed_findings: list[dict[str, Any]] = []
+    for finding in findings:
+        suppression = suppressed_items.get(finding["key"])
+        if suppression:
+            suppressed_findings.append(
+                {
+                    **finding,
+                    "suppressionStatus": suppression["status"],
+                    "suppressionLabel": suppression["label"],
+                    "suppressedAt": suppression["updatedAt"],
+                }
+            )
+        else:
+            active_findings.append(finding)
+
+    errors = sum(item.get("severity") == "error" for item in active_findings)
+    warnings = sum(item.get("severity") == "warning" for item in active_findings)
+    hidden = sum(item.get("suppressionStatus") == "hidden" for item in suppressed_findings)
+    irrelevant = sum(item.get("suppressionStatus") == "irrelevant" for item in suppressed_findings)
     score = max(0, 100 - errors * 10 - warnings * 2)
     backups_root = DATA_ROOT / "backups"
     backup_count = sum(path.is_dir() for path in backups_root.iterdir()) if backups_root.exists() else 0
@@ -2064,6 +2187,10 @@ def configuration_quality_dashboard() -> dict[str, Any]:
             "unusedScripts": len(unused),
             "errors": errors,
             "warnings": warnings,
+            "activeFindings": len(active_findings),
+            "hiddenFindings": hidden,
+            "irrelevantFindings": irrelevant,
+            "suppressedFindings": len(suppressed_findings),
             "backups": backup_count,
             "blueprints": blueprints["summary"].get("total", 0),
             "security": security["counts"].get("error", 0) + security["counts"].get("warning", 0),
@@ -2074,8 +2201,10 @@ def configuration_quality_dashboard() -> dict[str, Any]:
             "semanticErrors": semantic.get("counts", {}).get("error", 0),
             "semanticWarnings": semantic.get("counts", {}).get("warning", 0),
         },
-        "findings": findings[:200],
-        "findingsTruncated": len(findings) > 200,
+        "findings": active_findings[:200],
+        "findingsTruncated": len(active_findings) > 200,
+        "suppressedFindings": suppressed_findings[:200],
+        "suppressedFindingsTruncated": len(suppressed_findings) > 200,
         "objects": objects["summary"],
         "blueprints": blueprints["summary"],
         "semantic": semantic,
@@ -2383,6 +2512,33 @@ def home_assistant_request(path: str, method: str = "GET", payload: Any | None =
                 if "json" in content_type:
                     raise
                 return text
+    except urllib.error.HTTPError as exc:
+        message = "Home Assistant hat die Anfrage abgelehnt."
+        details: dict[str, Any] = {"homeAssistantStatus": exc.code}
+        try:
+            raw = exc.read()
+            text = raw.decode("utf-8", errors="replace") if raw else ""
+        except OSError:
+            text = ""
+        if text:
+            details["homeAssistantResponse"] = text
+            try:
+                error_body = json.loads(text)
+            except json.JSONDecodeError:
+                message = text.strip() or message
+            else:
+                if isinstance(error_body, dict):
+                    details["homeAssistantResponse"] = error_body
+                    extracted = (
+                        error_body.get("message")
+                        or error_body.get("error")
+                        or error_body.get("detail")
+                    )
+                    if extracted:
+                        message = str(extracted)
+                else:
+                    message = str(error_body)
+        raise ApiError(HTTPStatus.BAD_GATEWAY, message, details) from exc
     except (urllib.error.URLError, json.JSONDecodeError, UnicodeDecodeError) as exc:
         raise ApiError(HTTPStatus.BAD_GATEWAY, "Home Assistant konnte nicht erreicht werden.") from exc
 

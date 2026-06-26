@@ -985,11 +985,33 @@ class FileApiTests(unittest.TestCase):
 
         self.assertEqual(script["traceHint"], {"domain": "script", "itemId": "test"})
         self.assertEqual(automation["traceHint"], {"domain": "automation", "itemId": "test"})
-        self.assertEqual(calls[0], ("services/script/turn_on", "POST", {"target": {"entity_id": "script.test"}}))
+        self.assertEqual(calls[0], ("services/script/turn_on", "POST", {"entity_id": "script.test"}))
         self.assertEqual(
             calls[1],
-            ("services/automation/trigger", "POST", {"target": {"entity_id": "automation.test"}, "skip_condition": True}),
+            ("services/automation/trigger", "POST", {"entity_id": "automation.test", "skip_condition": True}),
         )
+
+    def test_home_assistant_request_reports_http_error_message(self):
+        error = app.urllib.error.HTTPError(
+            url="http://supervisor/core/api/services/script/turn_on",
+            code=400,
+            msg="Bad Request",
+            hdrs={},
+            fp=io.BytesIO(b'{"message":"Entity not found"}'),
+        )
+
+        with patch.dict(app.os.environ, {"SUPERVISOR_TOKEN": "token"}):
+            with patch.object(app.urllib.request, "urlopen", side_effect=error):
+                with self.assertRaises(app.ApiError) as raised:
+                    app.home_assistant_request(
+                        "services/script/turn_on",
+                        method="POST",
+                        payload={"entity_id": "script.missing"},
+                    )
+
+        self.assertEqual(raised.exception.status, 502)
+        self.assertEqual(raised.exception.message, "Entity not found")
+        self.assertEqual(raised.exception.details["homeAssistantStatus"], 400)
 
     def test_documentation_overview_contains_html_page_data(self):
         app.write_file(
@@ -1365,6 +1387,36 @@ class FileApiTests(unittest.TestCase):
         self.assertEqual(dashboard["summary"]["scripts"], 2)
         self.assertTrue(any("unused" in title for title in unused_titles))
         self.assertFalse(any(title.startswith("Script „used“") for title in unused_titles))
+
+    def test_dashboard_findings_can_be_marked_irrelevant_and_restored(self):
+        app.write_file(
+            "scripts.yaml",
+            "script:\n  unused:\n    sequence: []\n",
+            None,
+            "Tests",
+            create=True,
+        )
+        dashboard = app.configuration_quality_dashboard()
+        finding = next(item for item in dashboard["findings"] if item["code"] == "possibly-unused-script")
+
+        result = app.update_dashboard_finding_state(
+            {"key": finding["key"], "status": "irrelevant", "finding": finding}
+        )
+        hidden_dashboard = app.configuration_quality_dashboard()
+        hidden = next(
+            item for item in hidden_dashboard["suppressedFindings"] if item["key"] == finding["key"]
+        )
+
+        self.assertEqual(result["label"], "gegenstandslos")
+        self.assertFalse(any(item["key"] == finding["key"] for item in hidden_dashboard["findings"]))
+        self.assertEqual(hidden["suppressionStatus"], "irrelevant")
+        self.assertEqual(hidden_dashboard["summary"]["irrelevantFindings"], 1)
+
+        restored = app.restore_dashboard_finding_state({"key": finding["key"]})
+        restored_dashboard = app.configuration_quality_dashboard()
+
+        self.assertTrue(restored["restored"])
+        self.assertTrue(any(item["key"] == finding["key"] for item in restored_dashboard["findings"]))
 
     def test_blueprint_import_and_instantiation_create_package(self):
         blueprint = app.import_blueprint(
