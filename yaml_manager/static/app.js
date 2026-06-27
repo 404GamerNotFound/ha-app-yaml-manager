@@ -23,8 +23,24 @@ const snippets = [
   { symbol: "E", name: "Ereignis auslösen", description: "Event mit Daten", text: "- event: eigenes_ereignis\n  event_data:\n    quelle: script" },
 ];
 
+function readStoredJson(key, fallback) {
+  try {
+    const value = localStorage.getItem(key);
+    return value ? JSON.parse(value) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 const state = {
   files: [], categories: [], tags: [], selectedCategory: "Alle", selectedTag: "", selected: null,
+  fileSort: localStorage.getItem("ha-maintenance:file-sort") || "name",
+  fileQuickFilter: localStorage.getItem("ha-maintenance:file-quick-filter") || "all",
+  fileGroupFolders: localStorage.getItem("ha-maintenance:file-group-folders") === "true",
+  fileFavorites: new Set(readStoredJson("ha-maintenance:file-favorites", [])),
+  fileRecent: readStoredJson("ha-maintenance:file-recent", []),
+  fileSavedFilters: readStoredJson("ha-maintenance:file-saved-filters", []),
+  fileRenderLimit: 160,
   originalContent: "", originalCategory: "", originalTags: [], dirty: false, helpers: null,
   configuration: null, configurationOriginal: "", configurationDirty: false,
   packageConflicts: null,
@@ -66,7 +82,7 @@ const state = {
 };
 
 const elements = Object.fromEntries([
-  "workspace", "sidebar", "sidebar-toggle", "sidebar-close", "sidebar-tools", "sidebar-tools-current", "file-search", "configuration-status", "configuration-status-dot", "package-conflicts-status-dot", "filter-summary", "categories", "tags", "file-list", "file-count", "root-path",
+  "workspace", "sidebar", "sidebar-toggle", "sidebar-close", "sidebar-tools", "sidebar-tools-current", "file-search", "file-sort", "file-list-meta", "file-filter-all", "file-filter-favorites", "file-filter-recent", "file-group-folders", "file-filter-save", "file-saved-filters", "configuration-status", "configuration-status-dot", "package-conflicts-status-dot", "filter-summary", "categories", "tags", "file-list", "file-count", "root-path",
   "empty-state", "empty-open-files-button", "empty-new-button", "editor-content", "document-name", "document-path", "dirty-dot", "category-select", "tag-input",
   "rename-button", "duplicate-button", "delete-button", "editor", "highlighting", "line-numbers", "completion-popover", "validation-status", "file-ha-check", "cursor-status",
   "save-button", "open-files-button", "new-button", "reload-button", "helpers", "helpers-toggle", "helpers-close", "snippet-list", "analysis-summary", "analysis-list", "api-notice",
@@ -92,7 +108,7 @@ const elements = Object.fromEntries([
   "transfer-button", "transfer-dialog", "transfer-close", "export-scope", "export-category", "export-start", "import-file", "import-strategy", "import-preview", "import-apply", "import-summary", "import-preview-list",
   "settings-button", "settings-dialog", "settings-close", "settings-save", "settings-reload", "settings-backup-retention", "settings-backup-days", "settings-backup-size", "settings-trash-days", "settings-trash-size", "settings-import-size", "settings-expanded-size", "settings-import-files", "settings-theme", "settings-after-save", "settings-branch-prefix", "settings-unused-scripts",
   "trash-button", "trash-dialog", "trash-close", "trash-refresh", "trash-purge-all", "trash-summary", "trash-list",
-  "package-files-button",
+  "editor-button", "package-files-button",
   "objects-button", "objects-dialog", "objects-close", "objects-refresh", "object-search", "object-domain", "objects-summary", "object-list",
   "blueprints-button", "blueprints-page", "blueprints-close", "blueprints-refresh", "blueprints-summary", "blueprint-search", "blueprint-domain", "blueprint-list",
   "blueprint-selected-title", "blueprint-selected-path", "blueprint-selected-domain", "blueprint-package-path", "blueprint-instance-id", "blueprint-instance-alias", "blueprint-inputs", "blueprint-instantiate",
@@ -118,13 +134,20 @@ let validationTimer;
 let flowTimer;
 let configurationValidationTimer;
 let resourceValidationTimer;
+let suppressRouteUpdate = false;
 
 const sidebarToolLabels = {
   "dashboard-button": "Dashboard",
+  "editor-button": "Editor",
   "package-files-button": "Package-Dateien",
   "review-button": "Review",
   "git-page-button": "Git",
   "objects-button": "HA-Objekte",
+  "search-replace-button": "Suchen & Ersetzen",
+  "configuration-button": "configuration.yaml",
+  "transfer-button": "Import/Export",
+  "trash-button": "Papierkorb",
+  "settings-button": "Einstellungen",
   "entity-health-button": "Entity-Health",
   "database-button": "Datenbank",
   "backups-button": "Backups",
@@ -154,7 +177,21 @@ function collapseSidebarTools() {
   requestAnimationFrame(updateSidebarToolSummary);
 }
 
+function setAppRoute(route, replace = false) {
+  if (suppressRouteUpdate) return;
+  const nextHash = `#${route}`;
+  if (window.location.hash === nextHash) return;
+  const url = `${window.location.pathname}${window.location.search}${nextHash}`;
+  if (replace) window.history.replaceState(null, "", url);
+  else window.history.pushState(null, "", url);
+}
+
+function currentRoute() {
+  return window.location.hash.replace(/^#/, "") || "dashboard";
+}
+
 function openFileBrowser() {
+  setAppRoute("files");
   closePages();
   renderCategories();
   renderTags();
@@ -390,7 +427,122 @@ function fileMatches(file) {
   const inCategory = state.selectedCategory === "Alle" || file.category === state.selectedCategory;
   const hasTag = !state.selectedTag || file.tags.includes(state.selectedTag);
   const haystack = `${file.path} ${file.category} ${file.tags.join(" ")}`.toLocaleLowerCase("de");
-  return inCategory && hasTag && (!term || haystack.includes(term));
+  const inQuickFilter = state.fileQuickFilter === "favorites"
+    ? state.fileFavorites.has(file.path)
+    : state.fileQuickFilter === "recent"
+      ? state.fileRecent.includes(file.path)
+      : true;
+  return inCategory && hasTag && inQuickFilter && (!term || haystack.includes(term));
+}
+
+function persistFileViewSetting(key, value) {
+  localStorage.setItem(`ha-maintenance:${key}`, value);
+}
+
+function persistFileFavorites() {
+  localStorage.setItem("ha-maintenance:file-favorites", JSON.stringify([...state.fileFavorites]));
+}
+
+function persistFileRecent() {
+  localStorage.setItem("ha-maintenance:file-recent", JSON.stringify(state.fileRecent.slice(0, 30)));
+}
+
+function persistFileSavedFilters() {
+  localStorage.setItem("ha-maintenance:file-saved-filters", JSON.stringify(state.fileSavedFilters));
+}
+
+function fileFolder(path) {
+  const parts = String(path || "").split("/");
+  return parts.length > 1 ? parts.slice(0, -1).join("/") : "Root";
+}
+
+function sortedFiles(files) {
+  const collator = new Intl.Collator("de", { numeric: true, sensitivity: "base" });
+  return [...files].sort((left, right) => {
+    if (state.fileGroupFolders) {
+      const folderOrder = collator.compare(fileFolder(left.path), fileFolder(right.path));
+      if (folderOrder) return folderOrder;
+    }
+    if (state.fileSort === "modified") return (right.modified || 0) - (left.modified || 0) || collator.compare(left.path, right.path);
+    if (state.fileSort === "category") return collator.compare(left.category || "", right.category || "") || collator.compare(left.path, right.path);
+    if (state.fileSort === "path") return collator.compare(left.path, right.path);
+    return collator.compare(left.name || left.path, right.name || right.path) || collator.compare(left.path, right.path);
+  });
+}
+
+function trackRecentFile(path) {
+  state.fileRecent = [path, ...state.fileRecent.filter((item) => item !== path)].slice(0, 30);
+  persistFileRecent();
+  if (state.fileQuickFilter === "recent") renderFiles();
+}
+
+function updateFileViewControls() {
+  if (elements["file-sort"]) elements["file-sort"].value = state.fileSort;
+  if (elements["file-group-folders"]) elements["file-group-folders"].checked = state.fileGroupFolders;
+  ["all", "favorites", "recent"].forEach((mode) => {
+    elements[`file-filter-${mode}`]?.classList.toggle("active", state.fileQuickFilter === mode);
+  });
+}
+
+function renderSavedFileFilters() {
+  const select = elements["file-saved-filters"];
+  if (!select) return;
+  const options = [new Option("Gespeicherte Filter", "")];
+  state.fileSavedFilters.forEach((filter) => options.push(new Option(filter.name, filter.name)));
+  select.replaceChildren(...options);
+}
+
+function saveCurrentFileFilter() {
+  const name = prompt("Name des Filters");
+  if (!name?.trim()) return;
+  const filter = {
+    name: name.trim(),
+    search: elements["file-search"].value.trim(),
+    category: state.selectedCategory,
+    tag: state.selectedTag,
+    quick: state.fileQuickFilter,
+    sort: state.fileSort,
+    groupFolders: state.fileGroupFolders,
+  };
+  state.fileSavedFilters = [filter, ...state.fileSavedFilters.filter((item) => item.name !== filter.name)].slice(0, 20);
+  persistFileSavedFilters();
+  renderSavedFileFilters();
+  elements["file-saved-filters"].value = filter.name;
+  toast("Filter gespeichert", "success");
+}
+
+function applySavedFileFilter(name) {
+  const filter = state.fileSavedFilters.find((item) => item.name === name);
+  if (!filter) return;
+  elements["file-search"].value = filter.search || "";
+  state.selectedCategory = filter.category || "Alle";
+  state.selectedTag = filter.tag || "";
+  state.fileQuickFilter = filter.quick || "all";
+  state.fileSort = filter.sort || "name";
+  state.fileGroupFolders = Boolean(filter.groupFolders);
+  state.fileRenderLimit = 160;
+  persistFileViewSetting("file-sort", state.fileSort);
+  persistFileViewSetting("file-quick-filter", state.fileQuickFilter);
+  persistFileViewSetting("file-group-folders", String(state.fileGroupFolders));
+  updateFileViewControls();
+  renderCategories();
+  renderTags();
+  renderFiles();
+}
+
+function setFileQuickFilter(mode) {
+  state.fileQuickFilter = mode;
+  state.fileRenderLimit = 160;
+  persistFileViewSetting("file-quick-filter", mode);
+  updateFileViewControls();
+  renderFiles();
+}
+
+function toggleFileFavorite(path) {
+  if (state.fileFavorites.has(path)) state.fileFavorites.delete(path);
+  else state.fileFavorites.add(path);
+  persistFileFavorites();
+  renderFiles();
 }
 
 function renderCategories() {
@@ -400,7 +552,12 @@ function renderCategories() {
     button.className = `category-item${state.selectedCategory === category ? " active" : ""}`;
     const count = category === "Alle" ? state.files.length : state.files.filter((file) => file.category === category).length;
     button.innerHTML = `<span class="category-dot"></span><span>${escapeHtml(category)}</span><span class="category-count">${count}</span>`;
-    button.addEventListener("click", () => { state.selectedCategory = category; renderCategories(); renderFiles(); });
+    button.addEventListener("click", () => {
+      state.selectedCategory = category;
+      state.fileRenderLimit = 160;
+      renderCategories();
+      renderFiles();
+    });
     return button;
   }));
   updateFilterSummary();
@@ -415,6 +572,7 @@ function renderTags() {
     button.innerHTML = `<span>${escapeHtml(tag.name)}</span><span class="tag-filter-count">${count}</span>`;
     button.addEventListener("click", () => {
       state.selectedTag = tag.value;
+      state.fileRenderLimit = 160;
       renderTags();
       renderFiles();
     });
@@ -431,8 +589,13 @@ function updateFilterSummary() {
 }
 
 function renderFiles() {
-  const files = state.files.filter(fileMatches);
+  updateFileViewControls();
+  renderSavedFileFilters();
+  const files = sortedFiles(state.files.filter(fileMatches));
+  const renderLimit = Math.min(state.fileRenderLimit, files.length);
+  const visibleFiles = files.slice(0, renderLimit);
   elements["file-count"].textContent = files.length;
+  elements["file-list-meta"].textContent = files.length > renderLimit ? `${renderLimit} sichtbar` : "";
   if (!files.length) {
     const empty = document.createElement("div");
     empty.className = "list-empty";
@@ -440,18 +603,51 @@ function renderFiles() {
     elements["file-list"].replaceChildren(empty);
     return;
   }
-  elements["file-list"].replaceChildren(...files.map((file) => {
+  const nodes = [];
+  let lastFolder = "";
+  visibleFiles.forEach((file) => {
+    const folder = fileFolder(file.path);
+    if (state.fileGroupFolders && folder !== lastFolder) {
+      const heading = document.createElement("div");
+      heading.className = "file-group-heading";
+      heading.textContent = folder;
+      nodes.push(heading);
+      lastFolder = folder;
+    }
+    const row = document.createElement("div");
+    row.className = "file-row";
     const button = document.createElement("button");
     button.className = `file-item${state.selected?.path === file.path ? " active" : ""}`;
     const tags = file.tags.length ? `<span class="file-tag-line">${escapeHtml(file.tags.map((tag) => `#${tag}`).join(" "))}</span>` : "";
-    button.innerHTML = `<span class="file-icon">YML</span><span class="file-label"><strong>${escapeHtml(file.name)}</strong><span>${escapeHtml(file.path)}</span>${tags}</span>`;
+    const modified = file.modified ? new Date(file.modified * 1000).toLocaleDateString("de-DE") : "";
+    const meta = modified ? `<span>${escapeHtml(file.category)} · ${escapeHtml(modified)}</span>` : `<span>${escapeHtml(file.category)}</span>`;
+    button.innerHTML = `<span class="file-icon">YML</span><span class="file-label"><strong>${escapeHtml(file.name)}</strong><span>${escapeHtml(file.path)}</span>${meta}${tags}</span>`;
     button.title = file.path;
     button.addEventListener("click", async () => {
       openScriptManager();
       await openFile(file.path);
     });
-    return button;
-  }));
+    const favorite = document.createElement("button");
+    favorite.type = "button";
+    favorite.className = `file-favorite${state.fileFavorites.has(file.path) ? " active" : ""}`;
+    favorite.textContent = state.fileFavorites.has(file.path) ? "★" : "☆";
+    favorite.title = state.fileFavorites.has(file.path) ? "Favorit entfernen" : "Als Favorit markieren";
+    favorite.addEventListener("click", () => toggleFileFavorite(file.path));
+    row.append(button, favorite);
+    nodes.push(row);
+  });
+  if (files.length > renderLimit) {
+    const more = document.createElement("button");
+    more.type = "button";
+    more.className = "button secondary file-list-more";
+    more.textContent = `${Math.min(160, files.length - renderLimit)} weitere anzeigen`;
+    more.addEventListener("click", () => {
+      state.fileRenderLimit += 160;
+      renderFiles();
+    });
+    nodes.push(more);
+  }
+  elements["file-list"].replaceChildren(...nodes);
 }
 
 function parseTags(value) {
@@ -586,18 +782,32 @@ function applyConfigurationResult(result) {
 }
 
 async function openConfigurationEditor() {
+  setAppRoute("configuration");
+  closePages();
+  elements["configuration-dialog"].classList.remove("hidden");
+  elements["configuration-button"].classList.add("active");
+  updateSidebarToolSummary();
+  if (state.configurationDirty && state.configuration) {
+    setTimeout(() => elements["configuration-editor"].focus(), 0);
+    return;
+  }
   try {
     const result = await api("api/configuration");
     applyConfigurationResult(result);
     setConfigurationNotice("Der Bereich homeassistant: bleibt aus Sicherheitsgründen in der Hauptdatei.");
-    elements["configuration-dialog"].showModal();
     setTimeout(() => elements["configuration-editor"].focus(), 0);
   } catch (error) { toast(error.message, "error"); }
 }
 
 function closeConfigurationEditor() {
   if (state.configurationDirty && !confirm("Ungespeicherte Änderungen an configuration.yaml verwerfen?")) return;
-  elements["configuration-dialog"].close();
+  if (state.configurationDirty) {
+    elements["configuration-editor"].value = state.configurationOriginal;
+    state.configurationDirty = false;
+    elements["configuration-save"].disabled = true;
+    updateConfigurationRendering();
+  }
+  openScriptManager();
 }
 
 function showConfigurationValidation(result) {
@@ -880,7 +1090,9 @@ async function openHistory(scope) {
   try {
     const history = await api(`api/backups?${historyQuery(state.history.path)}`);
     renderHistory(history);
-    elements["history-dialog"].showModal();
+    setAppRoute("history");
+    closePages();
+    elements["history-dialog"].classList.remove("hidden");
   } catch (error) { toast(error.message, "error"); }
 }
 
@@ -901,11 +1113,14 @@ async function restoreSelectedBackup() {
         version: state.history.currentVersion,
       }),
     });
-    elements["history-dialog"].close();
     if (state.history.scope === "configuration") {
       applyConfigurationResult(result);
       await refreshFiles();
       showConfigurationActionResult(result, result.message);
+      setAppRoute("configuration");
+      closePages();
+      elements["configuration-dialog"].classList.remove("hidden");
+      elements["configuration-button"].classList.add("active");
     } else {
       await refreshFiles();
       await openFile(result.path, true);
@@ -984,7 +1199,9 @@ async function openGitHistory(scope) {
   try {
     const history = await api(`api/git/history?${gitHistoryQuery()}`);
     renderGitHistory(history);
-    elements["git-dialog"].showModal();
+    setAppRoute("git-history");
+    closePages();
+    elements["git-dialog"].classList.remove("hidden");
   } catch (error) { toast(error.message, "error"); }
 }
 
@@ -1006,11 +1223,14 @@ async function restoreSelectedGitCommit() {
         version: state.gitHistory.currentVersion,
       }),
     });
-    elements["git-dialog"].close();
     if (state.gitHistory.scope === "configuration") {
       applyConfigurationResult(result);
       await refreshFiles();
       showConfigurationActionResult(result, result.message);
+      setAppRoute("configuration");
+      closePages();
+      elements["configuration-dialog"].classList.remove("hidden");
+      elements["configuration-button"].classList.add("active");
     } else {
       await refreshFiles();
       await openFile(result.path, true);
@@ -1056,7 +1276,9 @@ async function loadPackageConflicts() {
 async function openPackageConflicts() {
   try {
     await loadPackageConflicts();
-    elements["conflict-dialog"].showModal();
+    setAppRoute("conflicts");
+    closePages();
+    elements["conflict-dialog"].classList.remove("hidden");
   } catch (error) { toast(error.message, "error"); }
 }
 
@@ -1299,6 +1521,7 @@ async function applyReview() {
 }
 
 function openReviewPage() {
+  setAppRoute("review");
   closePages();
   elements["review-page"].classList.remove("hidden");
   elements["review-button"].classList.add("active");
@@ -1387,6 +1610,7 @@ async function saveLintRules() {
 }
 
 async function openLintPage() {
+  setAppRoute("lint");
   closePages();
   elements["lint-page"].classList.remove("hidden");
   elements["lint-button"].classList.add("active");
@@ -1432,6 +1656,7 @@ async function loadGraph() {
 }
 
 async function openGraphPage() {
+  setAppRoute("graph");
   closePages();
   elements["graph-page"].classList.remove("hidden");
   elements["graph-button"].classList.add("active");
@@ -1459,6 +1684,7 @@ async function loadCompatibility() {
 }
 
 async function openCompatibilityPage() {
+  setAppRoute("compatibility");
   closePages();
   elements["compatibility-page"].classList.remove("hidden");
   elements["compatibility-button"].classList.add("active");
@@ -1466,16 +1692,17 @@ async function openCompatibilityPage() {
 }
 
 function closePages() {
-  ["dashboard-dialog", "file-browser-page", "review-page", "git-page", "objects-dialog", "blueprints-page", "documentation-page", "security-page", "entity-health-page", "database-page", "backups-page", "graph-page", "lint-page", "compatibility-page", "refactor-page", "secrets-page", "preflight-page", "traces-page"].forEach((id) => {
+  ["dashboard-dialog", "file-browser-page", "configuration-dialog", "history-dialog", "git-dialog", "resource-dialog", "conflict-dialog", "search-replace-dialog", "transfer-dialog", "settings-dialog", "trash-dialog", "review-page", "git-page", "objects-dialog", "blueprints-page", "documentation-page", "security-page", "entity-health-page", "database-page", "backups-page", "graph-page", "lint-page", "compatibility-page", "refactor-page", "secrets-page", "preflight-page", "traces-page"].forEach((id) => {
     elements[id].classList.add("hidden");
   });
-  ["dashboard-button", "package-files-button", "review-button", "git-page-button", "objects-button", "blueprints-button", "documentation-button", "security-button", "entity-health-button", "database-button", "backups-button", "graph-button", "lint-button", "compatibility-button", "refactor-button", "secrets-button", "preflight-button", "traces-button"].forEach((id) => {
+  ["dashboard-button", "editor-button", "package-files-button", "configuration-button", "search-replace-button", "transfer-button", "settings-button", "trash-button", "review-button", "git-page-button", "objects-button", "blueprints-button", "documentation-button", "security-button", "entity-health-button", "database-button", "backups-button", "graph-button", "lint-button", "compatibility-button", "refactor-button", "secrets-button", "preflight-button", "traces-button"].forEach((id) => {
     elements[id].classList.remove("active");
   });
   requestAnimationFrame(updateSidebarToolSummary);
 }
 
 async function openDashboard() {
+  setAppRoute("dashboard");
   closePages();
   elements["dashboard-dialog"].classList.remove("hidden");
   elements["dashboard-button"].classList.add("active");
@@ -1483,7 +1710,10 @@ async function openDashboard() {
 }
 
 function openScriptManager() {
+  setAppRoute("editor");
   closePages();
+  elements["editor-button"].classList.add("active");
+  updateSidebarToolSummary();
 }
 
 async function loadRemoteStatus() {
@@ -1493,6 +1723,7 @@ async function loadRemoteStatus() {
 }
 
 async function openGitPage() {
+  setAppRoute("git");
   closePages();
   elements["git-page"].classList.remove("hidden");
   elements["git-page-button"].classList.add("active");
@@ -1711,11 +1942,15 @@ function fillSettings(settings = state.settings) {
   elements["settings-unused-scripts"].checked = settings.showUnusedScripts;
 }
 
-async function openSettingsDialog() {
+async function openSettingsPage() {
+  setAppRoute("settings");
+  closePages();
+  elements["settings-dialog"].classList.remove("hidden");
+  elements["settings-button"].classList.add("active");
+  updateSidebarToolSummary();
   try {
     const settings = await loadSettings();
     fillSettings(settings);
-    elements["settings-dialog"].showModal();
   } catch (error) { toast(error.message, "error"); }
 }
 
@@ -1766,11 +2001,15 @@ function resetImportPreview() {
   elements["import-preview-list"].replaceChildren();
 }
 
-function openTransferDialog() {
+function openTransferPage() {
+  setAppRoute("transfer");
+  closePages();
   fillExportCategories();
   elements["import-file"].value = "";
   resetImportPreview();
-  elements["transfer-dialog"].showModal();
+  elements["transfer-dialog"].classList.remove("hidden");
+  elements["transfer-button"].classList.add("active");
+  updateSidebarToolSummary();
 }
 
 function startPackageExport() {
@@ -1921,10 +2160,14 @@ async function loadTrash() {
   return result;
 }
 
-async function openTrashDialog() {
+async function openTrashPage() {
+  setAppRoute("trash");
+  closePages();
+  elements["trash-dialog"].classList.remove("hidden");
+  elements["trash-button"].classList.add("active");
+  updateSidebarToolSummary();
   try {
     await loadTrash();
-    elements["trash-dialog"].showModal();
   } catch (error) { toast(error.message, "error"); }
 }
 
@@ -1949,7 +2192,6 @@ async function restoreTrashEntry(entry) {
     });
     await refreshFiles();
     await loadTrash();
-    elements["trash-dialog"].close();
     await openFile(result.path, true);
     renderFileHomeAssistantCheck(result.configurationCheck);
     toast(result.message, "success");
@@ -2010,6 +2252,7 @@ async function loadHaObjects() {
 }
 
 async function openObjectsDialog() {
+  setAppRoute("objects");
   closePages();
   elements["objects-dialog"].classList.remove("hidden");
   elements["objects-button"].classList.add("active");
@@ -2131,6 +2374,7 @@ async function loadBlueprints() {
 }
 
 async function openBlueprintsPage() {
+  setAppRoute("blueprints");
   closePages();
   elements["blueprints-page"].classList.remove("hidden");
   elements["blueprints-button"].classList.add("active");
@@ -2289,6 +2533,7 @@ async function loadDocumentation() {
 }
 
 async function openDocumentationPage() {
+  setAppRoute("documentation");
   closePages();
   elements["documentation-page"].classList.remove("hidden");
   elements["documentation-button"].classList.add("active");
@@ -2342,6 +2587,7 @@ async function loadSecurity() {
 }
 
 async function openSecurityPage() {
+  setAppRoute("security");
   closePages();
   elements["security-page"].classList.remove("hidden");
   elements["security-button"].classList.add("active");
@@ -2404,6 +2650,7 @@ async function applyRefactor() {
 }
 
 function openRefactorPage() {
+  setAppRoute("refactor");
   closePages();
   elements["refactor-page"].classList.remove("hidden");
   elements["refactor-button"].classList.add("active");
@@ -2437,6 +2684,7 @@ async function loadSecrets() {
 }
 
 async function openSecretsPage() {
+  setAppRoute("secrets");
   closePages();
   elements["secrets-page"].classList.remove("hidden");
   elements["secrets-button"].classList.add("active");
@@ -2513,6 +2761,7 @@ async function loadPreflight() {
 }
 
 async function openPreflightPage() {
+  setAppRoute("preflight");
   closePages();
   elements["preflight-page"].classList.remove("hidden");
   elements["preflight-button"].classList.add("active");
@@ -2565,6 +2814,7 @@ async function loadEntityHealth() {
 }
 
 async function openEntityHealthPage() {
+  setAppRoute("entity-health");
   closePages();
   elements["entity-health-page"].classList.remove("hidden");
   elements["entity-health-button"].classList.add("active");
@@ -2716,6 +2966,7 @@ async function loadDatabase() {
 }
 
 async function openDatabasePage() {
+  setAppRoute("database");
   closePages();
   elements["database-page"].classList.remove("hidden");
   elements["database-button"].classList.add("active");
@@ -2885,6 +3136,7 @@ async function loadBackups() {
 }
 
 async function openBackupsPage() {
+  setAppRoute("backups");
   closePages();
   elements["backups-page"].classList.remove("hidden");
   elements["backups-button"].classList.add("active");
@@ -3006,6 +3258,7 @@ async function loadTraces() {
 }
 
 async function openTracesPage() {
+  setAppRoute("traces");
   closePages();
   elements["traces-page"].classList.remove("hidden");
   elements["traces-button"].classList.add("active");
@@ -3151,7 +3404,9 @@ async function openResourceEditor(path, line = 0) {
     elements["resource-path"].textContent = path;
     elements["resource-editor"].value = resource.content;
     elements["resource-save"].disabled = true;
-    elements["resource-dialog"].showModal();
+    setAppRoute("resource");
+    closePages();
+    elements["resource-dialog"].classList.remove("hidden");
     updateResourceRendering();
     scheduleResourceValidation();
     if (line) jumpToResourceLine(line);
@@ -3161,7 +3416,7 @@ async function openResourceEditor(path, line = 0) {
 function closeResourceEditor() {
   if (state.resource.dirty && !confirm("Ungespeicherte Änderungen verwerfen?")) return;
   state.resource.dirty = false;
-  elements["resource-dialog"].close();
+  openScriptManager();
 }
 
 async function saveResource() {
@@ -3198,9 +3453,14 @@ function resetSearchPreview() {
   elements["replace-file-list"].replaceChildren();
 }
 
-function openSearchReplaceDialog() {
+function openSearchReplacePage() {
+  setAppRoute("search-replace");
+  closePages();
   resetSearchPreview();
-  elements["search-replace-dialog"].showModal();
+  elements["search-replace-dialog"].classList.remove("hidden");
+  elements["search-replace-button"].classList.add("active");
+  elements["replace-search"].focus();
+  updateSidebarToolSummary();
 }
 
 async function previewSearchReplace() {
@@ -3276,6 +3536,7 @@ async function openFile(path, force = false) {
     const file = await api(`api/file?path=${encodeURIComponent(path)}`);
     openScriptManager();
     state.selected = file;
+    trackRecentFile(file.path);
     state.originalContent = file.content;
     state.originalCategory = file.category;
     state.originalTags = parseTags(file.tags);
@@ -3955,7 +4216,7 @@ elements.editor.addEventListener("keydown", (event) => {
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") { event.preventDefault(); saveCurrent(); }
   if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "f") {
     event.preventDefault();
-    openSearchReplaceDialog();
+    openSearchReplacePage();
   }
 });
 elements["category-select"].addEventListener("change", () => {
@@ -3969,23 +4230,44 @@ elements["category-select"].addEventListener("change", () => {
   setDirty();
 });
 elements["tag-input"].addEventListener("input", setDirty);
-elements["file-search"].addEventListener("input", renderFiles);
+elements["file-search"].addEventListener("input", () => {
+  state.fileRenderLimit = 160;
+  renderFiles();
+});
+elements["file-sort"].addEventListener("change", () => {
+  state.fileSort = elements["file-sort"].value;
+  state.fileRenderLimit = 160;
+  persistFileViewSetting("file-sort", state.fileSort);
+  renderFiles();
+});
+elements["file-group-folders"].addEventListener("change", () => {
+  state.fileGroupFolders = elements["file-group-folders"].checked;
+  state.fileRenderLimit = 160;
+  persistFileViewSetting("file-group-folders", String(state.fileGroupFolders));
+  renderFiles();
+});
+elements["file-filter-all"].addEventListener("click", () => setFileQuickFilter("all"));
+elements["file-filter-favorites"].addEventListener("click", () => setFileQuickFilter("favorites"));
+elements["file-filter-recent"].addEventListener("click", () => setFileQuickFilter("recent"));
+elements["file-filter-save"].addEventListener("click", saveCurrentFileFilter);
+elements["file-saved-filters"].addEventListener("change", () => applySavedFileFilter(elements["file-saved-filters"].value));
 elements["open-files-button"].addEventListener("click", openFileBrowser);
 elements["empty-open-files-button"].addEventListener("click", openFileBrowser);
 elements["file-browser-close"].addEventListener("click", closeFileBrowser);
 elements["file-browser-new"].addEventListener("click", () => {
   openNewDialog();
 });
+elements["editor-button"].addEventListener("click", openScriptManager);
 elements["package-files-button"].addEventListener("click", openFileBrowser);
 elements["dashboard-button"].addEventListener("click", openDashboard);
-elements["dashboard-close"].addEventListener("click", openFileBrowser);
+elements["dashboard-close"].addEventListener("click", openScriptManager);
 elements["dashboard-refresh"].addEventListener("click", loadDashboard);
 elements["dashboard-show-suppressed"].addEventListener("change", () => {
   state.dashboardShowSuppressed = elements["dashboard-show-suppressed"].checked;
   renderDashboard(state.dashboard);
 });
 elements["review-button"].addEventListener("click", openReviewPage);
-elements["review-close"].addEventListener("click", openFileBrowser);
+elements["review-close"].addEventListener("click", openScriptManager);
 elements["review-add-current"].addEventListener("click", addCurrentToReview);
 elements["review-clear"].addEventListener("click", () => {
   state.reviewChanges = [];
@@ -3994,19 +4276,19 @@ elements["review-clear"].addEventListener("click", () => {
 elements["review-preview"].addEventListener("click", previewReview);
 elements["review-apply"].addEventListener("click", applyReview);
 elements["lint-button"].addEventListener("click", openLintPage);
-elements["lint-close"].addEventListener("click", openFileBrowser);
+elements["lint-close"].addEventListener("click", openScriptManager);
 elements["lint-refresh"].addEventListener("click", () => loadLint().catch((error) => toast(error.message, "error")));
 elements["lint-save"].addEventListener("click", saveLintRules);
 elements["graph-button"].addEventListener("click", openGraphPage);
-elements["graph-close"].addEventListener("click", openFileBrowser);
+elements["graph-close"].addEventListener("click", openScriptManager);
 elements["graph-refresh"].addEventListener("click", () => loadGraph().catch((error) => toast(error.message, "error")));
 elements["graph-search"].addEventListener("input", () => state.graph && renderGraph(state.graph));
 elements["graph-type"].addEventListener("change", () => state.graph && renderGraph(state.graph));
 elements["compatibility-button"].addEventListener("click", openCompatibilityPage);
-elements["compatibility-close"].addEventListener("click", openFileBrowser);
+elements["compatibility-close"].addEventListener("click", openScriptManager);
 elements["compatibility-refresh"].addEventListener("click", () => loadCompatibility().catch((error) => toast(error.message, "error")));
 elements["git-page-button"].addEventListener("click", openGitPage);
-elements["git-page-close"].addEventListener("click", openFileBrowser);
+elements["git-page-close"].addEventListener("click", openScriptManager);
 elements["branch-create"].addEventListener("click", createBranch);
 elements["branch-switch"].addEventListener("click", switchBranch);
 elements["branch-compare"].addEventListener("click", compareBranch);
@@ -4025,26 +4307,23 @@ elements["remote-sync"].addEventListener("click", () => synchronizeRemote("sync"
 elements["remote-merge"].addEventListener("click", () => synchronizeRemote("merge"));
 elements["remote-force-push"].addEventListener("click", () => synchronizeRemote("force-push"));
 elements["remote-remove"].addEventListener("click", removeRemoteConfiguration);
-elements["settings-button"].addEventListener("click", openSettingsDialog);
-elements["settings-close"].addEventListener("click", () => elements["settings-dialog"].close());
-elements["settings-dialog"].addEventListener("cancel", () => elements["settings-dialog"].close());
+elements["settings-button"].addEventListener("click", openSettingsPage);
+elements["settings-close"].addEventListener("click", openScriptManager);
 elements["settings-save"].addEventListener("click", saveSettings);
 elements["settings-reload"].addEventListener("click", () => fillSettings());
-elements["trash-button"].addEventListener("click", openTrashDialog);
-elements["trash-close"].addEventListener("click", () => elements["trash-dialog"].close());
+elements["trash-button"].addEventListener("click", openTrashPage);
+elements["trash-close"].addEventListener("click", openScriptManager);
 elements["trash-refresh"].addEventListener("click", () => loadTrash().catch((error) => toast(error.message, "error")));
 elements["trash-purge-all"].addEventListener("click", purgeAllTrash);
-elements["trash-dialog"].addEventListener("cancel", () => elements["trash-dialog"].close());
-elements["transfer-button"].addEventListener("click", openTransferDialog);
-elements["transfer-close"].addEventListener("click", () => elements["transfer-dialog"].close());
-elements["transfer-dialog"].addEventListener("cancel", () => elements["transfer-dialog"].close());
+elements["transfer-button"].addEventListener("click", openTransferPage);
+elements["transfer-close"].addEventListener("click", openScriptManager);
 elements["objects-button"].addEventListener("click", openObjectsDialog);
-elements["objects-close"].addEventListener("click", openFileBrowser);
+elements["objects-close"].addEventListener("click", openScriptManager);
 elements["objects-refresh"].addEventListener("click", loadHaObjects);
 elements["object-search"].addEventListener("input", renderHaObjects);
 elements["object-domain"].addEventListener("change", renderHaObjects);
 elements["blueprints-button"].addEventListener("click", openBlueprintsPage);
-elements["blueprints-close"].addEventListener("click", openFileBrowser);
+elements["blueprints-close"].addEventListener("click", openScriptManager);
 elements["blueprints-refresh"].addEventListener("click", () => loadBlueprints().catch((error) => toast(error.message, "error")));
 elements["blueprint-search"].addEventListener("input", renderBlueprints);
 elements["blueprint-domain"].addEventListener("change", renderBlueprints);
@@ -4052,7 +4331,7 @@ elements["blueprint-instantiate"].addEventListener("click", instantiateSelectedB
 elements["blueprint-import"].addEventListener("click", importBlueprint);
 elements["blueprint-from-create"].addEventListener("click", createBlueprintFromYaml);
 elements["documentation-button"].addEventListener("click", openDocumentationPage);
-elements["documentation-close"].addEventListener("click", openFileBrowser);
+elements["documentation-close"].addEventListener("click", openScriptManager);
 elements["documentation-refresh"].addEventListener("click", loadDocumentation);
 elements["documentation-save"].addEventListener("click", saveDocumentation);
 elements["documentation-search"].addEventListener("input", renderDocumentationHtml);
@@ -4061,10 +4340,10 @@ document.querySelectorAll(".documentation-tab").forEach((tab) => tab.addEventLis
   renderDocumentationHtml();
 }));
 elements["security-button"].addEventListener("click", openSecurityPage);
-elements["security-close"].addEventListener("click", openFileBrowser);
+elements["security-close"].addEventListener("click", openScriptManager);
 elements["security-refresh"].addEventListener("click", () => loadSecurity().catch((error) => toast(error.message, "error")));
 elements["refactor-button"].addEventListener("click", openRefactorPage);
-elements["refactor-close"].addEventListener("click", openFileBrowser);
+elements["refactor-close"].addEventListener("click", openScriptManager);
 elements["refactor-preview"].addEventListener("click", previewRefactor);
 elements["refactor-apply"].addEventListener("click", applyRefactor);
 elements["refactor-kind"].addEventListener("change", () => {
@@ -4084,33 +4363,33 @@ elements["refactor-kind"].addEventListener("change", () => {
   elements["refactor-apply"].disabled = true;
 });
 elements["secrets-button"].addEventListener("click", openSecretsPage);
-elements["secrets-close"].addEventListener("click", openFileBrowser);
+elements["secrets-close"].addEventListener("click", openScriptManager);
 elements["secrets-refresh"].addEventListener("click", () => loadSecrets().catch((error) => toast(error.message, "error")));
 elements["secret-save"].addEventListener("click", saveSecret);
 elements["secret-convert"].addEventListener("click", convertSecret);
 elements["preflight-button"].addEventListener("click", openPreflightPage);
-elements["preflight-close"].addEventListener("click", openFileBrowser);
+elements["preflight-close"].addEventListener("click", openScriptManager);
 elements["preflight-run"].addEventListener("click", () => loadPreflight().catch((error) => toast(error.message, "error")));
 elements["entity-health-button"].addEventListener("click", openEntityHealthPage);
-elements["entity-health-close"].addEventListener("click", openFileBrowser);
+elements["entity-health-close"].addEventListener("click", openScriptManager);
 elements["entity-health-refresh"].addEventListener("click", () => loadEntityHealth().catch((error) => toast(error.message, "error")));
 elements["entity-health-filter"].addEventListener("change", () => renderEntityHealth(state.entityHealth));
 elements["database-button"].addEventListener("click", openDatabasePage);
-elements["database-close"].addEventListener("click", openFileBrowser);
+elements["database-close"].addEventListener("click", openScriptManager);
 elements["database-refresh"].addEventListener("click", () => loadDatabase().catch((error) => toast(error.message, "error")));
 elements["database-entity-filter"].addEventListener("change", () => state.database && renderDatabaseEntities(state.database));
 elements["database-compare-filter"].addEventListener("change", () => state.database && renderDatabaseCompare(state.database));
 elements["database-statistics-filter"].addEventListener("change", () => state.database && renderDatabaseStatistics(state.database));
 elements["database-query-run"].addEventListener("click", runDatabaseQuery);
 elements["backups-button"].addEventListener("click", openBackupsPage);
-elements["backups-close"].addEventListener("click", openFileBrowser);
+elements["backups-close"].addEventListener("click", openScriptManager);
 elements["backups-refresh"].addEventListener("click", () => loadBackups().catch((error) => toast(error.message, "error")));
 elements["backup-filter"].addEventListener("change", () => state.backups && renderBackupList(state.backups));
 elements["backup-snapshot-create"].addEventListener("click", createSnapshotBackup);
 elements["backup-database-create"].addEventListener("click", createRecorderBackup);
 elements["backup-restore-apply"].addEventListener("click", restoreSnapshotBackup);
 elements["traces-button"].addEventListener("click", openTracesPage);
-elements["traces-close"].addEventListener("click", openFileBrowser);
+elements["traces-close"].addEventListener("click", openScriptManager);
 elements["traces-refresh"].addEventListener("click", () => loadTraces().catch((error) => toast(error.message, "error")));
 elements["trace-search"].addEventListener("input", () => renderTraces(state.traces));
 elements["trace-domain"].addEventListener("change", () => renderTraces(state.traces));
@@ -4120,10 +4399,6 @@ elements["trace-clear-detail"].addEventListener("click", () => {
 });
 elements["resource-close"].addEventListener("click", closeResourceEditor);
 elements["resource-save"].addEventListener("click", saveResource);
-elements["resource-dialog"].addEventListener("cancel", (event) => {
-  event.preventDefault();
-  closeResourceEditor();
-});
 elements["resource-editor"].addEventListener("input", () => {
   updateResourceRendering();
   setResourceDirty();
@@ -4144,9 +4419,8 @@ elements["resource-editor"].addEventListener("keydown", (event) => {
   }
 });
 elements["resource-validation"].addEventListener("click", () => jumpToResourceLine(elements["resource-validation"].dataset.line));
-elements["search-replace-button"].addEventListener("click", openSearchReplaceDialog);
-elements["search-replace-close"].addEventListener("click", () => elements["search-replace-dialog"].close());
-elements["search-replace-dialog"].addEventListener("cancel", () => elements["search-replace-dialog"].close());
+elements["search-replace-button"].addEventListener("click", openSearchReplacePage);
+elements["search-replace-close"].addEventListener("click", openScriptManager);
 elements["replace-search"].addEventListener("input", resetSearchPreview);
 elements["replace-value"].addEventListener("input", resetSearchPreview);
 elements["replace-case-sensitive"].addEventListener("change", resetSearchPreview);
@@ -4190,12 +4464,8 @@ elements["configuration-editor"].addEventListener("keydown", (event) => {
     saveConfiguration();
   }
 });
-elements["configuration-dialog"].addEventListener("cancel", (event) => {
-  event.preventDefault();
-  closeConfigurationEditor();
-});
 elements["history-button"].addEventListener("click", () => openHistory("package"));
-elements["history-close"].addEventListener("click", () => elements["history-dialog"].close());
+elements["history-close"].addEventListener("click", openScriptManager);
 elements["history-restore"].addEventListener("click", restoreSelectedBackup);
 elements["diff-changed-only"].addEventListener("change", () => {
   if (state.history.diffResult) {
@@ -4207,9 +4477,8 @@ elements["diff-changed-only"].addEventListener("change", () => {
     );
   }
 });
-elements["history-dialog"].addEventListener("cancel", () => elements["history-dialog"].close());
 elements["git-history-button"].addEventListener("click", () => openGitHistory("package"));
-elements["git-history-close"].addEventListener("click", () => elements["git-dialog"].close());
+elements["git-history-close"].addEventListener("click", openScriptManager);
 elements["git-history-restore"].addEventListener("click", restoreSelectedGitCommit);
 elements["git-diff-changed-only"].addEventListener("change", () => {
   if (state.gitHistory.diffResult) {
@@ -4221,10 +4490,8 @@ elements["git-diff-changed-only"].addEventListener("change", () => {
     );
   }
 });
-elements["git-dialog"].addEventListener("cancel", () => elements["git-dialog"].close());
 elements["package-conflicts-button"].addEventListener("click", openPackageConflicts);
-elements["conflict-close"].addEventListener("click", () => elements["conflict-dialog"].close());
-elements["conflict-dialog"].addEventListener("cancel", () => elements["conflict-dialog"].close());
+elements["conflict-close"].addEventListener("click", openScriptManager);
 elements["entity-search"].addEventListener("input", () => renderHelperResults("entity"));
 elements["service-search"].addEventListener("input", () => renderHelperResults("service"));
 elements["template-render"].addEventListener("click", renderTemplate);
@@ -4274,7 +4541,7 @@ document.addEventListener("click", (event) => {
 document.addEventListener("keydown", (event) => {
   if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "f") {
     event.preventDefault();
-    openSearchReplaceDialog();
+    openSearchReplacePage();
   }
 });
 document.querySelectorAll(".helper-tab").forEach((tab) => tab.addEventListener("click", () => {
@@ -4289,6 +4556,61 @@ window.addEventListener("beforeunload", (event) => {
   if (state.dirty || state.configurationDirty || state.resource.dirty) event.preventDefault();
 });
 
+const routeHandlers = {
+  dashboard: openDashboard,
+  editor: openScriptManager,
+  files: openFileBrowser,
+  review: openReviewPage,
+  git: openGitPage,
+  objects: openObjectsDialog,
+  blueprints: openBlueprintsPage,
+  documentation: openDocumentationPage,
+  security: openSecurityPage,
+  "entity-health": openEntityHealthPage,
+  database: openDatabasePage,
+  backups: openBackupsPage,
+  graph: openGraphPage,
+  lint: openLintPage,
+  compatibility: openCompatibilityPage,
+  refactor: openRefactorPage,
+  secrets: openSecretsPage,
+  preflight: openPreflightPage,
+  traces: openTracesPage,
+  configuration: openConfigurationEditor,
+  "search-replace": openSearchReplacePage,
+  transfer: openTransferPage,
+  trash: openTrashPage,
+  settings: openSettingsPage,
+  conflicts: openPackageConflicts,
+  history: async () => (state.history.scope ? openHistory(state.history.scope) : (openScriptManager(), "editor")),
+  "git-history": async () => (state.gitHistory.scope ? openGitHistory(state.gitHistory.scope) : (openScriptManager(), "editor")),
+  resource: async () => (state.resource.path ? openResourceEditor(state.resource.path) : (openScriptManager(), "editor")),
+};
+
+async function openRouteFromHash(replaceInvalid = false) {
+  const route = currentRoute();
+  const handler = routeHandlers[route] || routeHandlers.dashboard;
+  suppressRouteUpdate = true;
+  let replacement = "";
+  try {
+    replacement = await handler();
+  } catch (error) {
+    toast(error.message, "error");
+  } finally {
+    suppressRouteUpdate = false;
+  }
+  if (replacement) setAppRoute(replacement, true);
+  else if ((!window.location.hash || !routeHandlers[route]) && replaceInvalid) setAppRoute("dashboard", true);
+}
+
+window.addEventListener("hashchange", () => {
+  openRouteFromHash(false).catch((error) => toast(error.message, "error"));
+});
+
 renderSnippets();
 updateSidebarToolSummary();
-Promise.all([loadSettings(), refreshFiles(), loadHelpers(), loadDashboard()]).catch((error) => toast(error.message, "error"));
+Promise.all([loadSettings(), refreshFiles(), loadHelpers()]).then(() => {
+  updateFileViewControls();
+  renderSavedFileFilters();
+  return openRouteFromHash(true);
+}).catch((error) => toast(error.message, "error"));

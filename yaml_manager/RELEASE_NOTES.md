@@ -1,44 +1,65 @@
-# Release Notes 1.7.0
+# Release Notes 1.8.0
 
 Veröffentlicht am 27. Juni 2026.
 
-## Streamlined UI
+## Navigation und Verlauf
 
-Die Oberfläche wurde auf eine zentrale, logisch gruppierte Sidebar-Navigation
-umgestellt. Werkzeuge sind jetzt in die Bereiche **Übersicht**,
-**Dateien bearbeiten**, **Prüfen und Debuggen**, **Struktur und Daten** sowie
-**Verwaltung** einsortiert. Die bisherige Werkzeugauswahl in der Topbar wurde
-entfernt, damit die Kopfzeile nur noch die wichtigsten Dateiaktionen enthält.
+Der Editor ist jetzt ein eigener Navigationseintrag in der linken Sidebar. Damit
+ist der Rückweg aus Werkzeugseiten eindeutig: Seitenaktionen führen zurück zum
+Editor, während **Package-Dateien** gezielt die Dateiansicht öffnet.
+
+Die App unterstützt außerdem URL-Hashes für Hauptseiten. Beispiele:
+
+- `#dashboard`
+- `#editor`
+- `#files`
+- `#backups`
+- `#search-replace`
+- `#configuration`
+
+Browser-Zurück und Browser-Vorwärts wechseln damit zwischen App-Seiten, ohne
+Funktionen oder Daten zu verlieren.
 
 ## Package-Dateien
 
-Package-Dateien werden nicht mehr dauerhaft als lange Liste in der Sidebar
-angezeigt. Stattdessen gibt es den neuen Navigationseintrag
-**Package-Dateien**, der eine eigene Dateiansicht öffnet. Diese Seite bündelt:
+Die Package-Dateiansicht wurde für größere Dateibestände erweitert:
 
-- Suche nach Dateinamen,
-- Kategorie-Filter,
-- Tag-Filter,
-- kompakte Kennzahlen,
-- scrollbare Dateiliste,
-- direkten Wechsel in den Editor.
+- Favoriten lokal im Browser markieren,
+- zuletzt geöffnete Dateien anzeigen,
+- nach Name, Pfad, Änderung oder Kategorie sortieren,
+- nach Ordnern gruppieren,
+- aktuelle Filter speichern und wieder anwenden,
+- große Trefferlisten gestaffelt rendern.
 
-Damit bleiben auch viele Package-Dateien auffindbar, ohne die Hauptnavigation zu
-überladen.
+Die Datei-Metadaten bleiben unverändert; Favoriten, zuletzt geöffnete Dateien
+und gespeicherte Filter werden nur lokal im Browser gespeichert.
 
 ## Seiten statt Dialoge
 
-Die Package-Dateiansicht ist als reguläre Inhaltsseite umgesetzt und verhält
-sich damit wie Dashboard, Review, Git, Backups und die übrigen Werkzeugseiten.
-Beim Öffnen oder Erstellen einer Package-Datei wechselt die App direkt zurück in
-den Editor.
+Weitere größere Arbeitsbereiche sind jetzt echte Inhaltsseiten:
+
+- Versionsverlauf
+- Git-Historie
+- Ressourcen-Editor
+- Package-Konfliktübersicht
+
+Kurze Aktionen wie **Neue Datei** und die Impact-Bestätigung bleiben bewusst als
+Dialoge bestehen.
+
+## Responsive Feinschliff
+
+Für kleinere Displays wurden Page-Header, Navigationszeilen, Seitenabstände und
+Diff-Ansichten verdichtet. Tabellen, Karten und Werkzeugbereiche stapeln sich
+stabiler und lassen mehr Platz für den eigentlichen Inhalt.
 
 ## Technische Änderungen
 
-- Sidebar-Navigation in `index.html` neu gruppiert
-- Topbar-Werkzeugmenü entfernt und Dateiaktionen konsolidiert
-- Package-Dateibrowser von einem Dialog in eine echte Seite umgebaut
-- Seitenzustände, aktive Navigation und Sidebar-Zusammenfassung in `app.js`
-  erweitert
-- Responsive Darstellung und Dateibrowser-Layout in `app.css` angepasst
-- Projekt- und Add-on-Version auf `1.7.0` angehoben
+- `Editor` als eigener Sidebar-Navigationszustand ergänzt
+- Hash-Router in `app.js` eingeführt
+- Package-Dateiliste um lokale Favoriten, Recents, gespeicherte Filter,
+  Sortierung, Ordnergruppen und gestaffeltes Rendering erweitert
+- History-, Git-History-, Resource- und Conflict-Flächen in den gemeinsamen
+  Page-Stack aufgenommen
+- Responsive CSS-Regeln für Page-Header, Dateiliste, Diffs und Sidebar
+  nachgezogen
+- Projekt- und Add-on-Version auf `1.8.0` angehoben

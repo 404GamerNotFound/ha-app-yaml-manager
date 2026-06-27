@@ -54,6 +54,10 @@
             <section class="tool-group" aria-labelledby="tool-group-editor">
               <h2 class="tool-group-title" id="tool-group-editor">Dateien bearbeiten</h2>
               <nav class="sidebar-primary-nav" aria-label="Dateien bearbeiten">
+                <button class="sidebar-nav-item editor-nav" id="editor-button" type="button" aria-label="Editor öffnen">
+                  <span class="sidebar-nav-icon" aria-hidden="true">ED</span>
+                  <span><strong>Editor</strong><small>Aktuelle Datei bearbeiten</small></span>
+                </button>
                 <button class="sidebar-nav-item files-nav" id="package-files-button" type="button" aria-label="Package-Dateien öffnen">
                   <span class="sidebar-nav-icon" aria-hidden="true">YML</span>
                   <span><strong>Package-Dateien</strong><small>YAML-Dateien öffnen</small></span>
@@ -402,25 +406,51 @@
             <span aria-hidden="true">⌕</span>
             <input id="file-search" type="search" placeholder="Datei, Kategorie oder Tag suchen" autocomplete="off">
           </label>
+          <label class="file-sort-control">
+            <span>Sortieren</span>
+            <select id="file-sort">
+              <option value="name">Name</option>
+              <option value="path">Pfad</option>
+              <option value="modified">Zuletzt geändert</option>
+              <option value="category">Kategorie</option>
+            </select>
+          </label>
           <button class="button secondary" id="file-browser-new" type="button">Neue Datei</button>
         </div>
 
         <div class="file-browser-layout">
-          <aside class="file-browser-filters">
+          <div class="file-browser-filters">
             <div class="file-browser-filter-heading">
               <strong>Filter</strong>
               <span id="filter-summary">Alle Dateien</span>
             </div>
-            <div class="filter-heading">Kategorien</div>
-            <nav class="categories" id="categories" aria-label="Kategorien"></nav>
-            <div class="filter-heading">Tags</div>
-            <nav class="tags" id="tags" aria-label="Tags"></nav>
-          </aside>
+            <div class="file-browser-filter-row">
+              <div class="filter-heading">Kategorien</div>
+              <div class="categories" id="categories" role="list" aria-label="Kategorien"></div>
+            </div>
+            <div class="file-browser-filter-row">
+              <div class="filter-heading">Tags</div>
+              <div class="tags" id="tags" role="list" aria-label="Tags"></div>
+            </div>
+            <div class="file-browser-filter-row">
+              <div class="filter-heading">Ansicht</div>
+              <div class="file-view-options" aria-label="Dateiansicht">
+                <button class="view-filter active" id="file-filter-all" type="button">Alle</button>
+                <button class="view-filter" id="file-filter-favorites" type="button">Favoriten</button>
+                <button class="view-filter" id="file-filter-recent" type="button">Zuletzt</button>
+                <label class="view-toggle"><input id="file-group-folders" type="checkbox"> Ordner gruppieren</label>
+                <button class="button secondary small-button" id="file-filter-save" type="button">Filter speichern</button>
+                <select id="file-saved-filters" aria-label="Gespeicherte Filter">
+                  <option value="">Gespeicherte Filter</option>
+                </select>
+              </div>
+            </div>
+          </div>
 
           <section class="file-browser-list-panel">
             <div class="file-list-header">
               <span>Dateien</span>
-              <span id="file-count">0</span>
+              <span><span id="file-count">0</span><small id="file-list-meta"></small></span>
             </div>
             <div class="file-list" id="file-list"></div>
             <div class="root-path" id="root-path" title="Verzeichnis"></div>
@@ -429,14 +459,14 @@
       </div>
     </section>
 
-    <dialog class="configuration-dialog" id="configuration-dialog">
-      <div class="configuration-dialog-content">
+    <section class="configuration-page hidden" id="configuration-dialog">
+      <div class="configuration-page-content configuration-dialog-content">
         <div class="dialog-header configuration-dialog-header">
           <div>
             <h2>configuration.yaml</h2>
             <p>Home-Assistant-Hauptkonfiguration bearbeiten und in Packages aufteilen.</p>
           </div>
-          <button class="icon-button" id="configuration-close" type="button" aria-label="Konfigurationseditor schließen">×</button>
+          <button class="button primary" id="configuration-close" type="button">Editor öffnen</button>
         </div>
 
         <div class="configuration-toolbar">
@@ -476,16 +506,16 @@
           <span>UTF-8 · YAML</span>
         </footer>
       </div>
-    </dialog>
+    </section>
 
-    <dialog class="history-dialog" id="history-dialog">
-      <div class="history-dialog-content">
+    <section class="history-page hidden" id="history-dialog">
+      <div class="history-page-content history-dialog-content">
         <div class="dialog-header history-dialog-header">
           <div>
             <h2>Versionsverlauf</h2>
             <p id="history-path"></p>
           </div>
-          <button class="icon-button" id="history-close" type="button" aria-label="Versionsverlauf schließen">×</button>
+          <button class="button primary" id="history-close" type="button">Editor öffnen</button>
         </div>
         <div class="history-body">
           <aside class="history-list" id="history-list"></aside>
@@ -502,16 +532,16 @@
           <button class="button warning" id="history-restore" type="button" disabled>Diese Version wiederherstellen</button>
         </div>
       </div>
-    </dialog>
+    </section>
 
-    <dialog class="history-dialog" id="git-dialog">
-      <div class="history-dialog-content">
+    <section class="git-history-page hidden" id="git-dialog">
+      <div class="git-history-page-content history-dialog-content">
         <div class="dialog-header history-dialog-header">
           <div>
             <h2>Git-Historie</h2>
             <p id="git-history-path"></p>
           </div>
-          <button class="icon-button" id="git-history-close" type="button" aria-label="Git-Historie schließen">×</button>
+          <button class="button primary" id="git-history-close" type="button">Editor öffnen</button>
         </div>
         <div class="history-body">
           <aside class="history-list" id="git-history-list"></aside>
@@ -528,7 +558,7 @@
           <button class="button warning" id="git-history-restore" type="button" disabled>Auf diesen Stand zurückgehen</button>
         </div>
       </div>
-    </dialog>
+    </section>
 
     <section class="dashboard-page" id="dashboard-dialog">
       <div class="dashboard-page-content">
@@ -537,7 +567,7 @@
             <h2>Konfigurationsqualität</h2>
             <p>Konflikte, Script-Nutzung, Sicherungen und Git-Status auf einen Blick.</p>
           </div>
-          <button class="button primary" id="dashboard-close" type="button">Dateien öffnen</button>
+          <button class="button primary" id="dashboard-close" type="button">Editor öffnen</button>
         </div>
         <div class="dashboard-body">
           <section class="quality-overview">
@@ -572,7 +602,7 @@
             <h2>Review-Modus</h2>
             <p>Mehrere geplante Änderungen als Paket prüfen, vergleichen und gemeinsam anwenden.</p>
           </div>
-          <button class="button primary" id="review-close" type="button">Dateien öffnen</button>
+          <button class="button primary" id="review-close" type="button">Editor öffnen</button>
         </div>
         <div class="review-body">
           <section class="admin-section">
@@ -604,7 +634,7 @@
             <h2>Lint-Regeln</h2>
             <p>Projektregeln für IDs, Pflichtfelder, Domains, Klartextmuster und Tags.</p>
           </div>
-          <button class="button primary" id="lint-close" type="button">Dateien öffnen</button>
+          <button class="button primary" id="lint-close" type="button">Editor öffnen</button>
         </div>
         <div class="lint-body">
           <section class="admin-section">
@@ -644,7 +674,7 @@
             <h2>Gesamtgraph</h2>
             <p>Packages, Automationen, Scripts, Szenen, Entities, Secrets und Blueprints in einem Netz.</p>
           </div>
-          <button class="button primary" id="graph-close" type="button">Dateien öffnen</button>
+          <button class="button primary" id="graph-close" type="button">Editor öffnen</button>
         </div>
         <div class="graph-body">
           <section class="admin-section">
@@ -678,7 +708,7 @@
             <h2>HA-Kompatibilität</h2>
             <p>Historische Schlüssel, alte Dienste und migrationsverdächtige Syntax erkennen.</p>
           </div>
-          <button class="button primary" id="compatibility-close" type="button">Dateien öffnen</button>
+          <button class="button primary" id="compatibility-close" type="button">Editor öffnen</button>
         </div>
         <div class="compatibility-body">
           <section class="admin-section">
@@ -705,7 +735,7 @@
             <h2>Git</h2>
             <p>Lokale Branches und optionaler GitHub-/GitLab-Remote-Sync.</p>
           </div>
-          <button class="button primary" id="git-page-close" type="button">Dateien öffnen</button>
+          <button class="button primary" id="git-page-close" type="button">Editor öffnen</button>
         </div>
         <div class="git-body">
           <section class="admin-section git-branch-section">
@@ -762,14 +792,14 @@
       </div>
     </section>
 
-    <dialog class="transfer-dialog" id="transfer-dialog">
-      <div class="transfer-dialog-content">
+    <section class="transfer-page hidden" id="transfer-dialog">
+      <div class="transfer-page-content transfer-dialog-content">
         <div class="dialog-header admin-dialog-header">
           <div>
             <h2>Package Import und Export</h2>
             <p>ZIP-Archive mit Metadaten, Vorschau und Konfliktprüfung.</p>
           </div>
-          <button class="icon-button" id="transfer-close" type="button" aria-label="Import und Export schließen">×</button>
+          <button class="button primary" id="transfer-close" type="button">Editor öffnen</button>
         </div>
         <div class="transfer-body">
           <section class="admin-section transfer-section">
@@ -793,16 +823,16 @@
           </section>
         </div>
       </div>
-    </dialog>
+    </section>
 
-    <dialog class="transfer-dialog" id="settings-dialog">
-      <div class="transfer-dialog-content settings-dialog-content">
+    <section class="settings-page hidden" id="settings-dialog">
+      <div class="settings-page-content transfer-dialog-content settings-dialog-content">
         <div class="dialog-header admin-dialog-header">
           <div>
             <h2>Einstellungen</h2>
             <p>Aufbewahrung, Importgrenzen, Dashboard-Regeln und Editor-Verhalten.</p>
           </div>
-          <button class="icon-button" id="settings-close" type="button" aria-label="Einstellungen schließen">×</button>
+          <button class="button primary" id="settings-close" type="button">Editor öffnen</button>
         </div>
         <div class="settings-body">
           <section class="admin-section settings-section">
@@ -833,16 +863,16 @@
           </div>
         </div>
       </div>
-    </dialog>
+    </section>
 
-    <dialog class="history-dialog" id="trash-dialog">
-      <div class="history-dialog-content trash-dialog-content">
+    <section class="trash-page hidden" id="trash-dialog">
+      <div class="trash-page-content history-dialog-content trash-dialog-content">
         <div class="dialog-header history-dialog-header">
           <div>
             <h2>Papierkorb</h2>
             <p>Gelöschte Package-Dateien wiederherstellen oder endgültig entfernen.</p>
           </div>
-          <button class="icon-button" id="trash-close" type="button" aria-label="Papierkorb schließen">×</button>
+          <button class="button primary" id="trash-close" type="button">Editor öffnen</button>
         </div>
         <div class="trash-toolbar">
           <span id="trash-summary">Papierkorb wird geladen.</span>
@@ -851,7 +881,7 @@
         </div>
         <div class="trash-list" id="trash-list"></div>
       </div>
-    </dialog>
+    </section>
 
     <section class="objects-page hidden" id="objects-dialog">
       <div class="objects-page-content">
@@ -860,7 +890,7 @@
             <h2>Home-Assistant-Objekte</h2>
             <p>Automationen, Scripts, Szenen und ihre Referenzen direkt finden.</p>
           </div>
-          <button class="button primary" id="objects-close" type="button">Dateien öffnen</button>
+          <button class="button primary" id="objects-close" type="button">Editor öffnen</button>
         </div>
         <div class="object-browser-body">
           <div class="object-toolbar">
@@ -881,7 +911,7 @@
             <h2>Blueprints</h2>
             <p>Blueprints anzeigen, importieren, erzeugen und als Package instanziieren.</p>
           </div>
-          <button class="button primary" id="blueprints-close" type="button">Dateien öffnen</button>
+          <button class="button primary" id="blueprints-close" type="button">Editor öffnen</button>
         </div>
         <div class="blueprint-body">
           <section class="admin-section blueprint-list-section">
@@ -937,7 +967,7 @@
             <h2>Dokumentation</h2>
             <p>Interaktive Übersicht über Packages, Objekte, Bezüge, Entitäten und Änderungen.</p>
           </div>
-          <button class="button primary" id="documentation-close" type="button">Dateien öffnen</button>
+          <button class="button primary" id="documentation-close" type="button">Editor öffnen</button>
         </div>
         <div class="documentation-body">
           <section class="admin-section">
@@ -972,7 +1002,7 @@
             <h2>Sicherheit</h2>
             <p>Secrets, Klartext-Tokens und Git-Push-Warnungen prüfen.</p>
           </div>
-          <button class="button primary" id="security-close" type="button">Dateien öffnen</button>
+          <button class="button primary" id="security-close" type="button">Editor öffnen</button>
         </div>
         <div class="security-body">
           <section class="admin-section">
@@ -999,7 +1029,7 @@
             <h2>Entity-Health</h2>
             <p>Unbekannte, nicht verfügbare, deaktivierte und ungenutzte Entities prüfen.</p>
           </div>
-          <button class="button primary" id="entity-health-close" type="button">Dateien öffnen</button>
+          <button class="button primary" id="entity-health-close" type="button">Editor öffnen</button>
         </div>
         <div class="entity-health-body">
           <section class="admin-section">
@@ -1032,7 +1062,7 @@
             <h2>Datenbankanalyse</h2>
             <p>Recorder-Health, Entity-Rauschen, Statistiklücken und YAML-Abgleich.</p>
           </div>
-          <button class="button primary" id="database-close" type="button">Dateien öffnen</button>
+          <button class="button primary" id="database-close" type="button">Editor öffnen</button>
         </div>
         <div class="database-body">
           <section class="admin-section">
@@ -1104,7 +1134,7 @@
             <h2>Backup-Center</h2>
             <p>Manifeste, Snapshots, Integritätsprüfung und Recorder-Datenbank-Backups.</p>
           </div>
-          <button class="button primary" id="backups-close" type="button">Dateien öffnen</button>
+          <button class="button primary" id="backups-close" type="button">Editor öffnen</button>
         </div>
         <div class="backups-body">
           <section class="admin-section">
@@ -1159,7 +1189,7 @@
             <h2>Refactoring</h2>
             <p>Entities, Helper, Szenen, Automationen, Geräte, Bereiche und Package-Pfade geschützt ändern.</p>
           </div>
-          <button class="button primary" id="refactor-close" type="button">Dateien öffnen</button>
+          <button class="button primary" id="refactor-close" type="button">Editor öffnen</button>
         </div>
         <div class="refactor-body">
           <section class="admin-section">
@@ -1186,7 +1216,7 @@
             <h2>Secrets</h2>
             <p>`secrets.yaml` maskiert verwalten und Klartextwerte auslagern.</p>
           </div>
-          <button class="button primary" id="secrets-close" type="button">Dateien öffnen</button>
+          <button class="button primary" id="secrets-close" type="button">Editor öffnen</button>
         </div>
         <div class="secrets-body">
           <section class="admin-section">
@@ -1230,7 +1260,7 @@
             <h2>Preflight</h2>
             <p>YAML, HA-Check, Security, Entity-Health, Dokumentation und Git vor dem Push prüfen.</p>
           </div>
-          <button class="button primary" id="preflight-close" type="button">Dateien öffnen</button>
+          <button class="button primary" id="preflight-close" type="button">Editor öffnen</button>
         </div>
         <div class="preflight-body">
           <section class="admin-section">
@@ -1257,7 +1287,7 @@
             <h2>Traces</h2>
             <p>Letzte Ausführungen von Automationen und Scripts debuggen.</p>
           </div>
-          <button class="button primary" id="traces-close" type="button">Dateien öffnen</button>
+          <button class="button primary" id="traces-close" type="button">Editor öffnen</button>
         </div>
         <div class="traces-body">
           <section class="admin-section">
@@ -1283,11 +1313,11 @@
       </div>
     </section>
 
-    <dialog class="configuration-dialog" id="resource-dialog">
-      <div class="configuration-dialog-content resource-dialog-content">
+    <section class="resource-page hidden" id="resource-dialog">
+      <div class="resource-page-content configuration-dialog-content resource-dialog-content">
         <div class="dialog-header configuration-dialog-header">
           <div><h2 id="resource-title">HA-Ressource</h2><p id="resource-path"></p></div>
-          <button class="icon-button" id="resource-close" type="button" aria-label="Ressourceneditor schließen">×</button>
+          <button class="button primary" id="resource-close" type="button">Editor öffnen</button>
         </div>
         <div class="configuration-toolbar">
           <span>Direkt eingebundene Home-Assistant-YAML-Datei</span>
@@ -1306,13 +1336,13 @@
           <span>UTF-8 · YAML</span>
         </footer>
       </div>
-    </dialog>
+    </section>
 
-    <dialog id="search-replace-dialog" class="transfer-dialog">
-      <div class="transfer-dialog-content search-replace-content">
+    <section id="search-replace-dialog" class="search-replace-page hidden">
+      <div class="search-replace-page-content transfer-dialog-content search-replace-content">
         <div class="dialog-header admin-dialog-header">
           <div><h2>Multi-Datei-Suche und Ersetzen</h2><p>Packages, configuration.yaml und eingebundene HA-Ressourcen gemeinsam ändern.</p></div>
-          <button class="icon-button" id="search-replace-close" type="button" aria-label="Suchen und Ersetzen schließen">×</button>
+          <button class="button primary" id="search-replace-close" type="button">Editor öffnen</button>
         </div>
         <div class="search-replace-body">
           <div class="search-replace-controls">
@@ -1326,7 +1356,7 @@
           <div class="import-preview-list" id="replace-file-list"></div>
         </div>
       </div>
-    </dialog>
+    </section>
 
     <dialog id="impact-dialog" class="transfer-dialog">
       <div class="transfer-dialog-content impact-dialog-content">
@@ -1343,19 +1373,19 @@
       </div>
     </dialog>
 
-    <dialog class="conflict-dialog" id="conflict-dialog">
-      <div class="conflict-dialog-content">
+    <section class="conflict-page hidden" id="conflict-dialog">
+      <div class="conflict-page-content conflict-dialog-content">
         <div class="dialog-header conflict-dialog-header">
           <div>
             <h2>Package-Konfliktprüfung</h2>
             <p>Doppelte Namen, Entity-IDs und nicht zusammenführbare Schlüssel.</p>
           </div>
-          <button class="icon-button" id="conflict-close" type="button" aria-label="Konfliktübersicht schließen">×</button>
+          <button class="button primary" id="conflict-close" type="button">Editor öffnen</button>
         </div>
         <div class="conflict-summary" id="conflict-summary"></div>
         <div class="conflict-list" id="conflict-list"></div>
       </div>
-    </dialog>
+    </section>
 
     <div class="toast-region" id="toast-region" aria-live="polite"></div>
     <script src="static/app.js"></script>
