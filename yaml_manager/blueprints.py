@@ -240,7 +240,7 @@ def create_blueprint_from_yaml(
     blueprint_document = {
         "blueprint": {
             "name": name.strip(),
-            "description": "Aus YAML Script Manager erzeugt.",
+            "description": "Aus HA Maintenance Hub erzeugt.",
             "domain": domain,
             "input": {},
         },

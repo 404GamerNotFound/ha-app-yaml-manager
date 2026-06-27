@@ -1,1 +1,1 @@
-"""Unit tests for the YAML Script Manager."""
+"""Unit tests for HA Maintenance Hub."""

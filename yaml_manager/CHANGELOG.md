@@ -2,6 +2,7 @@
 
 ## 1.5.0 - 2026-06-27
 
+- App in **HA Maintenance Hub** umbenannt; sichtbare Add-on-, Panel-, Browser- und Git-Autor-Namen angepasst
 - Datenbankanalyse-Seite für Home-Assistant-Recorder ergänzt
 - Recorder-Health mit Datenbankgröße, WAL-Größe, Tabellen, Zeilenanzahl, State-Zeitraum und `PRAGMA quick_check`
 - Analyse lauter Entities nach State-Änderungen, Attributvolumen und dauerhaft `unknown`/`unavailable` wirkenden Zuständen

@@ -103,8 +103,8 @@ def git_commit_staged(message: str, relative_paths: list[str]) -> dict[str, Any]
         return {"available": True, "committed": False, "message": "Keine Git-Änderungen vorhanden."}
     run_git(
         [
-            "-c", "user.name=YAML Script Manager",
-            "-c", "user.email=yaml-script-manager@local",
+            "-c", "user.name=HA Maintenance Hub",
+            "-c", "user.email=ha-maintenance-hub@local",
             "commit", "--no-gpg-sign", "--no-verify", "--only", "-m", message, "--", *relative_paths,
         ]
     )
@@ -123,14 +123,14 @@ def ensure_git_repository() -> dict[str, Any]:
         if baseline:
             relative_paths = [git_relative_path(path) for path in baseline]
             run_git(["add", "-A", "-f", "--", *relative_paths])
-            git_commit_staged("Ausgangsstand des YAML Script Managers", relative_paths)
+            git_commit_staged("Ausgangsstand des HA Maintenance Hub", relative_paths)
         if not git_has_head():
             run_git(
                 [
-                    "-c", "user.name=YAML Script Manager",
-                    "-c", "user.email=yaml-script-manager@local",
+                    "-c", "user.name=HA Maintenance Hub",
+                    "-c", "user.email=ha-maintenance-hub@local",
                     "commit", "--no-gpg-sign", "--no-verify", "--allow-empty", "-m",
-                    "Leerer Ausgangsstand des YAML Script Managers",
+                    "Leerer Ausgangsstand des HA Maintenance Hub",
                 ]
             )
     return {"available": True, "initialized": created}
@@ -150,7 +150,7 @@ def git_commit_paths(paths: list[Path], message: str) -> dict[str, Any]:
 
 
 def git_checkpoint(paths: list[Path]) -> dict[str, Any]:
-    return git_commit_paths(paths, "Zwischenstand vor Änderung durch den YAML Script Manager")
+    return git_commit_paths(paths, "Zwischenstand vor Änderung durch den HA Maintenance Hub")
 
 
 def public_git_remote_config(config: dict[str, Any]) -> dict[str, Any]:
@@ -414,8 +414,8 @@ def merge_git_branch(raw_branch: Any, state_version: Any) -> dict[str, Any]:
                 )
             run_git(
                 [
-                    "-c", "user.name=YAML Script Manager",
-                    "-c", "user.email=yaml-script-manager@local",
+                    "-c", "user.name=HA Maintenance Hub",
+                    "-c", "user.email=ha-maintenance-hub@local",
                     "commit", "--no-gpg-sign", "--no-verify", "-m",
                     f"Git-Branch zusammengeführt: {preview['branch']}",
                 ]
@@ -720,8 +720,8 @@ def synchronize_git_remote(action: str) -> dict[str, Any]:
                 prepare_remote_history_merge(branch)
                 merge = run_git(
                     [
-                        "-c", "user.name=YAML Script Manager",
-                        "-c", "user.email=yaml-script-manager@local",
+                        "-c", "user.name=HA Maintenance Hub",
+                        "-c", "user.email=ha-maintenance-hub@local",
                         "merge", "--allow-unrelated-histories", "--no-edit", "--no-gpg-sign", reference,
                     ],
                     allowed_codes=(0, 1),

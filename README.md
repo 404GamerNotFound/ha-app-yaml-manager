@@ -1,7 +1,7 @@
-# Home Assistant YAML Script Manager
+# HA Maintenance Hub
 
-Eine Home-Assistant-App zum Kategorisieren und Bearbeiten von YAML-Skripten,
-Automationen, Szenen und zugehörigen YAML-Ressourcen.
+Eine Home-Assistant-App für Wartung, Health-Checks und die sichere Bearbeitung
+von YAML-Skripten, Automationen, Szenen und zugehörigen YAML-Ressourcen.
 
 ## Funktionen
 
@@ -65,7 +65,7 @@ Automationen, Szenen und zugehörigen YAML-Ressourcen.
 
 1. Dieses Repository in Home Assistant unter **Einstellungen → Apps → App-Store →
    Repositories** hinzufügen.
-2. **YAML Script Manager** installieren und starten.
+2. **HA Maintenance Hub** installieren und starten.
 3. Optional **In Seitenleiste anzeigen** aktivieren.
 
 Die App bindet die Home-Assistant-Konfiguration schreibbar unter `/homeassistant`

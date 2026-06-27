@@ -1,4 +1,4 @@
-# YAML Script Manager
+# HA Maintenance Hub
 
 ## Verwendung
 
@@ -341,7 +341,7 @@ ein weiterer Commit mit einer beschreibenden Nachricht. Das gilt für:
 - Package-Einbindung und Konfigurationsmigration,
 - Wiederherstellung aus Datei-Backups oder Git.
 
-Git-Commits werden mit `YAML Script Manager <yaml-script-manager@local>` erstellt.
+Git-Commits werden mit `HA Maintenance Hub <ha-maintenance-hub@local>` erstellt.
 Jeder Commit ist explizit auf die von der App bearbeiteten Pfade begrenzt. Bereits
 vom Nutzer vorgemerkte Änderungen an anderen Dateien bleiben im Index und werden
 nicht Teil des App-Commits. Auch durch `.gitignore` ausgeschlossene, verwaltete

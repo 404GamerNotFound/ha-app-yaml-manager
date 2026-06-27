@@ -1,1 +1,1 @@
-"""YAML Script Manager package."""
+"""HA Maintenance Hub package."""

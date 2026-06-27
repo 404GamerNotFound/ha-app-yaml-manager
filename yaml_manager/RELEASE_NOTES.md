@@ -2,6 +2,16 @@
 
 Veröffentlicht am 27. Juni 2026.
 
+## Neuer Name
+
+Die App heißt jetzt **HA Maintenance Hub**. Der Name spiegelt den erweiterten
+Fokus besser wider: nicht nur YAML- und Script-Bearbeitung, sondern Health-
+Checks, Wartung, Recorder-Analyse, Preflight, Secrets, Git und Diagnose.
+
+Angepasst wurden sichtbare Add-on-, Panel-, Browser- und Git-Autor-Namen. Der
+technische Add-on-Slug bleibt `yaml_script_manager`, damit bestehende
+Installationen und Updates kompatibel bleiben.
+
 ## Datenbankanalyse
 
 Die neue Seite **Datenbank** analysiert die Home-Assistant-Recorder-Datenbank
@@ -55,5 +65,6 @@ Statements werden abgelehnt.
   - `GET /api/database/yaml-compare`
   - `POST /api/database/query`
 - Neue Sidebar-Seite **Datenbank**
+- Umbenennung der App in **HA Maintenance Hub**
 - Projekt- und Add-on-Version auf `1.5.0` angehoben
 - Tests für Recorder-Health, Entity-Analyse, Statistikhinweise, YAML-Abgleich und SQL-Schutz ergänzt

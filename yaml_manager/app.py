@@ -1,4 +1,4 @@
-"""HTTP backend for the Home Assistant YAML Script Manager."""
+"""HTTP backend for HA Maintenance Hub."""
 
 from __future__ import annotations
 
@@ -2737,7 +2737,7 @@ Handler = create_handler(sys.modules[__name__])
 
 def main() -> None:
     global DATA_ROOT, GIT_REMOTE_FILE, METADATA_FILE, PACKAGES_ROOT, PORT, SETTINGS_FILE
-    parser = argparse.ArgumentParser(description="Home Assistant YAML Script Manager")
+    parser = argparse.ArgumentParser(description="HA Maintenance Hub")
     parser.add_argument("--port", type=int)
     parser.add_argument("--packages-path", type=Path)
     parser.add_argument("--data-path", type=Path)
@@ -2753,7 +2753,7 @@ def main() -> None:
         SETTINGS_FILE = DATA_ROOT / "settings.json"
     ensure_directories()
     server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
-    print(f"YAML Script Manager listening on port {PORT}; packages={PACKAGES_ROOT}", flush=True)
+    print(f"HA Maintenance Hub listening on port {PORT}; packages={PACKAGES_ROOT}", flush=True)
     server.serve_forever()
 
 

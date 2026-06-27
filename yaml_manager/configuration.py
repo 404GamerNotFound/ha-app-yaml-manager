@@ -515,7 +515,7 @@ def prepare_configuration_migration(
         package_body = f"{package_name}:\n{indented}"
     package_content = (
         "# Automatisch aus configuration.yaml ausgelagert.\n"
-        "# Bearbeitung und Wiederherstellung sind über den YAML Script Manager möglich.\n\n"
+        "# Bearbeitung und Wiederherstellung sind über den HA Maintenance Hub möglich.\n\n"
         + package_body
     )
     remaining = (preamble + "".join(kept_blocks)).rstrip() + "\n"
