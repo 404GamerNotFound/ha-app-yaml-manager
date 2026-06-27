@@ -153,6 +153,16 @@ def create_handler(backend: Any) -> type[BaseHTTPRequestHandler]:
                     self.send_json(HTTPStatus.OK, backend.preflight())
                 elif path == "/api/entity-health":
                     self.send_json(HTTPStatus.OK, backend.entity_health())
+                elif path == "/api/database":
+                    self.send_json(HTTPStatus.OK, backend.database_overview())
+                elif path == "/api/database/health":
+                    self.send_json(HTTPStatus.OK, backend.database_health())
+                elif path == "/api/database/entities":
+                    self.send_json(HTTPStatus.OK, backend.database_entities())
+                elif path == "/api/database/statistics":
+                    self.send_json(HTTPStatus.OK, backend.database_statistics())
+                elif path == "/api/database/yaml-compare":
+                    self.send_json(HTTPStatus.OK, backend.database_yaml_compare())
                 elif path == "/api/traces":
                     self.send_json(HTTPStatus.OK, backend.trace_index())
                 elif path == "/api/trace":
@@ -323,6 +333,8 @@ def create_handler(backend: Any) -> type[BaseHTTPRequestHandler]:
                     )
                 elif path == "/api/template/render":
                     self.send_json(HTTPStatus.OK, backend.render_template(body))
+                elif path == "/api/database/query":
+                    self.send_json(HTTPStatus.OK, backend.database_query(body))
                 elif path == "/api/secrets":
                     self.send_json(HTTPStatus.OK, backend.upsert_secret(body))
                 elif path == "/api/secrets/convert":

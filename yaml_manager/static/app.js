@@ -49,6 +49,7 @@ const state = {
   refactorPreview: null,
   preflight: null,
   entityHealth: null,
+  database: null,
   flow: null,
   traces: null,
   settings: null,
@@ -99,6 +100,8 @@ const elements = Object.fromEntries([
   "secrets-button", "secrets-page", "secrets-close", "secrets-refresh", "secrets-summary", "secret-name", "secret-value", "secret-save", "secret-convert-path", "secret-convert-line", "secret-convert-key", "secret-convert-name", "secret-convert-value", "secret-convert", "secrets-list",
   "preflight-button", "preflight-page", "preflight-close", "preflight-run", "preflight-summary", "preflight-stats", "preflight-list",
   "entity-health-button", "entity-health-page", "entity-health-close", "entity-health-refresh", "entity-health-summary", "entity-health-stats", "entity-health-filter", "entity-health-list",
+  "database-button", "database-page", "database-close", "database-refresh", "database-summary", "database-stats", "database-tables-summary", "database-table-list", "database-entities-summary", "database-entity-filter", "database-entity-list",
+  "database-compare-summary", "database-compare-filter", "database-compare-list", "database-statistics-summary", "database-statistics-filter", "database-statistics-list", "database-query-summary", "database-query-limit", "database-query-run", "database-query", "database-query-result",
   "traces-button", "traces-page", "traces-close", "traces-refresh", "traces-summary", "trace-search", "trace-domain", "trace-clear-detail", "trace-run-list", "trace-list", "trace-detail-summary", "trace-detail",
   "resource-dialog", "resource-close", "resource-title", "resource-path", "resource-save", "resource-editor", "resource-highlighting", "resource-line-numbers", "resource-validation", "resource-cursor",
   "template-input", "template-render", "template-result", "template-entities",
@@ -118,6 +121,7 @@ const sidebarToolLabels = {
   "git-page-button": "Git",
   "objects-button": "HA-Objekte",
   "entity-health-button": "Entity-Health",
+  "database-button": "Datenbank",
   "graph-button": "Graph",
   "lint-button": "Lint",
   "compatibility-button": "Kompatibilität",
@@ -1435,10 +1439,10 @@ async function openCompatibilityPage() {
 }
 
 function closePages() {
-  ["dashboard-dialog", "review-page", "git-page", "objects-dialog", "blueprints-page", "documentation-page", "security-page", "entity-health-page", "graph-page", "lint-page", "compatibility-page", "refactor-page", "secrets-page", "preflight-page", "traces-page"].forEach((id) => {
+  ["dashboard-dialog", "review-page", "git-page", "objects-dialog", "blueprints-page", "documentation-page", "security-page", "entity-health-page", "database-page", "graph-page", "lint-page", "compatibility-page", "refactor-page", "secrets-page", "preflight-page", "traces-page"].forEach((id) => {
     elements[id].classList.add("hidden");
   });
-  ["dashboard-button", "review-button", "git-page-button", "objects-button", "blueprints-button", "documentation-button", "security-button", "entity-health-button", "graph-button", "lint-button", "compatibility-button", "refactor-button", "secrets-button", "preflight-button", "traces-button"].forEach((id) => {
+  ["dashboard-button", "review-button", "git-page-button", "objects-button", "blueprints-button", "documentation-button", "security-button", "entity-health-button", "database-button", "graph-button", "lint-button", "compatibility-button", "refactor-button", "secrets-button", "preflight-button", "traces-button"].forEach((id) => {
     elements[id].classList.remove("active");
   });
   requestAnimationFrame(updateSidebarToolSummary);
@@ -2534,6 +2538,199 @@ async function openEntityHealthPage() {
   elements["entity-health-page"].classList.remove("hidden");
   elements["entity-health-button"].classList.add("active");
   try { await loadEntityHealth(); } catch (error) { toast(error.message, "error"); }
+}
+
+function databaseEntityMessage(entity, filter) {
+  if (filter === "attributeHeavy") {
+    return `${bytesLabel(entity.attributeBytes)} Attribute · ${entity.changes || 0} Änderungen`;
+  }
+  if (filter === "badStateEntities") {
+    return `${entity.lastState || "unknown"} · ${entity.badStates || 0}/${entity.changes || 0} kritische Zustände`;
+  }
+  return `${entity.changes || 0} Änderungen · ${bytesLabel(entity.attributeBytes)} Attribute`;
+}
+
+function renderDatabaseEntities(result) {
+  const entities = result.entities || {};
+  const summary = entities.summary || {};
+  elements["database-entities-summary"].textContent = `${summary.entities || 0} Entities · ${summary.changes || 0} State-Änderungen · ${summary.badStateEntities || 0} auffällig`;
+  const filter = elements["database-entity-filter"].value;
+  const items = entities[filter] || [];
+  if (!result.available) {
+    elements["database-entity-list"].replaceChildren(emptyBlock(result.message || "Recorder-Datenbank nicht verfügbar."));
+    return;
+  }
+  if (!items.length) {
+    elements["database-entity-list"].replaceChildren(emptyBlock("Keine Entities in dieser Kategorie."));
+    return;
+  }
+  elements["database-entity-list"].replaceChildren(...items.map((entity) => {
+    const item = document.createElement("div");
+    const noisy = filter === "noisy" && (entity.changes || 0) >= 1000;
+    item.className = `dashboard-finding ${filter === "badStateEntities" || noisy ? "warning" : "tip"}`;
+    const suggestion = noisy ? "recorder.exclude oder geringere Update-Frequenz prüfen" : `${entity.firstSeen || "?"} bis ${entity.lastSeen || "?"}`;
+    item.innerHTML = `<span class="finding-dot"></span><div><strong>${escapeHtml(entity.entityId || "")}</strong><small>${escapeHtml(databaseEntityMessage(entity, filter))}</small><small>${escapeHtml(suggestion)}</small></div>`;
+    return item;
+  }));
+}
+
+function renderDatabaseCompare(result) {
+  const compare = result.compare || {};
+  const summary = compare.summary || {};
+  elements["database-compare-summary"].textContent = `${summary.yamlEntities || 0} YAML-Entities · ${summary.databaseEntities || 0} DB-Entities · ${summary.yamlMissingInDatabase || 0} ohne DB-Historie`;
+  const filter = elements["database-compare-filter"].value;
+  const items = compare[filter] || [];
+  if (!result.available && filter !== "yamlMissingInDatabase") {
+    elements["database-compare-list"].replaceChildren(emptyBlock(result.message || "Recorder-Datenbank nicht verfügbar."));
+    return;
+  }
+  if (!items.length) {
+    elements["database-compare-list"].replaceChildren(emptyBlock("Keine Einträge in dieser Kategorie."));
+    return;
+  }
+  elements["database-compare-list"].replaceChildren(...items.map((entity) => {
+    const item = document.createElement("div");
+    item.className = `dashboard-finding ${filter === "databaseOnly" ? "tip" : "warning"}`;
+    const uses = entity.uses || [];
+    const detail = filter === "databaseOnly"
+      ? "Nicht in verwaltetem YAML referenziert"
+      : uses.slice(0, 3).map((use) => `${use.path || ""}${use.line ? `:${use.line}` : ""}`).join(" · ") || `${entity.lastState || entity.state || ""}`;
+    item.innerHTML = `<span class="finding-dot"></span><div><strong>${escapeHtml(entity.entityId || "")}</strong><small>${escapeHtml(detail)}</small></div>`;
+    if (uses[0]?.path) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "dependency-action dashboard-action";
+      button.textContent = "Öffnen";
+      button.addEventListener("click", () => openManagedPath(uses[0].path, uses[0].line));
+      item.append(button);
+    }
+    return item;
+  }));
+}
+
+function renderDatabaseStatistics(result) {
+  const statistics = result.statistics || {};
+  const summary = statistics.summary || {};
+  elements["database-statistics-summary"].textContent = `${summary.rows || 0} Statistikzeilen · ${summary.gaps || 0} Lücken · ${summary.jumps || 0} Sprung-Kandidaten`;
+  const filter = elements["database-statistics-filter"].value;
+  const items = statistics[filter] || [];
+  if (!result.available) {
+    elements["database-statistics-list"].replaceChildren(emptyBlock(result.message || "Recorder-Datenbank nicht verfügbar."));
+    return;
+  }
+  if (!items.length) {
+    elements["database-statistics-list"].replaceChildren(emptyBlock("Keine Statistik-Hinweise in dieser Kategorie."));
+    return;
+  }
+  elements["database-statistics-list"].replaceChildren(...items.map((entry) => {
+    const item = document.createElement("div");
+    item.className = "dashboard-finding warning";
+    const title = entry.statisticId || entry.statistic_id || "Statistik";
+    const detail = filter === "gaps"
+      ? `${entry.table} · ${entry.gaps} Lücken · größte Lücke ${entry.maxGapSeconds || 0}s`
+      : filter === "jumps"
+        ? `${entry.table} · größter Sprung ${entry.maxDelta}`
+        : filter === "unitChanges"
+          ? `${entry.units} verschiedene Einheiten`
+          : `has_mean=${entry.has_mean} · has_sum=${entry.has_sum}`;
+    item.innerHTML = `<span class="finding-dot"></span><div><strong>${escapeHtml(String(title))}</strong><small>${escapeHtml(String(detail))}</small></div>`;
+    return item;
+  }));
+}
+
+function renderDatabaseTables(result) {
+  const health = result.health || {};
+  const tables = health.tables || [];
+  const sizes = Object.fromEntries((health.largestTables || []).map((table) => [table.name, table.bytes]));
+  elements["database-tables-summary"].textContent = `${tables.length} Tabellen · quick_check: ${health.quickCheck || "n/a"}`;
+  if (!result.available) {
+    elements["database-table-list"].replaceChildren(emptyBlock(result.message || "Recorder-Datenbank nicht verfügbar."));
+    return;
+  }
+  elements["database-table-list"].replaceChildren(...tables.slice(0, 24).map((table) => {
+    const item = document.createElement("div");
+    item.className = "import-preview-item";
+    const size = sizes[table.name] ? ` · ${bytesLabel(sizes[table.name])}` : "";
+    item.innerHTML = `<strong>${escapeHtml(table.name)}</strong><span>${escapeHtml(String(table.rows || 0))} Zeilen${escapeHtml(size)}</span>`;
+    return item;
+  }));
+}
+
+function renderDatabase(result) {
+  state.database = result;
+  const health = result.health || {};
+  const summary = health.summary || {};
+  elements["database-summary"].textContent = result.available
+    ? `${summary.tables || 0} Tabellen · ${summary.rows || 0} Zeilen · ${bytesLabel(summary.dbSize)}`
+    : result.message || "Recorder-Datenbank nicht verfügbar.";
+  const stats = [
+    [summary.tables || 0, "Tabellen"],
+    [summary.rows || 0, "Zeilen"],
+    [bytesLabel(summary.dbSize), "DB-Größe"],
+    [bytesLabel(summary.walSize), "WAL"],
+    [health.quickCheck || "n/a", "quick_check"],
+  ];
+  elements["database-stats"].innerHTML = stats.map(([value, label]) => `<div class="quality-stat"><strong>${escapeHtml(String(value))}</strong><span>${escapeHtml(label)}</span></div>`).join("");
+  renderDatabaseTables(result);
+  renderDatabaseEntities(result);
+  renderDatabaseCompare(result);
+  renderDatabaseStatistics(result);
+}
+
+async function loadDatabase() {
+  elements["database-summary"].textContent = "Datenbankanalyse wird geladen …";
+  const result = await api("api/database");
+  renderDatabase(result);
+  return result;
+}
+
+async function openDatabasePage() {
+  closePages();
+  elements["database-page"].classList.remove("hidden");
+  elements["database-button"].classList.add("active");
+  try { await loadDatabase(); } catch (error) { toast(error.message, "error"); }
+}
+
+function renderDatabaseQueryResult(result) {
+  elements["database-query-summary"].textContent = `${result.rowCount || 0} Zeilen${result.truncated ? " · gekürzt" : ""}`;
+  const columns = result.columns || [];
+  const rows = result.rows || [];
+  if (!columns.length) {
+    elements["database-query-result"].replaceChildren(emptyBlock("Keine Spalten im Ergebnis."));
+    return;
+  }
+  const table = document.createElement("table");
+  table.className = "documentation-table database-result-table";
+  const thead = document.createElement("thead");
+  thead.innerHTML = `<tr>${columns.map((column) => `<th>${escapeHtml(String(column))}</th>`).join("")}</tr>`;
+  const tbody = document.createElement("tbody");
+  tbody.innerHTML = rows.map((row) => `<tr>${columns.map((column) => `<td>${escapeHtml(String(row[column] ?? ""))}</td>`).join("")}</tr>`).join("");
+  table.append(thead, tbody);
+  const wrap = document.createElement("div");
+  wrap.className = "documentation-table-wrap";
+  wrap.append(table);
+  elements["database-query-result"].replaceChildren(wrap);
+}
+
+async function runDatabaseQuery() {
+  elements["database-query-run"].disabled = true;
+  elements["database-query-summary"].textContent = "SQL läuft …";
+  try {
+    const result = await api("api/database/query", {
+      method: "POST",
+      body: JSON.stringify({
+        sql: elements["database-query"].value,
+        limit: elements["database-query-limit"].value,
+      }),
+    });
+    renderDatabaseQueryResult(result);
+  } catch (error) {
+    elements["database-query-summary"].textContent = error.message;
+    elements["database-query-result"].replaceChildren(emptyBlock(error.message));
+    toast(error.message, "error");
+  } finally {
+    elements["database-query-run"].disabled = false;
+  }
 }
 
 function renderTraces(result) {
@@ -3667,6 +3864,13 @@ elements["entity-health-button"].addEventListener("click", openEntityHealthPage)
 elements["entity-health-close"].addEventListener("click", openScriptManager);
 elements["entity-health-refresh"].addEventListener("click", () => loadEntityHealth().catch((error) => toast(error.message, "error")));
 elements["entity-health-filter"].addEventListener("change", () => renderEntityHealth(state.entityHealth));
+elements["database-button"].addEventListener("click", openDatabasePage);
+elements["database-close"].addEventListener("click", openScriptManager);
+elements["database-refresh"].addEventListener("click", () => loadDatabase().catch((error) => toast(error.message, "error")));
+elements["database-entity-filter"].addEventListener("change", () => state.database && renderDatabaseEntities(state.database));
+elements["database-compare-filter"].addEventListener("change", () => state.database && renderDatabaseCompare(state.database));
+elements["database-statistics-filter"].addEventListener("change", () => state.database && renderDatabaseStatistics(state.database));
+elements["database-query-run"].addEventListener("click", runDatabaseQuery);
 elements["traces-button"].addEventListener("click", openTracesPage);
 elements["traces-close"].addEventListener("click", openScriptManager);
 elements["traces-refresh"].addEventListener("click", () => loadTraces().catch((error) => toast(error.message, "error")));

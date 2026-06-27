@@ -1,5 +1,6 @@
 import base64
 import io
+import sqlite3
 import tempfile
 import unittest
 import zipfile
@@ -23,6 +24,105 @@ class FileApiTests(unittest.TestCase):
 
     def tearDown(self):
         self.temporary.cleanup()
+
+    def create_recorder_database(self):
+        path = app.PACKAGES_ROOT.parent / "home-assistant_v2.db"
+        with sqlite3.connect(path) as connection:
+            connection.executescript(
+                """
+                CREATE TABLE states_meta (
+                  metadata_id INTEGER PRIMARY KEY,
+                  entity_id TEXT NOT NULL
+                );
+                CREATE TABLE state_attributes (
+                  attributes_id INTEGER PRIMARY KEY,
+                  shared_attrs TEXT
+                );
+                CREATE TABLE states (
+                  state_id INTEGER PRIMARY KEY,
+                  metadata_id INTEGER NOT NULL,
+                  state TEXT,
+                  last_changed_ts REAL,
+                  attributes_id INTEGER
+                );
+                CREATE TABLE statistics_meta (
+                  metadata_id INTEGER PRIMARY KEY,
+                  statistic_id TEXT NOT NULL,
+                  unit_of_measurement TEXT,
+                  has_mean INTEGER,
+                  has_sum INTEGER
+                );
+                CREATE TABLE statistics (
+                  id INTEGER PRIMARY KEY,
+                  metadata_id INTEGER NOT NULL,
+                  start_ts REAL,
+                  state REAL,
+                  sum REAL
+                );
+                CREATE TABLE statistics_short_term (
+                  id INTEGER PRIMARY KEY,
+                  metadata_id INTEGER NOT NULL,
+                  start_ts REAL,
+                  state REAL,
+                  sum REAL
+                );
+                """
+            )
+            connection.executemany(
+                "INSERT INTO states_meta(metadata_id, entity_id) VALUES (?, ?)",
+                [
+                    (1, "light.used"),
+                    (2, "sensor.noisy"),
+                    (3, "sensor.db_only"),
+                    (4, "sensor.dead"),
+                ],
+            )
+            connection.executemany(
+                "INSERT INTO state_attributes(attributes_id, shared_attrs) VALUES (?, ?)",
+                [
+                    (1, '{"friendly_name":"Used"}'),
+                    (2, '{"payload":"' + ("x" * 250) + '"}'),
+                ],
+            )
+            rows = [
+                (1, 1, "on", 1_700_000_000, 1),
+                (2, 3, "42", 1_700_000_200, 1),
+                (3, 4, "unavailable", 1_700_000_300, 1),
+            ]
+            rows.extend(
+                (100 + index, 2, str(index), 1_700_001_000 + index, 2)
+                for index in range(12)
+            )
+            connection.executemany(
+                "INSERT INTO states(state_id, metadata_id, state, last_changed_ts, attributes_id) VALUES (?, ?, ?, ?, ?)",
+                rows,
+            )
+            connection.executemany(
+                "INSERT INTO statistics_meta(metadata_id, statistic_id, unit_of_measurement, has_mean, has_sum) VALUES (?, ?, ?, ?, ?)",
+                [
+                    (1, "sensor.energy", "kWh", 0, 1),
+                    (2, "sensor.energy", "Wh", 0, 1),
+                    (3, "sensor.no_class", None, 0, 0),
+                ],
+            )
+            connection.executemany(
+                "INSERT INTO statistics(metadata_id, start_ts, state, sum) VALUES (?, ?, ?, ?)",
+                [
+                    (1, 1_700_000_000, 1, 1),
+                    (1, 1_700_003_600, 2, 2),
+                    (1, 1_700_012_000, 150, 150),
+                    (3, 1_700_000_000, 5, 5),
+                ],
+            )
+            connection.executemany(
+                "INSERT INTO statistics_short_term(metadata_id, start_ts, state, sum) VALUES (?, ?, ?, ?)",
+                [
+                    (1, 1_700_000_000, 1, 1),
+                    (1, 1_700_000_300, 2, 2),
+                    (1, 1_700_001_200, 3, 3),
+                ],
+            )
+        return path
 
     def test_create_update_list_and_delete(self):
         created = app.write_file(
@@ -1649,6 +1749,59 @@ class FileApiTests(unittest.TestCase):
         self.assertIn("lint-missing-required-tag", codes)
         self.assertIn("lint", {check["id"] for check in preflight["checks"]})
         self.assertTrue(any(finding["code"].startswith("lint-") for finding in dashboard["findings"]))
+
+    def test_database_analysis_reports_recorder_health_entities_and_statistics(self):
+        self.create_recorder_database()
+
+        health = app.database_health()
+        entities = app.database_entities()
+        statistics = app.database_statistics()
+
+        self.assertTrue(health["available"])
+        self.assertEqual(health["quickCheck"], "ok")
+        self.assertGreaterEqual(health["summary"]["tables"], 6)
+        self.assertGreater(health["summary"]["rows"], 0)
+        self.assertEqual(entities["noisy"][0]["entityId"], "sensor.noisy")
+        self.assertTrue(
+            any(item["entityId"] == "sensor.dead" for item in entities["badStateEntities"])
+        )
+        self.assertTrue(any(item["statisticId"] == "sensor.energy" for item in statistics["gaps"]))
+        self.assertTrue(
+            any(item["statistic_id"] == "sensor.energy" for item in statistics["unitChanges"])
+        )
+        self.assertTrue(
+            any(item["statistic_id"] == "sensor.no_class" for item in statistics["stateClassWarnings"])
+        )
+
+    def test_database_yaml_compare_and_safe_sql_query(self):
+        self.create_recorder_database()
+        (app.PACKAGES_ROOT / "db.yaml").write_text(
+            "script:\n"
+            "  db_check:\n"
+            "    sequence:\n"
+            "      - action: light.turn_on\n"
+            "        target:\n"
+            "          entity_id: light.used\n"
+            "      - action: light.turn_on\n"
+            "        target:\n"
+            "          entity_id: light.missing\n",
+            encoding="utf-8",
+        )
+
+        compare = app.database_yaml_compare()
+        missing = {item["entityId"] for item in compare["yamlMissingInDatabase"]}
+        database_only = {item["entityId"] for item in compare["databaseOnly"]}
+        query = app.database_query(
+            {"sql": "SELECT entity_id FROM states_meta ORDER BY entity_id", "limit": 2}
+        )
+
+        self.assertIn("light.missing", missing)
+        self.assertIn("sensor.db_only", database_only)
+        self.assertEqual(query["rowCount"], 2)
+        self.assertTrue(query["truncated"])
+        with self.assertRaises(app.ApiError) as raised:
+            app.database_query({"sql": "DELETE FROM states", "limit": 10})
+        self.assertEqual(raised.exception.status, 400)
 
     def test_review_preview_and_apply_grouped_changes(self):
         created = app.write_file(

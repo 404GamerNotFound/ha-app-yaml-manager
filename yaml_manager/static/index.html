@@ -80,6 +80,10 @@
               <span class="sidebar-nav-icon" aria-hidden="true">EH</span>
               <span><strong>Entity-Health</strong><small>Status und Nutzung</small></span>
             </button>
+            <button class="sidebar-nav-item database-nav" id="database-button" type="button" aria-label="Datenbankanalyse">
+              <span class="sidebar-nav-icon" aria-hidden="true">DB</span>
+              <span><strong>Datenbank</strong><small>Recorder analysieren</small></span>
+            </button>
             <button class="sidebar-nav-item graph-nav" id="graph-button" type="button" aria-label="Gesamtgraph">
               <span class="sidebar-nav-icon" aria-hidden="true">GR</span>
               <span><strong>Graph</strong><small>Objekte und Bezüge</small></span>
@@ -950,6 +954,78 @@
               </select>
             </div>
             <div class="security-list" id="entity-health-list"></div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <section class="database-page hidden" id="database-page">
+      <div class="database-page-content">
+        <div class="dialog-header admin-dialog-header">
+          <div>
+            <h2>Datenbankanalyse</h2>
+            <p>Recorder-Health, Entity-Rauschen, Statistiklücken und YAML-Abgleich.</p>
+          </div>
+          <button class="button primary" id="database-close" type="button">Scripts öffnen</button>
+        </div>
+        <div class="database-body">
+          <section class="admin-section">
+            <div class="admin-section-heading">
+              <div><h3>Recorder</h3><p id="database-summary">Datenbankanalyse wurde noch nicht geladen.</p></div>
+              <button class="button secondary" id="database-refresh" type="button">Aktualisieren</button>
+            </div>
+            <div class="security-stats" id="database-stats"></div>
+          </section>
+          <section class="admin-section database-table-section">
+            <div class="admin-section-heading">
+              <div><h3>Tabellen</h3><p id="database-tables-summary">Tabellen werden nach Zeilenanzahl sortiert.</p></div>
+            </div>
+            <div class="database-table-list" id="database-table-list"></div>
+          </section>
+          <section class="admin-section database-table-section">
+            <div class="admin-section-heading">
+              <div><h3>Entities</h3><p id="database-entities-summary">State-Änderungen und Attributvolumen.</p></div>
+              <select id="database-entity-filter">
+                <option value="noisy">Viele Änderungen</option>
+                <option value="attributeHeavy">Große Attribute</option>
+                <option value="badStateEntities">Unknown/Unavailable</option>
+              </select>
+            </div>
+            <div class="security-list" id="database-entity-list"></div>
+          </section>
+          <section class="admin-section database-table-section">
+            <div class="admin-section-heading">
+              <div><h3>YAML vs. Datenbank</h3><p id="database-compare-summary">Referenzen werden mit Recorder-Entities abgeglichen.</p></div>
+              <select id="database-compare-filter">
+                <option value="yamlMissingInDatabase">In YAML, nicht in DB</option>
+                <option value="databaseOnly">In DB, nicht in YAML</option>
+                <option value="badStateEntities">Dauerhaft unknown/unavailable</option>
+              </select>
+            </div>
+            <div class="security-list" id="database-compare-list"></div>
+          </section>
+          <section class="admin-section database-table-section">
+            <div class="admin-section-heading">
+              <div><h3>Statistiken</h3><p id="database-statistics-summary">Langzeit- und Kurzzeitstatistiken.</p></div>
+              <select id="database-statistics-filter">
+                <option value="gaps">Lücken</option>
+                <option value="jumps">Sprünge</option>
+                <option value="unitChanges">Einheiten</option>
+                <option value="stateClassWarnings">State-Class</option>
+              </select>
+            </div>
+            <div class="security-list" id="database-statistics-list"></div>
+          </section>
+          <section class="admin-section database-sql-section">
+            <div class="admin-section-heading">
+              <div><h3>SQL</h3><p id="database-query-summary">Nur SELECT, read-only.</p></div>
+              <div class="database-query-actions">
+                <label><span>Limit</span><input id="database-query-limit" type="number" min="1" max="200" step="1" value="50"></label>
+                <button class="button secondary" id="database-query-run" type="button">Ausführen</button>
+              </div>
+            </div>
+            <textarea id="database-query" spellcheck="false">SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name</textarea>
+            <div class="database-query-result" id="database-query-result"></div>
           </section>
         </div>
       </div>

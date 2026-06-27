@@ -26,6 +26,7 @@ Automationen, Szenen und zugehörigen YAML-Ressourcen.
 - Globaler Objektgraph für Dateien, Automationen, Scripts, Szenen, Entities, Secrets und Blueprints
 - HA-Kompatibilitätsprüfung für historische Schlüssel, alte Dienste und migrationsverdächtige Syntax
 - Entity-Health-Dashboard für unbekannte, unavailable, deaktivierte und ungenutzte Entities
+- Datenbankanalyse für Recorder-Health, laute Entities, Statistiklücken, YAML-/DB-Abgleich und sicheren SELECT-Explorer
 - Entity-Refactoring mit exakter Vorschau und geschützter Multi-Datei-Anwendung
 - Maskierter Secrets-Manager inklusive Klartext-zu-`!secret`-Umwandlung
 - Preflight-Seite für den kompletten „bereit zum Push“-Check
@@ -120,6 +121,17 @@ erkennt konservative HA-Migrationshinweise und fragt optional die laufende
 Home-Assistant-Version ab. `graph.py` baut aus Objektindex, Referenzen, Secrets
 und Blueprints einen globalen Beziehungsgraphen. `secrets_manager.py` verwaltet `secrets.yaml`, ohne Werte
 in API-Antworten preiszugeben. `preflight.py` bündelt alle Push-Vorprüfungen.
+`database.py` öffnet die Home-Assistant-Recorder-Datenbank
+`home-assistant_v2.db` ausschließlich read-only relativ zum Konfigurationsroot.
+Das Modul ermittelt Dateigröße, WAL-Größe, Tabellen, Zeilenanzahlen,
+`PRAGMA quick_check`, State-Zeitraum, laute Entities, Attributvolumen,
+unknown-/unavailable-Verläufe, Statistiklücken, Statistik-Sprünge,
+Einheitswechsel, State-Class-Hinweise und den Abgleich zwischen verwalteten
+YAML-Entity-Referenzen und tatsächlich in der Datenbank gesehenen Entities.
+Der SQL-Explorer akzeptiert nur einzelne `SELECT`-/`WITH`-Abfragen, setzt
+`PRAGMA query_only=ON`, verwendet einen SQLite-Authorizer gegen Schreibzugriffe,
+bricht lange Abfragen per Progress-Handler ab und begrenzt Ergebniszeilen sowie
+Spaltenanzahl.
 Das Template-Rendering bleibt in `app.py`, weil es nur einen schmalen
 Supervisor-API-Aufruf an `POST /api/template` sowie die lokale Entity-Erkennung
 benötigt.

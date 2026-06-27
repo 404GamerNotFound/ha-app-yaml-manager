@@ -28,11 +28,11 @@ from typing import Any
 import yaml
 
 try:
-    from .api import create_handler
     from . import backup as backup_service
     from . import blueprints as blueprint_service
-    from . import configuration as configuration_service
     from . import compatibility as compatibility_service
+    from . import configuration as configuration_service
+    from . import database as database_service
     from . import documentation as documentation_service
     from . import entity_health as entity_health_service
     from . import entity_refactor as entity_refactor_service
@@ -46,11 +46,12 @@ try:
     from . import refactor as refactor_service
     from . import resources as resource_service
     from . import review as review_service
-    from . import security as security_service
     from . import secrets_manager as secrets_manager_service
+    from . import security as security_service
     from . import semantic as semantic_service
     from . import settings as settings_service
     from . import traces as trace_service
+    from .api import create_handler
     from .dependencies import (
         analyze_dependencies,
         focus_dependencies,
@@ -59,13 +60,14 @@ try:
     )
     from .errors import ApiError
     from .file_cache import TextFileCache
-    from .validation import HomeAssistantLoader, validate_yaml as validate_yaml_content
+    from .validation import HomeAssistantLoader
+    from .validation import validate_yaml as validate_yaml_content
 except ImportError:  # pragma: no cover - direct execution in the app container
-    from api import create_handler
     import backup as backup_service
     import blueprints as blueprint_service
-    import configuration as configuration_service
     import compatibility as compatibility_service
+    import configuration as configuration_service
+    import database as database_service
     import documentation as documentation_service
     import entity_health as entity_health_service
     import entity_refactor as entity_refactor_service
@@ -79,11 +81,12 @@ except ImportError:  # pragma: no cover - direct execution in the app container
     import refactor as refactor_service
     import resources as resource_service
     import review as review_service
-    import security as security_service
     import secrets_manager as secrets_manager_service
+    import security as security_service
     import semantic as semantic_service
     import settings as settings_service
     import traces as trace_service
+    from api import create_handler
     from dependencies import (
         analyze_dependencies,
         focus_dependencies,
@@ -92,7 +95,8 @@ except ImportError:  # pragma: no cover - direct execution in the app container
     )
     from errors import ApiError
     from file_cache import TextFileCache
-    from validation import HomeAssistantLoader, validate_yaml as validate_yaml_content
+    from validation import HomeAssistantLoader
+    from validation import validate_yaml as validate_yaml_content
 
 
 PORT = int(os.environ.get("PORT", "8099"))
@@ -1441,6 +1445,30 @@ def save_impact(body: dict[str, Any]) -> dict[str, Any]:
 
 def entity_health() -> dict[str, Any]:
     return entity_health_service.entity_health(sys.modules[__name__])
+
+
+def database_overview() -> dict[str, Any]:
+    return database_service.database_overview(sys.modules[__name__])
+
+
+def database_health() -> dict[str, Any]:
+    return database_service.database_health(sys.modules[__name__])
+
+
+def database_entities() -> dict[str, Any]:
+    return database_service.database_entities(sys.modules[__name__])
+
+
+def database_statistics() -> dict[str, Any]:
+    return database_service.database_statistics(sys.modules[__name__])
+
+
+def database_yaml_compare() -> dict[str, Any]:
+    return database_service.database_yaml_compare(sys.modules[__name__])
+
+
+def database_query(body: dict[str, Any]) -> dict[str, Any]:
+    return database_service.database_query(sys.modules[__name__], body)
 
 
 def preflight() -> dict[str, Any]:
