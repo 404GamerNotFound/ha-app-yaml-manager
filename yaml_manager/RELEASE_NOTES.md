@@ -1,70 +1,69 @@
-# Release Notes 1.5.0
+# Release Notes 1.6.0
 
 Veröffentlicht am 27. Juni 2026.
 
-## Neuer Name
+## Backup-Center
 
-Die App heißt jetzt **HA Maintenance Hub**. Der Name spiegelt den erweiterten
-Fokus besser wider: nicht nur YAML- und Script-Bearbeitung, sondern Health-
-Checks, Wartung, Recorder-Analyse, Preflight, Secrets, Git und Diagnose.
+Die neue Seite **Backups** bündelt lokale Datei-Backups, vollständige
+Konfigurations-Snapshots, Recorder-Datenbank-Backups und die
+Integritätsprüfung. Backups können gepinnt werden, damit sie von automatischer
+Bereinigung ausgenommen bleiben.
 
-Angepasst wurden sichtbare Add-on-, Panel-, Browser- und Git-Autor-Namen. Der
-technische Add-on-Slug bleibt `yaml_script_manager`, damit bestehende
-Installationen und Updates kompatibel bleiben.
+## Manifeste und Integrität
 
-## Datenbankanalyse
+Neue Datei-Backups erhalten ein `manifest.json` mit Quelle, Erstellzeitpunkt,
+Größe, SHA-256, Git-Commit, letztem Home-Assistant-Check und Restore-Status.
+Ältere Backups ohne Manifest bleiben lesbar und werden in der Integritätsprüfung
+als Hinweis markiert.
 
-Die neue Seite **Datenbank** analysiert die Home-Assistant-Recorder-Datenbank
-`home-assistant_v2.db` direkt aus dem Konfigurationsverzeichnis. Die Analyse ist
-rein lesend und funktioniert auch dann sauber, wenn lokal keine Recorder-
-Datenbank vorhanden ist.
+Die Integritätsprüfung erkennt:
 
-Die Recorder-Übersicht zeigt:
+- fehlende Manifeste oder Dateien,
+- Hash- und Größenabweichungen,
+- ungültige YAML-Sicherungen,
+- defekte Snapshot-ZIP-Archive,
+- überschrittene Backup-Größenlimits,
+- Backups außerhalb der Aufbewahrung.
 
-- Datenbank- und WAL-Größe,
-- Tabellen und Zeilenanzahlen,
-- größte Tabellen, sofern `dbstat` verfügbar ist,
-- ältesten und neuesten State-Zeitpunkt,
-- Ergebnis von `PRAGMA quick_check`.
+## Konfigurations-Snapshots
 
-## Entity- und YAML-Abgleich
+Snapshots werden als ZIP in `/data/backups/<id>/snapshot.zip` abgelegt und
+enthalten `configuration.yaml`, verwaltete Packages und Blueprints. `secrets.yaml`
+wird optional nur maskiert als `secrets.masked.yaml` aufgenommen und nicht
+zurückgeschrieben.
 
-Die Entity-Analyse findet laute Entities nach State-Änderungen, Entities mit
-großem Attributvolumen sowie Entities, deren letzter oder kompletter Verlauf auf
-`unknown` beziehungsweise `unavailable` hindeutet.
+Ein Snapshot-Restore ist nur nach einer Vorschau möglich. Die Vorschau prüft
+YAML, Package-Konflikte und bindet den Zielzustand über einen Hash. Beim
+Wiederherstellen werden bestehende Ziel-Dateien zuerst gesichert, dann atomar
+geschrieben, per Git versioniert und anschließend durch den Home-Assistant-Check
+geführt.
 
-Zusätzlich gleicht die App verwaltete YAML-Entity-Referenzen mit der
-Recorder-Historie ab. Dadurch werden Entities sichtbar, die zwar in YAML
-referenziert werden, aber nie in der Datenbank auftauchen, sowie Datenbank-
-Entities ohne verwaltete YAML-Referenz.
+## Recorder-Datenbank-Backups
 
-## Statistikprüfung
+Die Recorder-Datenbank `home-assistant_v2.db` wird nicht roh kopiert. Stattdessen
+erstellt HA Maintenance Hub über `sqlite3.Connection.backup()` einen konsistenten
+SQLite-Snapshot unter `/data/db-backups`.
 
-Langzeit- und Kurzzeitstatistiken werden auf typische Auffälligkeiten geprüft:
+## Aufbewahrung
 
-- Lücken in `statistics` und `statistics_short_term`,
-- große Sprung-Kandidaten,
-- geänderte Einheiten in `statistics_meta`,
-- Statistik-Metadaten ohne `has_mean` und ohne `has_sum`.
+Die Einstellungen wurden erweitert:
 
-## Sicherer SQL-Explorer
-
-Der SQL-Explorer erlaubt nur einzelne `SELECT`- oder `WITH`-Abfragen. Serverseitig
-werden `PRAGMA query_only=ON`, ein SQLite-Authorizer, ein kurzer Timeout sowie
-Limits für Zeilen und Spalten verwendet. Schreibende Statements und mehrere
-Statements werden abgelehnt.
+- Anzahl der Backup-Stände,
+- Backup-Aufbewahrung nach Tagen,
+- maximales Backup-Volumen in MiB,
+- Pinning einzelner Backups.
 
 ## Technische Änderungen
 
-- Neues Backend-Modul `database.py`
 - Neue API-Endpunkte:
-  - `GET /api/database`
-  - `GET /api/database/health`
-  - `GET /api/database/entities`
-  - `GET /api/database/statistics`
-  - `GET /api/database/yaml-compare`
-  - `POST /api/database/query`
-- Neue Sidebar-Seite **Datenbank**
-- Umbenennung der App in **HA Maintenance Hub**
-- Projekt- und Add-on-Version auf `1.5.0` angehoben
-- Tests für Recorder-Health, Entity-Analyse, Statistikhinweise, YAML-Abgleich und SQL-Schutz ergänzt
+  - `GET /api/backups/overview`
+  - `GET /api/backups/integrity`
+  - `POST /api/backups/pin`
+  - `POST /api/backups/snapshot`
+  - `POST /api/backups/snapshot/restore-preview`
+  - `POST /api/backups/snapshot/restore`
+  - `POST /api/backups/database`
+- Backup-Integrität ist Teil von Preflight
+- Systemstatus berücksichtigt `/data/db-backups`
+- Projekt- und Add-on-Version auf `1.6.0` angehoben
+- Tests für Manifeste, Pinning, Retention, Snapshots, Restore-Preview und SQLite-Backup ergänzt

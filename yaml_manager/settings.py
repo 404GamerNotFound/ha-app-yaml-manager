@@ -18,6 +18,8 @@ except ImportError:  # pragma: no cover - direct execution in the app container
 
 DEFAULT_SETTINGS: dict[str, Any] = {
     "backupRetention": 30,
+    "backupRetentionDays": 0,
+    "backupMaxSizeMiB": 0,
     "trashRetentionDays": 30,
     "trashMaxSizeMiB": 100,
     "maxImportFiles": 500,
@@ -64,6 +66,18 @@ def sanitize_settings(raw: Any) -> dict[str, Any]:
             DEFAULT_SETTINGS["backupRetention"],
             5,
             500,
+        ),
+        "backupRetentionDays": _bounded_int(
+            source.get("backupRetentionDays"),
+            DEFAULT_SETTINGS["backupRetentionDays"],
+            0,
+            3650,
+        ),
+        "backupMaxSizeMiB": _bounded_int(
+            source.get("backupMaxSizeMiB"),
+            DEFAULT_SETTINGS["backupMaxSizeMiB"],
+            0,
+            102400,
         ),
         "maxImportFiles": _bounded_int(
             source.get("maxImportFiles"),

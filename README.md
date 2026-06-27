@@ -38,6 +38,7 @@ von YAML-Skripten, Automationen, Szenen und zugehörigen YAML-Ressourcen.
 - Vorlagen für Aktionen, Bedingungen, Verzögerungen, Auswahl und Wiederholungen
 - Suche nach Home-Assistant-Entitäten und -Diensten
 - Sicheres Speichern mit Sicherungskopien und Papierkorb
+- Backup-Center mit Manifesten, Snapshots, Integritätsprüfung, Pinning und Recorder-Datenbank-Backups
 - Papierkorb-Dialog zum Wiederherstellen oder endgültigen Entfernen gelöschter Dateien
 - Automatische Papierkorb-Aufbewahrung nach Alter und Maximalgröße
 - Umbenennen und Verschieben von Dateien innerhalb des Package-Ordners
@@ -121,6 +122,22 @@ erkennt konservative HA-Migrationshinweise und fragt optional die laufende
 Home-Assistant-Version ab. `graph.py` baut aus Objektindex, Referenzen, Secrets
 und Blueprints einen globalen Beziehungsgraphen. `secrets_manager.py` verwaltet `secrets.yaml`, ohne Werte
 in API-Antworten preiszugeben. `preflight.py` bündelt alle Push-Vorprüfungen.
+`backup.py` verwaltet lokale Datei-Backups weiterhin rückwärtskompatibel als
+Timestamp-Verzeichnisse, schreibt für neue Sicherungen aber zusätzlich ein
+`manifest.json` mit Quelle, Erstellzeitpunkt, SHA-256, Größe, Git-Commit,
+Home-Assistant-Check und Restore-Status. Das Backup-Center fasst diese
+Manifeste zusammen, prüft Hashes, fehlende Dateien, YAML-Gültigkeit,
+Snapshot-ZIPs sowie Aufbewahrungsgrenzen und erlaubt das Pinnen wichtiger
+Stände. Vollständige Konfigurations-Snapshots werden als ZIP mit
+`configuration.yaml`, Packages und Blueprints unter `/data/backups` abgelegt;
+`secrets.yaml` wird nur maskiert aufgenommen und nicht zurückgeschrieben. Ein
+Snapshot-Restore benötigt eine serverseitige Vorschau mit YAML-Prüfung,
+Package-Konfliktanalyse und Zustandshash. Vor dem Schreiben werden aktuelle
+Zieldateien erneut gesichert, anschließend atomar ersetzt, per Git versioniert
+und durch den Home-Assistant-Check geführt. Recorder-Datenbank-Backups werden
+unter `/data/db-backups` über `sqlite3.Connection.backup()` erzeugt, damit auch
+bei WAL-Nutzung ein konsistenter SQLite-Stand entsteht.
+
 `database.py` öffnet die Home-Assistant-Recorder-Datenbank
 `home-assistant_v2.db` ausschließlich read-only relativ zum Konfigurationsroot.
 Das Modul ermittelt Dateigröße, WAL-Größe, Tabellen, Zeilenanzahlen,

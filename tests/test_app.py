@@ -1,5 +1,6 @@
 import base64
 import io
+import json
 import sqlite3
 import tempfile
 import unittest
@@ -1665,6 +1666,76 @@ class FileApiTests(unittest.TestCase):
 
         self.assertEqual(restored["configurationCheck"], {"valid": True})
         self.assertNotIn("logger:", restored["content"])
+
+    def test_backup_center_manifests_pin_and_retention(self):
+        app.update_settings({"backupRetention": 5, "backupRetentionDays": 0, "backupMaxSizeMiB": 0})
+        created = app.write_file("manifest.yaml", "script:\n  manifest: {}\n", None, "Tests", create=True)
+        updated = app.write_file(
+            created["path"],
+            "script:\n  manifest:\n    alias: Neu\n    sequence: []\n",
+            created["version"],
+            "Tests",
+            create=False,
+        )
+        backup_id = app.backup_history("package", created["path"])["entries"][0]["id"]
+        manifest = json.loads((app.DATA_ROOT / "backups" / backup_id / "manifest.json").read_text(encoding="utf-8"))
+
+        pinned = app.set_backup_pin(backup_id, True)
+        app.update_settings({"backupRetention": 5, "backupMaxSizeMiB": 1})
+        overview = app.backup_overview()
+
+        self.assertEqual(manifest["type"], "file")
+        self.assertEqual(manifest["files"][0]["path"], created["path"])
+        self.assertEqual(manifest["files"][0]["sha256"], created["version"])
+        self.assertTrue(any(item["id"] == backup_id and item["pinned"] for item in pinned["backups"]))
+        self.assertTrue((app.DATA_ROOT / "backups" / backup_id).is_dir())
+        self.assertGreaterEqual(overview["summary"]["pinned"], 1)
+        self.assertEqual(app.read_file(created["path"])["version"], updated["version"])
+
+    def test_snapshot_preview_restore_and_integrity(self):
+        configuration = app.PACKAGES_ROOT.parent / "configuration.yaml"
+        configuration.write_text("homeassistant:\n  packages: !include_dir_named packages\n", encoding="utf-8")
+        app.write_file(
+            "snapshot.yaml",
+            "script:\n  snapshot:\n    alias: Alt\n    sequence: []\n",
+            None,
+            "Tests",
+            create=True,
+        )
+        with patch.object(app, "check_home_assistant_configuration", return_value={"valid": True}):
+            snapshot = app.create_backup_snapshot({"secretsMode": "none"})
+            snapshot_id = snapshot["snapshot"]["id"]
+            changed = app.read_file("snapshot.yaml")
+            app.write_file(
+                "snapshot.yaml",
+                changed["content"].replace("alias: Alt", "alias: Neu"),
+                changed["version"],
+                "Tests",
+                create=False,
+            )
+            preview = app.snapshot_restore_preview(snapshot_id)
+            restored = app.restore_snapshot(snapshot_id, preview["stateVersion"])
+
+        self.assertTrue(preview["valid"])
+        self.assertTrue(any(file["path"] == "packages/snapshot.yaml" for file in preview["files"]))
+        self.assertIn("alias: Alt", app.read_file("snapshot.yaml")["content"])
+        self.assertEqual(restored["restored"], 2)
+        self.assertEqual(app.backup_integrity()["summary"]["errors"], 0)
+
+    def test_recorder_database_backup_uses_sqlite_backup(self):
+        self.create_recorder_database()
+
+        result = app.create_database_backup()
+        backup_id = result["databaseBackup"]["id"]
+        backup_path = app.DATA_ROOT / "db-backups" / backup_id / "home-assistant_v2.db"
+
+        with sqlite3.connect(backup_path) as connection:
+            count = connection.execute("SELECT COUNT(*) FROM states").fetchone()[0]
+
+        self.assertTrue(backup_path.is_file())
+        self.assertGreater(count, 0)
+        self.assertEqual(app.backup_overview()["summary"]["databaseBackups"], 1)
+        self.assertEqual(app.backup_integrity()["summary"]["errors"], 0)
 
     def test_package_conflicts_detect_names_entities_keys_and_unique_ids(self):
         configuration = app.PACKAGES_ROOT.parent / "configuration.yaml"

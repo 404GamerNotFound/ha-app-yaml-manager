@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.6.0 - 2026-06-27
+
+- Backup-Center mit Übersicht für Datei-Backups, Snapshots, Recorder-Datenbank-Backups und Integritätsprüfung ergänzt
+- Neue Backups erhalten ein `manifest.json` mit Quelle, Zeitpunkt, Größe, SHA-256, Git-Commit, Home-Assistant-Check und Restore-Status
+- Vollständige Konfigurations-Snapshots als ZIP mit `configuration.yaml`, Packages, Blueprints und optional maskierter `secrets.yaml` ergänzt
+- Snapshot-Restore läuft über eine verpflichtende Vorschau mit YAML-Prüfung, Package-Konfliktanalyse, Zustandshash und anschließendem Backup der Ziel-Dateien
+- Backup-Integritätsprüfung erkennt fehlende Manifeste/Dateien, Hash- und Größenabweichungen, ungültiges YAML, defekte Snapshot-ZIPs und überschrittene Limits
+- Aufbewahrung nach Anzahl, Alter, Maximalgröße und Pinning ergänzt
+- Konsistente SQLite-Sicherung der Recorder-Datenbank über `sqlite3.Connection.backup()` nach `/data/db-backups`
+- Backup-Integrität in Preflight und Systemstatus integriert
+
 ## 1.5.0 - 2026-06-27
 
 - App in **HA Maintenance Hub** umbenannt; sichtbare Add-on-, Panel-, Browser- und Git-Autor-Namen angepasst

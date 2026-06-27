@@ -50,6 +50,8 @@ const state = {
   preflight: null,
   entityHealth: null,
   database: null,
+  backups: null,
+  snapshotPreview: null,
   flow: null,
   traces: null,
   settings: null,
@@ -88,7 +90,7 @@ const elements = Object.fromEntries([
   "git-page-button", "git-page", "git-page-close",
   "remote-status", "remote-badge", "remote-url", "remote-branch", "remote-username", "remote-token", "remote-auto-push", "remote-clear-token", "remote-save", "remote-fetch", "remote-pull", "remote-push", "remote-sync", "remote-remove", "remote-resolution", "remote-merge", "remote-force-push",
   "transfer-button", "transfer-dialog", "transfer-close", "export-scope", "export-category", "export-start", "import-file", "import-strategy", "import-preview", "import-apply", "import-summary", "import-preview-list",
-  "settings-button", "settings-dialog", "settings-close", "settings-save", "settings-reload", "settings-backup-retention", "settings-trash-days", "settings-trash-size", "settings-import-size", "settings-expanded-size", "settings-import-files", "settings-theme", "settings-after-save", "settings-branch-prefix", "settings-unused-scripts",
+  "settings-button", "settings-dialog", "settings-close", "settings-save", "settings-reload", "settings-backup-retention", "settings-backup-days", "settings-backup-size", "settings-trash-days", "settings-trash-size", "settings-import-size", "settings-expanded-size", "settings-import-files", "settings-theme", "settings-after-save", "settings-branch-prefix", "settings-unused-scripts",
   "trash-button", "trash-dialog", "trash-close", "trash-refresh", "trash-purge-all", "trash-summary", "trash-list",
   "objects-button", "objects-dialog", "objects-close", "objects-refresh", "object-search", "object-domain", "objects-summary", "object-list",
   "blueprints-button", "blueprints-page", "blueprints-close", "blueprints-refresh", "blueprints-summary", "blueprint-search", "blueprint-domain", "blueprint-list",
@@ -102,6 +104,7 @@ const elements = Object.fromEntries([
   "entity-health-button", "entity-health-page", "entity-health-close", "entity-health-refresh", "entity-health-summary", "entity-health-stats", "entity-health-filter", "entity-health-list",
   "database-button", "database-page", "database-close", "database-refresh", "database-summary", "database-stats", "database-tables-summary", "database-table-list", "database-entities-summary", "database-entity-filter", "database-entity-list",
   "database-compare-summary", "database-compare-filter", "database-compare-list", "database-statistics-summary", "database-statistics-filter", "database-statistics-list", "database-query-summary", "database-query-limit", "database-query-run", "database-query", "database-query-result",
+  "backups-button", "backups-page", "backups-close", "backups-refresh", "backups-summary", "backups-stats", "backup-snapshot-create", "backup-database-create", "backup-list-summary", "backup-filter", "backup-list", "backup-database-summary", "backup-database-list", "backup-integrity-summary", "backup-integrity-list", "backup-restore-summary", "backup-restore-apply", "backup-restore-list",
   "traces-button", "traces-page", "traces-close", "traces-refresh", "traces-summary", "trace-search", "trace-domain", "trace-clear-detail", "trace-run-list", "trace-list", "trace-detail-summary", "trace-detail",
   "resource-dialog", "resource-close", "resource-title", "resource-path", "resource-save", "resource-editor", "resource-highlighting", "resource-line-numbers", "resource-validation", "resource-cursor",
   "template-input", "template-render", "template-result", "template-entities",
@@ -122,6 +125,7 @@ const sidebarToolLabels = {
   "objects-button": "HA-Objekte",
   "entity-health-button": "Entity-Health",
   "database-button": "Datenbank",
+  "backups-button": "Backups",
   "graph-button": "Graph",
   "lint-button": "Lint",
   "compatibility-button": "Kompatibilität",
@@ -323,7 +327,7 @@ function renderHealth(health) {
     },
     {
       title: "Backups",
-      detail: `${health.storage.backups.directories} Stände · ${bytesLabel(health.storage.backups.size)}`,
+      detail: `${health.storage.backups.directories} Stände · ${health.storage.databaseBackups?.directories || 0} DB · ${bytesLabel((health.storage.backups.size || 0) + (health.storage.databaseBackups?.size || 0))}`,
       status: "ok",
     },
     {
@@ -1439,10 +1443,10 @@ async function openCompatibilityPage() {
 }
 
 function closePages() {
-  ["dashboard-dialog", "review-page", "git-page", "objects-dialog", "blueprints-page", "documentation-page", "security-page", "entity-health-page", "database-page", "graph-page", "lint-page", "compatibility-page", "refactor-page", "secrets-page", "preflight-page", "traces-page"].forEach((id) => {
+  ["dashboard-dialog", "review-page", "git-page", "objects-dialog", "blueprints-page", "documentation-page", "security-page", "entity-health-page", "database-page", "backups-page", "graph-page", "lint-page", "compatibility-page", "refactor-page", "secrets-page", "preflight-page", "traces-page"].forEach((id) => {
     elements[id].classList.add("hidden");
   });
-  ["dashboard-button", "review-button", "git-page-button", "objects-button", "blueprints-button", "documentation-button", "security-button", "entity-health-button", "database-button", "graph-button", "lint-button", "compatibility-button", "refactor-button", "secrets-button", "preflight-button", "traces-button"].forEach((id) => {
+  ["dashboard-button", "review-button", "git-page-button", "objects-button", "blueprints-button", "documentation-button", "security-button", "entity-health-button", "database-button", "backups-button", "graph-button", "lint-button", "compatibility-button", "refactor-button", "secrets-button", "preflight-button", "traces-button"].forEach((id) => {
     elements[id].classList.remove("active");
   });
   requestAnimationFrame(updateSidebarToolSummary);
@@ -1671,6 +1675,8 @@ async function removeRemoteConfiguration() {
 function fillSettings(settings = state.settings) {
   if (!settings) return;
   elements["settings-backup-retention"].value = settings.backupRetention;
+  elements["settings-backup-days"].value = settings.backupRetentionDays;
+  elements["settings-backup-size"].value = settings.backupMaxSizeMiB;
   elements["settings-trash-days"].value = settings.trashRetentionDays;
   elements["settings-trash-size"].value = settings.trashMaxSizeMiB;
   elements["settings-import-size"].value = settings.maxImportSizeMiB;
@@ -1697,6 +1703,8 @@ async function saveSettings() {
       method: "PUT",
       body: JSON.stringify({
         backupRetention: elements["settings-backup-retention"].value,
+        backupRetentionDays: elements["settings-backup-days"].value,
+        backupMaxSizeMiB: elements["settings-backup-size"].value,
         trashRetentionDays: elements["settings-trash-days"].value,
         trashMaxSizeMiB: elements["settings-trash-size"].value,
         maxImportSizeMiB: elements["settings-import-size"].value,
@@ -2730,6 +2738,198 @@ async function runDatabaseQuery() {
     toast(error.message, "error");
   } finally {
     elements["database-query-run"].disabled = false;
+  }
+}
+
+function renderBackupStats(result) {
+  const summary = result.summary || {};
+  elements["backups-summary"].textContent = `${summary.backups || 0} Backups · ${summary.snapshots || 0} Snapshots · ${summary.databaseBackups || 0} DB-Backups`;
+  const stats = [
+    [summary.fileBackups || 0, "Datei-Backups"],
+    [summary.snapshots || 0, "Snapshots"],
+    [summary.databaseBackups || 0, "DB-Backups"],
+    [summary.pinned || 0, "Gepinnt"],
+    [bytesLabel(summary.size || 0), "Speicher"],
+  ];
+  elements["backups-stats"].innerHTML = stats.map(([value, label]) => `<div class="quality-stat"><strong>${escapeHtml(String(value))}</strong><span>${escapeHtml(label)}</span></div>`).join("");
+}
+
+function backupItemElement(backup) {
+  const item = document.createElement("div");
+  item.className = `dashboard-finding ${backup.type === "snapshot" ? "tip" : "warning"}`;
+  const type = backup.type === "snapshot" ? "Snapshot" : "Datei";
+  const source = backup.source?.relative || backup.summary?.files || "";
+  item.innerHTML = `<span class="finding-dot"></span><div><strong>${escapeHtml(type)} ${escapeHtml(backup.id)}</strong><small>${escapeHtml(backup.created || "")} · ${bytesLabel(backup.size)} · ${backup.pinned ? "gepinnt" : "nicht gepinnt"}</small><small>${escapeHtml(String(source || ""))}</small></div>`;
+  const actions = document.createElement("div");
+  actions.className = "dashboard-finding-actions";
+  if (backup.type === "snapshot") {
+    const preview = document.createElement("button");
+    preview.type = "button";
+    preview.className = "dependency-action dashboard-action";
+    preview.textContent = "Prüfen";
+    preview.addEventListener("click", () => previewSnapshotRestore(backup.id));
+    actions.append(preview);
+  }
+  const pin = document.createElement("button");
+  pin.type = "button";
+  pin.className = "dependency-action dashboard-action";
+  pin.textContent = backup.pinned ? "Lösen" : "Pinnen";
+  pin.addEventListener("click", () => setBackupPin(backup.id, !backup.pinned));
+  actions.append(pin);
+  item.append(actions);
+  return item;
+}
+
+function renderBackupList(result) {
+  const filter = elements["backup-filter"].value;
+  const items = (result.backups || []).filter((backup) => !filter || backup.type === filter);
+  elements["backup-list-summary"].textContent = `${items.length} Einträge · Aufbewahrung ${result.retention?.count || 0} Stände`;
+  if (!items.length) {
+    elements["backup-list"].replaceChildren(emptyBlock("Keine Backups in dieser Kategorie."));
+    return;
+  }
+  elements["backup-list"].replaceChildren(...items.map(backupItemElement));
+}
+
+function renderDatabaseBackupList(result) {
+  const items = result.databaseBackups || [];
+  elements["backup-database-summary"].textContent = `${items.length} konsistente SQLite-Backups`;
+  if (!items.length) {
+    elements["backup-database-list"].replaceChildren(emptyBlock("Noch keine Recorder-Datenbank-Backups."));
+    return;
+  }
+  elements["backup-database-list"].replaceChildren(...items.map((backup) => {
+    const item = document.createElement("div");
+    item.className = "dashboard-finding tip";
+    item.innerHTML = `<span class="finding-dot"></span><div><strong>${escapeHtml(backup.id)}</strong><small>${escapeHtml(backup.created || "")} · ${bytesLabel(backup.size)}</small><small>${escapeHtml(backup.source?.path || "")}</small></div>`;
+    return item;
+  }));
+}
+
+function renderBackupIntegrity(result) {
+  const integrity = result.integrity || {};
+  const summary = integrity.summary || {};
+  elements["backup-integrity-summary"].textContent = `${summary.errors || 0} Fehler · ${summary.warnings || 0} Warnungen`;
+  const findings = integrity.findings || [];
+  if (!findings.length) {
+    elements["backup-integrity-list"].replaceChildren(emptyBlock("Alle geprüften Backups sind plausibel."));
+    return;
+  }
+  elements["backup-integrity-list"].replaceChildren(...findings.map((finding) => {
+    const item = document.createElement("div");
+    item.className = `dashboard-finding ${finding.severity || "warning"}`;
+    item.innerHTML = `<span class="finding-dot"></span><div><strong>${escapeHtml(finding.title || finding.code || "Backup-Hinweis")}</strong><small>${escapeHtml(finding.message || "")}</small></div>`;
+    return item;
+  }));
+}
+
+function renderSnapshotPreview(preview) {
+  state.snapshotPreview = preview;
+  elements["backup-restore-apply"].disabled = !preview.valid;
+  elements["backup-restore-summary"].textContent = preview.valid
+    ? `${preview.summary.files} Dateien geprüft · ${preview.summary.warnings} Warnungen`
+    : `${preview.summary.errors} Fehler · Restore blockiert`;
+  const rows = [
+    ...(preview.files || []).map((file) => ({ title: file.path, detail: `${file.exists ? "überschreibt" : "neu"} · ${bytesLabel(file.size)}`, severity: "tip" })),
+    ...(preview.errors || []).map((error) => ({ title: error.path, detail: error.message, severity: "error" })),
+    ...((preview.conflicts?.findings || []).map((finding) => ({ title: finding.title, detail: finding.message, severity: finding.severity }))),
+  ];
+  if (!rows.length) {
+    elements["backup-restore-list"].replaceChildren(emptyBlock("Keine Dateien im Snapshot gefunden."));
+    return;
+  }
+  elements["backup-restore-list"].replaceChildren(...rows.map((row) => {
+    const item = document.createElement("div");
+    item.className = "import-preview-item";
+    item.innerHTML = `<strong>${escapeHtml(row.title || "")}</strong><span>${escapeHtml(row.detail || "")}</span>`;
+    return item;
+  }));
+}
+
+function renderBackups(result) {
+  state.backups = result;
+  renderBackupStats(result);
+  renderBackupList(result);
+  renderDatabaseBackupList(result);
+  renderBackupIntegrity(result);
+}
+
+async function loadBackups() {
+  elements["backups-summary"].textContent = "Backup-Center wird geladen …";
+  const result = await api("api/backups/overview");
+  renderBackups(result);
+  return result;
+}
+
+async function openBackupsPage() {
+  closePages();
+  elements["backups-page"].classList.remove("hidden");
+  elements["backups-button"].classList.add("active");
+  try { await loadBackups(); } catch (error) { toast(error.message, "error"); }
+}
+
+async function setBackupPin(id, pinned) {
+  try {
+    const result = await api("api/backups/pin", {
+      method: "POST",
+      body: JSON.stringify({ id, pinned }),
+    });
+    renderBackups(result);
+  } catch (error) { toast(error.message, "error"); }
+}
+
+async function createSnapshotBackup() {
+  elements["backup-snapshot-create"].disabled = true;
+  try {
+    const result = await api("api/backups/snapshot", {
+      method: "POST",
+      body: JSON.stringify({ secretsMode: "masked" }),
+    });
+    renderBackups(result.overview);
+    toast(result.message, "success");
+  } catch (error) { toast(error.message, "error"); }
+  finally { elements["backup-snapshot-create"].disabled = false; }
+}
+
+async function createRecorderBackup() {
+  elements["backup-database-create"].disabled = true;
+  try {
+    const result = await api("api/backups/database", { method: "POST", body: "{}" });
+    renderBackups(result.overview);
+    toast(result.message, "success");
+  } catch (error) { toast(error.message, "error"); }
+  finally { elements["backup-database-create"].disabled = false; }
+}
+
+async function previewSnapshotRestore(id) {
+  try {
+    const preview = await api("api/backups/snapshot/restore-preview", {
+      method: "POST",
+      body: JSON.stringify({ id }),
+    });
+    renderSnapshotPreview(preview);
+  } catch (error) { toast(error.message, "error"); }
+}
+
+async function restoreSnapshotBackup() {
+  const preview = state.snapshotPreview;
+  if (!preview || !preview.valid) return;
+  if (!confirm(`Snapshot ${preview.id} mit ${preview.summary.files} Dateien wiederherstellen? Die aktuellen Dateien werden vorher gesichert.`)) return;
+  elements["backup-restore-apply"].disabled = true;
+  try {
+    const result = await api("api/backups/snapshot/restore", {
+      method: "POST",
+      body: JSON.stringify({ id: preview.id, stateVersion: preview.stateVersion }),
+    });
+    state.snapshotPreview = null;
+    renderBackups(result.overview);
+    elements["backup-restore-list"].replaceChildren(emptyBlock(result.message));
+    elements["backup-restore-summary"].textContent = result.message;
+    await refreshFiles();
+    toast(result.message, "success");
+  } catch (error) {
+    elements["backup-restore-apply"].disabled = false;
+    toast(error.message, "error");
   }
 }
 
@@ -3871,6 +4071,13 @@ elements["database-entity-filter"].addEventListener("change", () => state.databa
 elements["database-compare-filter"].addEventListener("change", () => state.database && renderDatabaseCompare(state.database));
 elements["database-statistics-filter"].addEventListener("change", () => state.database && renderDatabaseStatistics(state.database));
 elements["database-query-run"].addEventListener("click", runDatabaseQuery);
+elements["backups-button"].addEventListener("click", openBackupsPage);
+elements["backups-close"].addEventListener("click", openScriptManager);
+elements["backups-refresh"].addEventListener("click", () => loadBackups().catch((error) => toast(error.message, "error")));
+elements["backup-filter"].addEventListener("change", () => state.backups && renderBackupList(state.backups));
+elements["backup-snapshot-create"].addEventListener("click", createSnapshotBackup);
+elements["backup-database-create"].addEventListener("click", createRecorderBackup);
+elements["backup-restore-apply"].addEventListener("click", restoreSnapshotBackup);
 elements["traces-button"].addEventListener("click", openTracesPage);
 elements["traces-close"].addEventListener("click", openScriptManager);
 elements["traces-refresh"].addEventListener("click", () => loadTraces().catch((error) => toast(error.message, "error")));

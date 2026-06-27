@@ -135,6 +135,7 @@ def ensure_directories() -> None:
     PACKAGES_ROOT.mkdir(parents=True, exist_ok=True)
     DATA_ROOT.mkdir(parents=True, exist_ok=True)
     (DATA_ROOT / "backups").mkdir(exist_ok=True)
+    (DATA_ROOT / "db-backups").mkdir(exist_ok=True)
     (DATA_ROOT / "trash").mkdir(exist_ok=True)
 
 
@@ -144,6 +145,7 @@ def load_settings() -> dict[str, Any]:
 
 def update_settings(body: dict[str, Any]) -> dict[str, Any]:
     settings = settings_service.update_settings(sys.modules[__name__], body)
+    backup_cleanup()
     cleanup_trash(settings)
     return settings
 
@@ -773,6 +775,38 @@ def restore_backup(
     return backup_service.restore_backup(
         sys.modules[__name__], scope, raw_path, backup_id, expected_version
     )
+
+
+def backup_cleanup() -> dict[str, int]:
+    return backup_service.cleanup_backups(sys.modules[__name__])
+
+
+def backup_overview() -> dict[str, Any]:
+    return backup_service.backup_overview(sys.modules[__name__])
+
+
+def backup_integrity() -> dict[str, Any]:
+    return backup_service.backup_integrity(sys.modules[__name__])
+
+
+def set_backup_pin(backup_id: Any, pinned: Any) -> dict[str, Any]:
+    return backup_service.set_backup_pin(sys.modules[__name__], backup_id, pinned)
+
+
+def create_backup_snapshot(body: dict[str, Any]) -> dict[str, Any]:
+    return backup_service.create_snapshot(sys.modules[__name__], body)
+
+
+def snapshot_restore_preview(backup_id: Any) -> dict[str, Any]:
+    return backup_service.snapshot_restore_preview(sys.modules[__name__], backup_id)
+
+
+def restore_snapshot(backup_id: Any, state_version: Any) -> dict[str, Any]:
+    return backup_service.restore_snapshot(sys.modules[__name__], backup_id, state_version)
+
+
+def create_database_backup() -> dict[str, Any]:
+    return backup_service.create_database_backup(sys.modules[__name__])
 
 
 def git_history_target(scope: str, raw_path: str = "") -> tuple[str, Path, str]:
@@ -2262,6 +2296,7 @@ def directory_usage(path: Path) -> dict[str, int]:
 
 def system_health(remote: dict[str, Any] | None = None, include_git: bool = True) -> dict[str, Any]:
     backups_root = DATA_ROOT / "backups"
+    db_backups_root = DATA_ROOT / "db-backups"
     trash_root = DATA_ROOT / "trash"
     result: dict[str, Any] = {
         "settings": load_settings(),
@@ -2278,6 +2313,10 @@ def system_health(remote: dict[str, Any] | None = None, include_git: bool = True
             "backups": {
                 "directories": sum(path.is_dir() for path in backups_root.iterdir()) if backups_root.exists() else 0,
                 **directory_usage(backups_root),
+            },
+            "databaseBackups": {
+                "directories": sum(path.is_dir() for path in db_backups_root.iterdir()) if db_backups_root.exists() else 0,
+                **directory_usage(db_backups_root),
             },
             "trash": {
                 "entries": trash_history()["count"],

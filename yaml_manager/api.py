@@ -20,7 +20,7 @@ def create_handler(backend: Any) -> type[BaseHTTPRequestHandler]:
     """Bind the transport layer to a backend module with the service functions."""
 
     class Handler(BaseHTTPRequestHandler):
-        server_version = "HaMaintenanceHub/1.5.0"
+        server_version = "HaMaintenanceHub/1.6.0"
 
         def log_message(self, format_string: str, *args: Any) -> None:
             print(f"{self.address_string()} - {format_string % args}", flush=True)
@@ -91,6 +91,10 @@ def create_handler(backend: Any) -> type[BaseHTTPRequestHandler]:
                             query.get("path", [""])[0],
                         ),
                     )
+                elif path == "/api/backups/overview":
+                    self.send_json(HTTPStatus.OK, backend.backup_overview())
+                elif path == "/api/backups/integrity":
+                    self.send_json(HTTPStatus.OK, backend.backup_integrity())
                 elif path == "/api/backup/diff":
                     self.send_json(
                         HTTPStatus.OK,
@@ -402,6 +406,19 @@ def create_handler(backend: Any) -> type[BaseHTTPRequestHandler]:
                             body.get("version"),
                         ),
                     )
+                elif path == "/api/backups/pin":
+                    self.send_json(HTTPStatus.OK, backend.set_backup_pin(body.get("id", ""), body.get("pinned", False)))
+                elif path == "/api/backups/snapshot":
+                    self.send_json(HTTPStatus.CREATED, backend.create_backup_snapshot(body))
+                elif path == "/api/backups/snapshot/restore-preview":
+                    self.send_json(HTTPStatus.OK, backend.snapshot_restore_preview(body.get("id", "")))
+                elif path == "/api/backups/snapshot/restore":
+                    self.send_json(
+                        HTTPStatus.OK,
+                        backend.restore_snapshot(body.get("id", ""), body.get("stateVersion")),
+                    )
+                elif path == "/api/backups/database":
+                    self.send_json(HTTPStatus.CREATED, backend.create_database_backup())
                 elif path == "/api/trash/restore":
                     self.send_json(
                         HTTPStatus.OK,

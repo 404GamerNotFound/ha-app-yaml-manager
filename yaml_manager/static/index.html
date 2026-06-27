@@ -84,6 +84,10 @@
               <span class="sidebar-nav-icon" aria-hidden="true">DB</span>
               <span><strong>Datenbank</strong><small>Recorder analysieren</small></span>
             </button>
+            <button class="sidebar-nav-item backups-nav" id="backups-button" type="button" aria-label="Backup-Center">
+              <span class="sidebar-nav-icon" aria-hidden="true">BK</span>
+              <span><strong>Backups</strong><small>Snapshots und Prüfung</small></span>
+            </button>
             <button class="sidebar-nav-item graph-nav" id="graph-button" type="button" aria-label="Gesamtgraph">
               <span class="sidebar-nav-icon" aria-hidden="true">GR</span>
               <span><strong>Graph</strong><small>Objekte und Bezüge</small></span>
@@ -745,6 +749,8 @@
             <h3>Dateien und Backups</h3>
             <div class="settings-grid">
               <label><span>Backup-Aufbewahrung</span><input id="settings-backup-retention" type="number" min="5" max="500" step="1"></label>
+              <label><span>Backup Tage</span><input id="settings-backup-days" type="number" min="0" max="3650" step="1"></label>
+              <label><span>Backup MiB</span><input id="settings-backup-size" type="number" min="0" max="102400" step="1"></label>
               <label><span>Papierkorb Tage</span><input id="settings-trash-days" type="number" min="0" max="3650" step="1"></label>
               <label><span>Papierkorb MiB</span><input id="settings-trash-size" type="number" min="0" max="10240" step="1"></label>
               <label><span>Max. ZIP-Größe MiB</span><input id="settings-import-size" type="number" min="1" max="100" step="1"></label>
@@ -1026,6 +1032,61 @@
             </div>
             <textarea id="database-query" spellcheck="false">SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name</textarea>
             <div class="database-query-result" id="database-query-result"></div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <section class="backups-page hidden" id="backups-page">
+      <div class="backups-page-content">
+        <div class="dialog-header admin-dialog-header">
+          <div>
+            <h2>Backup-Center</h2>
+            <p>Manifeste, Snapshots, Integritätsprüfung und Recorder-Datenbank-Backups.</p>
+          </div>
+          <button class="button primary" id="backups-close" type="button">Scripts öffnen</button>
+        </div>
+        <div class="backups-body">
+          <section class="admin-section">
+            <div class="admin-section-heading">
+              <div><h3>Übersicht</h3><p id="backups-summary">Backup-Center wurde noch nicht geladen.</p></div>
+              <div class="backup-actions">
+                <button class="button secondary" id="backups-refresh" type="button">Aktualisieren</button>
+                <button class="button primary" id="backup-snapshot-create" type="button">Snapshot erstellen</button>
+                <button class="button secondary" id="backup-database-create" type="button">DB sichern</button>
+              </div>
+            </div>
+            <div class="security-stats" id="backups-stats"></div>
+          </section>
+          <section class="admin-section backup-list-section">
+            <div class="admin-section-heading">
+              <div><h3>Backups</h3><p id="backup-list-summary">Datei-Backups und Snapshots.</p></div>
+              <select id="backup-filter">
+                <option value="">Alle</option>
+                <option value="file">Dateien</option>
+                <option value="snapshot">Snapshots</option>
+              </select>
+            </div>
+            <div class="security-list" id="backup-list"></div>
+          </section>
+          <section class="admin-section backup-list-section">
+            <div class="admin-section-heading">
+              <div><h3>Recorder-Datenbank</h3><p id="backup-database-summary">Konsistente SQLite-Snapshots.</p></div>
+            </div>
+            <div class="security-list" id="backup-database-list"></div>
+          </section>
+          <section class="admin-section backup-list-section">
+            <div class="admin-section-heading">
+              <div><h3>Integrität</h3><p id="backup-integrity-summary">Hash, YAML und Restore-Fähigkeit.</p></div>
+            </div>
+            <div class="security-list" id="backup-integrity-list"></div>
+          </section>
+          <section class="admin-section backup-preview-section">
+            <div class="admin-section-heading">
+              <div><h3>Snapshot-Restore</h3><p id="backup-restore-summary">Snapshot zuerst prüfen.</p></div>
+              <button class="button warning" id="backup-restore-apply" type="button" disabled>Geprüften Snapshot wiederherstellen</button>
+            </div>
+            <div class="import-preview-list" id="backup-restore-list"></div>
           </section>
         </div>
       </div>

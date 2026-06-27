@@ -24,6 +24,7 @@ def preflight(backend: Any) -> dict[str, Any]:
     entity_health = backend.entity_health()
     docs = backend.documentation_status()
     remote = backend.git_remote_status()
+    backups = backend.backup_integrity()
     ha_check = backend.check_home_assistant_configuration()
     blockers = (
         len(validation_errors)
@@ -31,6 +32,7 @@ def preflight(backend: Any) -> dict[str, Any]:
         + lint["counts"].get("error", 0)
         + compatibility["counts"].get("error", 0)
         + security["counts"].get("error", 0)
+        + backups["summary"].get("errors", 0)
         + (0 if ha_check.get("valid") is not False else 1)
     )
     warnings = (
@@ -38,6 +40,7 @@ def preflight(backend: Any) -> dict[str, Any]:
         + lint["counts"].get("warning", 0)
         + compatibility["counts"].get("warning", 0)
         + security["counts"].get("warning", 0)
+        + backups["summary"].get("warnings", 0)
         + entity_health["summary"].get("unknown", 0)
         + entity_health["summary"].get("unavailable", 0)
         + entity_health["summary"].get("disabled", 0)
@@ -91,6 +94,13 @@ def preflight(backend: Any) -> dict[str, Any]:
             },
         },
         {
+            "id": "backups",
+            "title": "Backups",
+            "status": _status(backups["summary"].get("errors", 0) == 0, backups["summary"].get("warnings", 0)),
+            "message": f"{backups['summary'].get('backups', 0)} Backups · {backups['summary'].get('databaseBackups', 0)} DB-Backups · {backups['summary'].get('errors', 0)} Fehler · {backups['summary'].get('warnings', 0)} Warnungen",
+            "details": backups["findings"][:20],
+        },
+        {
             "id": "ha-check",
             "title": "Home-Assistant-Check",
             "status": "ok" if ha_check.get("valid") is True else "error" if ha_check.get("valid") is False else "warning",
@@ -124,6 +134,7 @@ def preflight(backend: Any) -> dict[str, Any]:
             "lintWarnings": lint["counts"].get("warning", 0),
             "compatibilityWarnings": compatibility["counts"].get("warning", 0),
             "securityErrors": security["counts"].get("error", 0),
+            "backupErrors": backups["summary"].get("errors", 0),
             "warnings": warnings,
             "remoteConfigured": bool(remote.get("configured")),
         },

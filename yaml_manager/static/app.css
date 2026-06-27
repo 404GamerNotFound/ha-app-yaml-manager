@@ -473,13 +473,13 @@ dialog.history-dialog, dialog.conflict-dialog { width: min(920px, calc(100vw - 2
 .conflict-item small { color: var(--muted); font-size: 10px; }
 .conflict-files { color: var(--primary-dark) !important; font-family: var(--font-code); overflow-wrap: anywhere; }
 
-.dashboard-page, .review-page, .objects-page, .git-page, .blueprints-page, .documentation-page, .security-page, .entity-health-page, .database-page, .graph-page, .lint-page, .compatibility-page, .refactor-page, .secrets-page, .preflight-page, .traces-page { position: fixed; z-index: 15; top: 64px; right: 0; bottom: 0; left: 270px; min-height: 0; background: var(--surface-soft); }
-.dashboard-page-content, .review-page-content, .objects-page-content, .git-page-content, .blueprints-page-content, .documentation-page-content, .security-page-content, .entity-health-page-content, .database-page-content, .graph-page-content, .lint-page-content, .compatibility-page-content, .refactor-page-content, .secrets-page-content, .preflight-page-content, .traces-page-content { width: min(1180px, 100%); height: 100%; min-height: 0; margin: 0 auto; display: grid; grid-template-rows: auto minmax(0, 1fr); background: var(--surface); border-inline: 1px solid var(--border); }
+.dashboard-page, .review-page, .objects-page, .git-page, .blueprints-page, .documentation-page, .security-page, .entity-health-page, .database-page, .backups-page, .graph-page, .lint-page, .compatibility-page, .refactor-page, .secrets-page, .preflight-page, .traces-page { position: fixed; z-index: 15; top: 64px; right: 0; bottom: 0; left: 270px; min-height: 0; background: var(--surface-soft); }
+.dashboard-page-content, .review-page-content, .objects-page-content, .git-page-content, .blueprints-page-content, .documentation-page-content, .security-page-content, .entity-health-page-content, .database-page-content, .backups-page-content, .graph-page-content, .lint-page-content, .compatibility-page-content, .refactor-page-content, .secrets-page-content, .preflight-page-content, .traces-page-content { width: min(1180px, 100%); height: 100%; min-height: 0; margin: 0 auto; display: grid; grid-template-rows: auto minmax(0, 1fr); background: var(--surface); border-inline: 1px solid var(--border); }
 dialog.transfer-dialog { width: min(1040px, calc(100vw - 28px)); height: min(820px, calc(100vh - 28px)); max-width: none; max-height: none; }
 .transfer-dialog[open] { display: block; }
 .transfer-dialog-content { height: 100%; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); }
 .admin-dialog-header { margin: 0; padding: 16px 18px 12px; border-bottom: 1px solid var(--border); }
-.dashboard-body, .review-body, .transfer-body, .git-body, .blueprint-body, .documentation-body, .security-body, .entity-health-body, .database-body, .graph-body, .lint-body, .compatibility-body, .refactor-body, .secrets-body, .preflight-body, .traces-body { min-height: 0; padding: 16px; overflow-y: auto; display: grid; align-content: start; gap: 14px; background: var(--surface-soft); }
+.dashboard-body, .review-body, .transfer-body, .git-body, .blueprint-body, .documentation-body, .security-body, .entity-health-body, .database-body, .backups-body, .graph-body, .lint-body, .compatibility-body, .refactor-body, .secrets-body, .preflight-body, .traces-body { min-height: 0; padding: 16px; overflow-y: auto; display: grid; align-content: start; gap: 14px; background: var(--surface-soft); }
 .quality-overview { display: grid; grid-template-columns: 145px minmax(0, 1fr); gap: 14px; }
 .quality-score { min-height: 125px; display: grid; place-content: center; justify-items: center; color: var(--primary-dark); background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
 .quality-score strong { font-size: 38px; line-height: 1; }
@@ -577,9 +577,14 @@ dialog.transfer-dialog { width: min(1040px, calc(100vw - 28px)); height: min(820
 .graph-list { max-height: 520px; overflow-y: auto; }
 .graph-item { width: 100%; color: var(--text); text-align: left; background: var(--surface-soft); cursor: pointer; }
 .graph-item:hover { border-color: var(--primary); background: var(--primary-soft); }
-.entity-health-body select, .database-body select { min-width: 170px; height: 34px; padding: 0 8px; color: var(--text); background: var(--surface-soft); border: 1px solid var(--border); border-radius: 7px; }
+.entity-health-body select, .database-body select, .backups-body select { min-width: 170px; height: 34px; padding: 0 8px; color: var(--text); background: var(--surface-soft); border: 1px solid var(--border); border-radius: 7px; }
 .database-body { grid-template-columns: repeat(2, minmax(340px, 1fr)); }
 .database-body > .admin-section:first-child, .database-sql-section { grid-column: 1 / -1; }
+.backups-body { grid-template-columns: repeat(2, minmax(340px, 1fr)); }
+.backups-body > .admin-section:first-child, .backup-preview-section { grid-column: 1 / -1; }
+.backup-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.backup-list-section { min-height: 0; }
+.backup-preview-section .import-preview-list { max-height: 260px; }
 .database-table-section { min-height: 0; }
 .database-table-list { max-height: 260px; margin-top: 12px; overflow-y: auto; display: grid; gap: 5px; }
 .database-query-actions { display: flex; align-items: end; gap: 8px; }
@@ -692,7 +697,7 @@ dialog.transfer-dialog { width: min(1040px, calc(100vw - 28px)); height: min(820
   .helpers { position: fixed; top: 64px; right: 0; bottom: 0; width: 310px; box-shadow: var(--shadow); transform: translateX(105%); transition: transform .2s ease; }
   .helpers.open { transform: translateX(0); }
   .mobile-only#helpers-toggle, .helpers .mobile-only { display: grid; }
-  .dashboard-page, .review-page, .objects-page, .git-page, .blueprints-page, .documentation-page, .security-page, .entity-health-page, .database-page, .graph-page, .lint-page, .compatibility-page, .refactor-page, .secrets-page, .preflight-page, .traces-page { left: 245px; }
+  .dashboard-page, .review-page, .objects-page, .git-page, .blueprints-page, .documentation-page, .security-page, .entity-health-page, .database-page, .backups-page, .graph-page, .lint-page, .compatibility-page, .refactor-page, .secrets-page, .preflight-page, .traces-page { left: 245px; }
   .documentation-html { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .traces-body { grid-template-columns: 1fr; }
 }
@@ -740,8 +745,8 @@ dialog.transfer-dialog { width: min(1040px, calc(100vw - 28px)); height: min(820
   dialog.transfer-dialog { width: calc(100vw - 12px); height: calc(100vh - 12px); }
   .branch-controls, .search-replace-controls, .object-toolbar { grid-template-columns: 1fr; }
   .secrets-convert-controls { grid-template-columns: 1fr; }
-  .dashboard-page, .review-page, .objects-page, .git-page, .blueprints-page, .documentation-page, .security-page, .entity-health-page, .database-page, .graph-page, .lint-page, .compatibility-page, .refactor-page, .secrets-page, .preflight-page, .traces-page { top: 56px; left: 0; }
-  .dashboard-page-content, .review-page-content, .objects-page-content, .git-page-content, .blueprints-page-content, .documentation-page-content, .security-page-content, .entity-health-page-content, .database-page-content, .graph-page-content, .lint-page-content, .compatibility-page-content, .refactor-page-content, .secrets-page-content, .preflight-page-content, .traces-page-content { border-inline: 0; }
+  .dashboard-page, .review-page, .objects-page, .git-page, .blueprints-page, .documentation-page, .security-page, .entity-health-page, .database-page, .backups-page, .graph-page, .lint-page, .compatibility-page, .refactor-page, .secrets-page, .preflight-page, .traces-page { top: 56px; left: 0; }
+  .dashboard-page-content, .review-page-content, .objects-page-content, .git-page-content, .blueprints-page-content, .documentation-page-content, .security-page-content, .entity-health-page-content, .database-page-content, .backups-page-content, .graph-page-content, .lint-page-content, .compatibility-page-content, .refactor-page-content, .secrets-page-content, .preflight-page-content, .traces-page-content { border-inline: 0; }
   .object-item { grid-template-columns: minmax(0, 1fr) auto; }
   .object-location, .object-references { grid-column: 1 / -1; }
   .configuration-toolbar { align-items: stretch; flex-wrap: wrap; padding: 8px; }
@@ -759,6 +764,7 @@ dialog.transfer-dialog { width: min(1040px, calc(100vw - 28px)); height: min(820
   .security-stats, .documentation-html { grid-template-columns: 1fr; }
   .graph-layout { grid-template-columns: 1fr; }
   .database-body { grid-template-columns: 1fr; }
+  .backups-body { grid-template-columns: 1fr; }
   .impact-grid { grid-template-columns: repeat(2, minmax(100px, 1fr)); }
   .documentation-toolbar { grid-template-columns: 1fr; }
   .security-list .dashboard-finding { grid-template-columns: 8px minmax(0, 1fr); }
