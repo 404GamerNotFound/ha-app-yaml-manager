@@ -9,7 +9,7 @@
   </head>
   <body>
     <header class="topbar">
-      <button class="icon-button mobile-only" id="sidebar-toggle" aria-label="Dateiliste öffnen">☰</button>
+      <button class="icon-button mobile-only" id="sidebar-toggle" aria-label="Menü öffnen">☰</button>
       <div class="brand">
         <span class="brand-mark">HA</span>
         <div>
@@ -17,122 +17,152 @@
           <span>Home Assistant Health</span>
         </div>
       </div>
-      <div class="topbar-actions">
-        <details class="action-menu topbar-menu">
-          <summary class="button secondary">Werkzeuge <span class="menu-chevron" aria-hidden="true">⌄</span></summary>
-          <div class="action-menu-popover" role="menu">
-            <button class="action-menu-item" id="transfer-button" type="button" role="menuitem">
-              <span class="menu-icon" aria-hidden="true">⇄</span>
-              <span><strong>Import/Export</strong><small>Package-Archive übertragen</small></span>
-            </button>
-            <button class="action-menu-item" id="settings-button" type="button" role="menuitem">
-              <span class="menu-icon" aria-hidden="true">⚙</span>
-              <span><strong>Einstellungen</strong><small>Grenzen und Verhalten anpassen</small></span>
-            </button>
-            <button class="action-menu-item" id="trash-button" type="button" role="menuitem">
-              <span class="menu-icon" aria-hidden="true">⌫</span>
-              <span><strong>Papierkorb</strong><small>Gelöschte Dateien verwalten</small></span>
-            </button>
-            <button class="action-menu-item" id="configuration-button" type="button" role="menuitem">
-              <span class="menu-icon" aria-hidden="true">CFG</span>
-              <span><strong>configuration.yaml</strong><small>Hauptkonfiguration bearbeiten</small></span>
-            </button>
-            <button class="action-menu-item" id="reload-button" type="button" role="menuitem" title="script.reload ausführen">
-              <span class="menu-icon" aria-hidden="true">↻</span>
-              <span><strong>Skripte neu laden</strong><small>Home-Assistant-Dienst ausführen</small></span>
-            </button>
-          </div>
-        </details>
-        <button class="button secondary" id="new-button">Neue Datei</button>
-        <button class="button primary" id="save-button" disabled>Speichern</button>
+      <div class="topbar-actions" aria-label="Dateiaktionen">
+        <button class="button secondary" id="open-files-button" type="button">
+          <span>Dateien öffnen</span><span class="mobile-label">Dateien</span>
+        </button>
+        <button class="button secondary" id="new-button" type="button">
+          <span>Neue Datei</span><span class="mobile-label">Neu</span>
+        </button>
+        <button class="button primary" id="save-button" type="button" disabled>Speichern</button>
       </div>
     </header>
 
     <main class="workspace" id="workspace">
       <aside class="sidebar" id="sidebar">
-        <div class="sidebar-header">
-          <label class="search-field">
-            <span aria-hidden="true">⌕</span>
-            <input id="file-search" type="search" placeholder="Skripte suchen" autocomplete="off">
-          </label>
-          <button class="icon-button mobile-only" id="sidebar-close" aria-label="Dateiliste schließen">×</button>
+        <div class="sidebar-header navigation-header">
+          <span>Menü</span>
+          <button class="icon-button mobile-only" id="sidebar-close" aria-label="Menü schließen">×</button>
         </div>
-        <details class="sidebar-section sidebar-tools" id="sidebar-tools">
-          <summary><span>Werkzeuge</span><span class="section-summary" id="sidebar-tools-current">Dashboard</span></summary>
-          <nav class="sidebar-primary-nav" aria-label="Hauptbereiche">
-            <button class="sidebar-nav-item dashboard-nav active" id="dashboard-button" type="button" aria-label="Qualitätsdashboard">
-              <span class="sidebar-nav-icon" aria-hidden="true">Q</span>
-              <span><strong>Dashboard</strong><small>Qualität und Übersicht</small></span>
-            </button>
-            <button class="sidebar-nav-item review-nav" id="review-button" type="button" aria-label="Review-Modus">
-              <span class="sidebar-nav-icon" aria-hidden="true">RV</span>
-              <span><strong>Review</strong><small>Änderungspaket prüfen</small></span>
-            </button>
-            <button class="sidebar-nav-item git-nav" id="git-page-button" type="button" aria-label="Git-Verwaltung">
-              <span class="sidebar-nav-icon" aria-hidden="true">G</span>
-              <span><strong>Git</strong><small>Branches und Remote</small></span>
-            </button>
-            <button class="sidebar-nav-item object-nav" id="objects-button" type="button" aria-label="Home-Assistant-Objekte">
-              <span class="sidebar-nav-icon" aria-hidden="true">HA</span>
-              <span><strong>HA-Objekte</strong><small>Automationen, Scripts, Szenen</small></span>
-            </button>
-            <button class="sidebar-nav-item entity-health-nav" id="entity-health-button" type="button" aria-label="Entity-Health">
-              <span class="sidebar-nav-icon" aria-hidden="true">EH</span>
-              <span><strong>Entity-Health</strong><small>Status und Nutzung</small></span>
-            </button>
-            <button class="sidebar-nav-item database-nav" id="database-button" type="button" aria-label="Datenbankanalyse">
-              <span class="sidebar-nav-icon" aria-hidden="true">DB</span>
-              <span><strong>Datenbank</strong><small>Recorder analysieren</small></span>
-            </button>
-            <button class="sidebar-nav-item backups-nav" id="backups-button" type="button" aria-label="Backup-Center">
-              <span class="sidebar-nav-icon" aria-hidden="true">BK</span>
-              <span><strong>Backups</strong><small>Snapshots und Prüfung</small></span>
-            </button>
-            <button class="sidebar-nav-item graph-nav" id="graph-button" type="button" aria-label="Gesamtgraph">
-              <span class="sidebar-nav-icon" aria-hidden="true">GR</span>
-              <span><strong>Graph</strong><small>Objekte und Bezüge</small></span>
-            </button>
-            <button class="sidebar-nav-item lint-nav" id="lint-button" type="button" aria-label="Lint-Regeln">
-              <span class="sidebar-nav-icon" aria-hidden="true">LN</span>
-              <span><strong>Lint</strong><small>Regeln konfigurieren</small></span>
-            </button>
-            <button class="sidebar-nav-item compatibility-nav" id="compatibility-button" type="button" aria-label="Kompatibilität">
-              <span class="sidebar-nav-icon" aria-hidden="true">CP</span>
-              <span><strong>Kompatibilität</strong><small>HA-Syntax prüfen</small></span>
-            </button>
-            <button class="sidebar-nav-item refactor-nav" id="refactor-button" type="button" aria-label="Entity-Refactoring">
-              <span class="sidebar-nav-icon" aria-hidden="true">RF</span>
-              <span><strong>Refactor</strong><small>Objekte und IDs ändern</small></span>
-            </button>
-            <button class="sidebar-nav-item secrets-nav" id="secrets-button" type="button" aria-label="Secrets">
-              <span class="sidebar-nav-icon" aria-hidden="true">SK</span>
-              <span><strong>Secrets</strong><small>Maskiert verwalten</small></span>
-            </button>
-            <button class="sidebar-nav-item preflight-nav" id="preflight-button" type="button" aria-label="Preflight">
-              <span class="sidebar-nav-icon" aria-hidden="true">PF</span>
-              <span><strong>Preflight</strong><small>Bereit zum Push</small></span>
-            </button>
-            <button class="sidebar-nav-item blueprint-nav" id="blueprints-button" type="button" aria-label="Blueprints">
-              <span class="sidebar-nav-icon" aria-hidden="true">BP</span>
-              <span><strong>Blueprints</strong><small>Anzeigen und nutzen</small></span>
-            </button>
-            <button class="sidebar-nav-item documentation-nav" id="documentation-button" type="button" aria-label="Dokumentation">
-              <span class="sidebar-nav-icon" aria-hidden="true">DOC</span>
-              <span><strong>Doku</strong><small>Übersicht erzeugen</small></span>
-            </button>
-            <button class="sidebar-nav-item security-nav" id="security-button" type="button" aria-label="Sicherheit">
-              <span class="sidebar-nav-icon" aria-hidden="true">SEC</span>
-              <span><strong>Sicherheit</strong><small>Secrets und Tokens</small></span>
-            </button>
-            <button class="sidebar-nav-item traces-nav" id="traces-button" type="button" aria-label="Traces">
-              <span class="sidebar-nav-icon" aria-hidden="true">TR</span>
-              <span><strong>Traces</strong><small>Ausführungen debuggen</small></span>
-            </button>
-            <button class="sidebar-nav-item search-nav" id="search-replace-button" type="button" aria-label="Mehrere Dateien durchsuchen">
-              <span class="sidebar-nav-icon" aria-hidden="true">⌕</span>
-              <span><strong>Suchen &amp; Ersetzen</strong><small>Mehrere Dateien ändern</small></span>
-            </button>
-          </nav>
+        <details class="sidebar-section sidebar-tools" id="sidebar-tools" open>
+          <summary><span>Navigation</span><span class="section-summary" id="sidebar-tools-current">Dashboard</span></summary>
+          <div class="sidebar-tool-groups">
+            <section class="tool-group" aria-labelledby="tool-group-overview">
+              <h2 class="tool-group-title" id="tool-group-overview">Übersicht</h2>
+              <nav class="sidebar-primary-nav" aria-label="Übersicht">
+                <button class="sidebar-nav-item dashboard-nav active" id="dashboard-button" type="button" aria-label="Qualitätsdashboard">
+                  <span class="sidebar-nav-icon" aria-hidden="true">Q</span>
+                  <span><strong>Dashboard</strong><small>Qualität, Status, Hinweise</small></span>
+                </button>
+                <button class="sidebar-nav-item review-nav" id="review-button" type="button" aria-label="Review-Modus">
+                  <span class="sidebar-nav-icon" aria-hidden="true">RV</span>
+                  <span><strong>Review</strong><small>Änderungspaket prüfen</small></span>
+                </button>
+              </nav>
+            </section>
+
+            <section class="tool-group" aria-labelledby="tool-group-editor">
+              <h2 class="tool-group-title" id="tool-group-editor">Dateien bearbeiten</h2>
+              <nav class="sidebar-primary-nav" aria-label="Dateien bearbeiten">
+                <button class="sidebar-nav-item files-nav" id="package-files-button" type="button" aria-label="Package-Dateien öffnen">
+                  <span class="sidebar-nav-icon" aria-hidden="true">YML</span>
+                  <span><strong>Package-Dateien</strong><small>YAML-Dateien öffnen</small></span>
+                </button>
+                <button class="sidebar-nav-item object-nav" id="objects-button" type="button" aria-label="Home-Assistant-Objekte">
+                  <span class="sidebar-nav-icon" aria-hidden="true">HA</span>
+                  <span><strong>HA-Objekte</strong><small>Automationen, Scripts, Szenen</small></span>
+                </button>
+                <button class="sidebar-nav-item search-nav" id="search-replace-button" type="button" aria-label="Mehrere Dateien durchsuchen">
+                  <span class="sidebar-nav-icon" aria-hidden="true">⌕</span>
+                  <span><strong>Suchen &amp; Ersetzen</strong><small>Mehrere Dateien ändern</small></span>
+                </button>
+                <button class="sidebar-nav-item refactor-nav" id="refactor-button" type="button" aria-label="Entity-Refactoring">
+                  <span class="sidebar-nav-icon" aria-hidden="true">RF</span>
+                  <span><strong>Refactor</strong><small>Objekte und IDs ändern</small></span>
+                </button>
+                <button class="sidebar-nav-item blueprint-nav" id="blueprints-button" type="button" aria-label="Blueprints">
+                  <span class="sidebar-nav-icon" aria-hidden="true">BP</span>
+                  <span><strong>Blueprints</strong><small>Anzeigen und nutzen</small></span>
+                </button>
+              </nav>
+            </section>
+
+            <section class="tool-group" aria-labelledby="tool-group-quality">
+              <h2 class="tool-group-title" id="tool-group-quality">Prüfen und Debuggen</h2>
+              <nav class="sidebar-primary-nav" aria-label="Prüfen und Debuggen">
+                <button class="sidebar-nav-item entity-health-nav" id="entity-health-button" type="button" aria-label="Entity-Health">
+                  <span class="sidebar-nav-icon" aria-hidden="true">EH</span>
+                  <span><strong>Entity-Health</strong><small>Status und Nutzung</small></span>
+                </button>
+                <button class="sidebar-nav-item lint-nav" id="lint-button" type="button" aria-label="Lint-Regeln">
+                  <span class="sidebar-nav-icon" aria-hidden="true">LN</span>
+                  <span><strong>Lint</strong><small>Regeln konfigurieren</small></span>
+                </button>
+                <button class="sidebar-nav-item compatibility-nav" id="compatibility-button" type="button" aria-label="Kompatibilität">
+                  <span class="sidebar-nav-icon" aria-hidden="true">CP</span>
+                  <span><strong>Kompatibilität</strong><small>HA-Syntax prüfen</small></span>
+                </button>
+                <button class="sidebar-nav-item security-nav" id="security-button" type="button" aria-label="Sicherheit">
+                  <span class="sidebar-nav-icon" aria-hidden="true">SEC</span>
+                  <span><strong>Sicherheit</strong><small>Secrets und Tokens</small></span>
+                </button>
+                <button class="sidebar-nav-item preflight-nav" id="preflight-button" type="button" aria-label="Preflight">
+                  <span class="sidebar-nav-icon" aria-hidden="true">PF</span>
+                  <span><strong>Preflight</strong><small>Bereit zum Push</small></span>
+                </button>
+                <button class="sidebar-nav-item traces-nav" id="traces-button" type="button" aria-label="Traces">
+                  <span class="sidebar-nav-icon" aria-hidden="true">TR</span>
+                  <span><strong>Traces</strong><small>Ausführungen debuggen</small></span>
+                </button>
+              </nav>
+            </section>
+
+            <section class="tool-group" aria-labelledby="tool-group-insights">
+              <h2 class="tool-group-title" id="tool-group-insights">Struktur und Daten</h2>
+              <nav class="sidebar-primary-nav" aria-label="Struktur und Daten">
+                <button class="sidebar-nav-item graph-nav" id="graph-button" type="button" aria-label="Gesamtgraph">
+                  <span class="sidebar-nav-icon" aria-hidden="true">GR</span>
+                  <span><strong>Graph</strong><small>Objekte und Bezüge</small></span>
+                </button>
+                <button class="sidebar-nav-item database-nav" id="database-button" type="button" aria-label="Datenbankanalyse">
+                  <span class="sidebar-nav-icon" aria-hidden="true">DB</span>
+                  <span><strong>Datenbank</strong><small>Recorder analysieren</small></span>
+                </button>
+                <button class="sidebar-nav-item backups-nav" id="backups-button" type="button" aria-label="Backup-Center">
+                  <span class="sidebar-nav-icon" aria-hidden="true">BK</span>
+                  <span><strong>Backups</strong><small>Snapshots und Prüfung</small></span>
+                </button>
+                <button class="sidebar-nav-item documentation-nav" id="documentation-button" type="button" aria-label="Dokumentation">
+                  <span class="sidebar-nav-icon" aria-hidden="true">DOC</span>
+                  <span><strong>Doku</strong><small>Übersicht erzeugen</small></span>
+                </button>
+              </nav>
+            </section>
+
+            <section class="tool-group" aria-labelledby="tool-group-admin">
+              <h2 class="tool-group-title" id="tool-group-admin">Verwaltung</h2>
+              <nav class="sidebar-primary-nav" aria-label="Verwaltung">
+                <button class="sidebar-nav-item git-nav" id="git-page-button" type="button" aria-label="Git-Verwaltung">
+                  <span class="sidebar-nav-icon" aria-hidden="true">G</span>
+                  <span><strong>Git</strong><small>Branches und Remote</small></span>
+                </button>
+                <button class="sidebar-nav-item secrets-nav" id="secrets-button" type="button" aria-label="Secrets">
+                  <span class="sidebar-nav-icon" aria-hidden="true">SK</span>
+                  <span><strong>Secrets</strong><small>Maskiert verwalten</small></span>
+                </button>
+                <button class="sidebar-nav-item configuration-nav" id="configuration-button" type="button" aria-label="configuration.yaml bearbeiten">
+                  <span class="sidebar-nav-icon" aria-hidden="true">CFG</span>
+                  <span><strong>configuration.yaml</strong><small>Hauptkonfiguration bearbeiten</small></span>
+                </button>
+                <button class="sidebar-nav-item transfer-nav" id="transfer-button" type="button" aria-label="Import und Export">
+                  <span class="sidebar-nav-icon" aria-hidden="true">⇄</span>
+                  <span><strong>Import/Export</strong><small>Package-Archive übertragen</small></span>
+                </button>
+                <button class="sidebar-nav-item trash-nav" id="trash-button" type="button" aria-label="Papierkorb">
+                  <span class="sidebar-nav-icon" aria-hidden="true">⌫</span>
+                  <span><strong>Papierkorb</strong><small>Gelöschte Dateien verwalten</small></span>
+                </button>
+                <button class="sidebar-nav-item settings-nav" id="settings-button" type="button" aria-label="Einstellungen">
+                  <span class="sidebar-nav-icon" aria-hidden="true">⚙</span>
+                  <span><strong>Einstellungen</strong><small>Grenzen und Verhalten anpassen</small></span>
+                </button>
+                <button class="sidebar-nav-item reload-nav" id="reload-button" type="button" aria-label="Skripte neu laden" title="script.reload ausführen">
+                  <span class="sidebar-nav-icon" aria-hidden="true">↻</span>
+                  <span><strong>Skripte neu laden</strong><small>Home-Assistant-Dienst ausführen</small></span>
+                </button>
+              </nav>
+            </section>
+          </div>
         </details>
         <details class="sidebar-section system-section">
           <summary>
@@ -159,29 +189,17 @@
             </button>
           </div>
         </details>
-        <details class="sidebar-section sidebar-filters">
-          <summary><span>Filter</span><span class="section-summary" id="filter-summary">Alle Dateien</span></summary>
-          <div class="sidebar-section-content">
-            <div class="filter-heading">Kategorien</div>
-            <nav class="categories" id="categories" aria-label="Kategorien"></nav>
-            <div class="filter-heading">Tags</div>
-            <nav class="tags" id="tags" aria-label="Tags"></nav>
-          </div>
-        </details>
-        <div class="file-list-header">
-          <span>Dateien</span>
-          <span id="file-count">0</span>
-        </div>
-        <div class="file-list" id="file-list"></div>
-        <div class="root-path" id="root-path" title="Verzeichnis"></div>
       </aside>
 
       <section class="editor-panel">
         <div class="empty-state" id="empty-state">
           <div class="empty-icon">YAML</div>
-          <h1>Skript auswählen</h1>
-          <p>Öffne links eine YAML-Datei oder lege ein neues Skript an.</p>
-          <button class="button primary" id="empty-new-button">Neue Datei</button>
+          <h1>Package-Datei öffnen</h1>
+          <p>Wähle eine YAML-Datei aus dem Dateibrowser oder lege eine neue Datei an.</p>
+          <div class="empty-actions">
+            <button class="button primary" id="empty-open-files-button" type="button">Dateien öffnen</button>
+            <button class="button secondary" id="empty-new-button" type="button">Neue Datei</button>
+          </div>
         </div>
 
         <div class="editor-content hidden" id="editor-content">
@@ -369,6 +387,48 @@
       </form>
     </dialog>
 
+    <section class="file-browser-page hidden" id="file-browser-page">
+      <div class="file-browser-page-content file-browser-content">
+        <div class="dialog-header file-browser-header">
+          <div>
+            <h2>Package-Dateien</h2>
+            <p>YAML-Dateien suchen, filtern und im Editor öffnen.</p>
+          </div>
+          <button class="button primary" id="file-browser-close" type="button">Editor öffnen</button>
+        </div>
+
+        <div class="file-browser-toolbar">
+          <label class="search-field">
+            <span aria-hidden="true">⌕</span>
+            <input id="file-search" type="search" placeholder="Datei, Kategorie oder Tag suchen" autocomplete="off">
+          </label>
+          <button class="button secondary" id="file-browser-new" type="button">Neue Datei</button>
+        </div>
+
+        <div class="file-browser-layout">
+          <aside class="file-browser-filters">
+            <div class="file-browser-filter-heading">
+              <strong>Filter</strong>
+              <span id="filter-summary">Alle Dateien</span>
+            </div>
+            <div class="filter-heading">Kategorien</div>
+            <nav class="categories" id="categories" aria-label="Kategorien"></nav>
+            <div class="filter-heading">Tags</div>
+            <nav class="tags" id="tags" aria-label="Tags"></nav>
+          </aside>
+
+          <section class="file-browser-list-panel">
+            <div class="file-list-header">
+              <span>Dateien</span>
+              <span id="file-count">0</span>
+            </div>
+            <div class="file-list" id="file-list"></div>
+            <div class="root-path" id="root-path" title="Verzeichnis"></div>
+          </section>
+        </div>
+      </div>
+    </section>
+
     <dialog class="configuration-dialog" id="configuration-dialog">
       <div class="configuration-dialog-content">
         <div class="dialog-header configuration-dialog-header">
@@ -477,7 +537,7 @@
             <h2>Konfigurationsqualität</h2>
             <p>Konflikte, Script-Nutzung, Sicherungen und Git-Status auf einen Blick.</p>
           </div>
-          <button class="button primary" id="dashboard-close" type="button">Scripts öffnen</button>
+          <button class="button primary" id="dashboard-close" type="button">Dateien öffnen</button>
         </div>
         <div class="dashboard-body">
           <section class="quality-overview">
@@ -512,7 +572,7 @@
             <h2>Review-Modus</h2>
             <p>Mehrere geplante Änderungen als Paket prüfen, vergleichen und gemeinsam anwenden.</p>
           </div>
-          <button class="button primary" id="review-close" type="button">Scripts öffnen</button>
+          <button class="button primary" id="review-close" type="button">Dateien öffnen</button>
         </div>
         <div class="review-body">
           <section class="admin-section">
@@ -544,7 +604,7 @@
             <h2>Lint-Regeln</h2>
             <p>Projektregeln für IDs, Pflichtfelder, Domains, Klartextmuster und Tags.</p>
           </div>
-          <button class="button primary" id="lint-close" type="button">Scripts öffnen</button>
+          <button class="button primary" id="lint-close" type="button">Dateien öffnen</button>
         </div>
         <div class="lint-body">
           <section class="admin-section">
@@ -584,7 +644,7 @@
             <h2>Gesamtgraph</h2>
             <p>Packages, Automationen, Scripts, Szenen, Entities, Secrets und Blueprints in einem Netz.</p>
           </div>
-          <button class="button primary" id="graph-close" type="button">Scripts öffnen</button>
+          <button class="button primary" id="graph-close" type="button">Dateien öffnen</button>
         </div>
         <div class="graph-body">
           <section class="admin-section">
@@ -618,7 +678,7 @@
             <h2>HA-Kompatibilität</h2>
             <p>Historische Schlüssel, alte Dienste und migrationsverdächtige Syntax erkennen.</p>
           </div>
-          <button class="button primary" id="compatibility-close" type="button">Scripts öffnen</button>
+          <button class="button primary" id="compatibility-close" type="button">Dateien öffnen</button>
         </div>
         <div class="compatibility-body">
           <section class="admin-section">
@@ -645,7 +705,7 @@
             <h2>Git</h2>
             <p>Lokale Branches und optionaler GitHub-/GitLab-Remote-Sync.</p>
           </div>
-          <button class="button primary" id="git-page-close" type="button">Scripts öffnen</button>
+          <button class="button primary" id="git-page-close" type="button">Dateien öffnen</button>
         </div>
         <div class="git-body">
           <section class="admin-section git-branch-section">
@@ -800,7 +860,7 @@
             <h2>Home-Assistant-Objekte</h2>
             <p>Automationen, Scripts, Szenen und ihre Referenzen direkt finden.</p>
           </div>
-          <button class="button primary" id="objects-close" type="button">Scripts öffnen</button>
+          <button class="button primary" id="objects-close" type="button">Dateien öffnen</button>
         </div>
         <div class="object-browser-body">
           <div class="object-toolbar">
@@ -821,7 +881,7 @@
             <h2>Blueprints</h2>
             <p>Blueprints anzeigen, importieren, erzeugen und als Package instanziieren.</p>
           </div>
-          <button class="button primary" id="blueprints-close" type="button">Scripts öffnen</button>
+          <button class="button primary" id="blueprints-close" type="button">Dateien öffnen</button>
         </div>
         <div class="blueprint-body">
           <section class="admin-section blueprint-list-section">
@@ -877,7 +937,7 @@
             <h2>Dokumentation</h2>
             <p>Interaktive Übersicht über Packages, Objekte, Bezüge, Entitäten und Änderungen.</p>
           </div>
-          <button class="button primary" id="documentation-close" type="button">Scripts öffnen</button>
+          <button class="button primary" id="documentation-close" type="button">Dateien öffnen</button>
         </div>
         <div class="documentation-body">
           <section class="admin-section">
@@ -912,7 +972,7 @@
             <h2>Sicherheit</h2>
             <p>Secrets, Klartext-Tokens und Git-Push-Warnungen prüfen.</p>
           </div>
-          <button class="button primary" id="security-close" type="button">Scripts öffnen</button>
+          <button class="button primary" id="security-close" type="button">Dateien öffnen</button>
         </div>
         <div class="security-body">
           <section class="admin-section">
@@ -939,7 +999,7 @@
             <h2>Entity-Health</h2>
             <p>Unbekannte, nicht verfügbare, deaktivierte und ungenutzte Entities prüfen.</p>
           </div>
-          <button class="button primary" id="entity-health-close" type="button">Scripts öffnen</button>
+          <button class="button primary" id="entity-health-close" type="button">Dateien öffnen</button>
         </div>
         <div class="entity-health-body">
           <section class="admin-section">
@@ -972,7 +1032,7 @@
             <h2>Datenbankanalyse</h2>
             <p>Recorder-Health, Entity-Rauschen, Statistiklücken und YAML-Abgleich.</p>
           </div>
-          <button class="button primary" id="database-close" type="button">Scripts öffnen</button>
+          <button class="button primary" id="database-close" type="button">Dateien öffnen</button>
         </div>
         <div class="database-body">
           <section class="admin-section">
@@ -1044,7 +1104,7 @@
             <h2>Backup-Center</h2>
             <p>Manifeste, Snapshots, Integritätsprüfung und Recorder-Datenbank-Backups.</p>
           </div>
-          <button class="button primary" id="backups-close" type="button">Scripts öffnen</button>
+          <button class="button primary" id="backups-close" type="button">Dateien öffnen</button>
         </div>
         <div class="backups-body">
           <section class="admin-section">
@@ -1099,7 +1159,7 @@
             <h2>Refactoring</h2>
             <p>Entities, Helper, Szenen, Automationen, Geräte, Bereiche und Package-Pfade geschützt ändern.</p>
           </div>
-          <button class="button primary" id="refactor-close" type="button">Scripts öffnen</button>
+          <button class="button primary" id="refactor-close" type="button">Dateien öffnen</button>
         </div>
         <div class="refactor-body">
           <section class="admin-section">
@@ -1126,7 +1186,7 @@
             <h2>Secrets</h2>
             <p>`secrets.yaml` maskiert verwalten und Klartextwerte auslagern.</p>
           </div>
-          <button class="button primary" id="secrets-close" type="button">Scripts öffnen</button>
+          <button class="button primary" id="secrets-close" type="button">Dateien öffnen</button>
         </div>
         <div class="secrets-body">
           <section class="admin-section">
@@ -1170,7 +1230,7 @@
             <h2>Preflight</h2>
             <p>YAML, HA-Check, Security, Entity-Health, Dokumentation und Git vor dem Push prüfen.</p>
           </div>
-          <button class="button primary" id="preflight-close" type="button">Scripts öffnen</button>
+          <button class="button primary" id="preflight-close" type="button">Dateien öffnen</button>
         </div>
         <div class="preflight-body">
           <section class="admin-section">
@@ -1197,7 +1257,7 @@
             <h2>Traces</h2>
             <p>Letzte Ausführungen von Automationen und Scripts debuggen.</p>
           </div>
-          <button class="button primary" id="traces-close" type="button">Scripts öffnen</button>
+          <button class="button primary" id="traces-close" type="button">Dateien öffnen</button>
         </div>
         <div class="traces-body">
           <section class="admin-section">

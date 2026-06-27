@@ -67,12 +67,12 @@ const state = {
 
 const elements = Object.fromEntries([
   "workspace", "sidebar", "sidebar-toggle", "sidebar-close", "sidebar-tools", "sidebar-tools-current", "file-search", "configuration-status", "configuration-status-dot", "package-conflicts-status-dot", "filter-summary", "categories", "tags", "file-list", "file-count", "root-path",
-  "empty-state", "empty-new-button", "editor-content", "document-name", "document-path", "dirty-dot", "category-select", "tag-input",
+  "empty-state", "empty-open-files-button", "empty-new-button", "editor-content", "document-name", "document-path", "dirty-dot", "category-select", "tag-input",
   "rename-button", "duplicate-button", "delete-button", "editor", "highlighting", "line-numbers", "completion-popover", "validation-status", "file-ha-check", "cursor-status",
-  "save-button", "new-button", "reload-button", "helpers", "helpers-toggle", "helpers-close", "snippet-list", "analysis-summary", "analysis-list", "api-notice",
+  "save-button", "open-files-button", "new-button", "reload-button", "helpers", "helpers-toggle", "helpers-close", "snippet-list", "analysis-summary", "analysis-list", "api-notice",
   "dependency-summary", "dependency-list", "flow-summary", "flow-diagram", "outline-summary", "outline-list",
   "entity-search", "entity-list", "service-search", "service-list", "new-dialog", "new-form", "new-path", "new-script-id",
-  "new-category", "new-tags", "category-options", "create-button", "toast-region",
+  "new-category", "new-tags", "category-options", "create-button", "file-browser-page", "file-browser-close", "file-browser-new", "toast-region",
   "configuration-button", "configuration-dialog", "configuration-close", "configuration-editor", "configuration-highlighting",
   "configuration-line-numbers", "configuration-validation", "configuration-cursor", "configuration-save",
   "configuration-enable-packages", "configuration-migrate", "migration-package-name", "configuration-notice",
@@ -92,6 +92,7 @@ const elements = Object.fromEntries([
   "transfer-button", "transfer-dialog", "transfer-close", "export-scope", "export-category", "export-start", "import-file", "import-strategy", "import-preview", "import-apply", "import-summary", "import-preview-list",
   "settings-button", "settings-dialog", "settings-close", "settings-save", "settings-reload", "settings-backup-retention", "settings-backup-days", "settings-backup-size", "settings-trash-days", "settings-trash-size", "settings-import-size", "settings-expanded-size", "settings-import-files", "settings-theme", "settings-after-save", "settings-branch-prefix", "settings-unused-scripts",
   "trash-button", "trash-dialog", "trash-close", "trash-refresh", "trash-purge-all", "trash-summary", "trash-list",
+  "package-files-button",
   "objects-button", "objects-dialog", "objects-close", "objects-refresh", "object-search", "object-domain", "objects-summary", "object-list",
   "blueprints-button", "blueprints-page", "blueprints-close", "blueprints-refresh", "blueprints-summary", "blueprint-search", "blueprint-domain", "blueprint-list",
   "blueprint-selected-title", "blueprint-selected-path", "blueprint-selected-domain", "blueprint-package-path", "blueprint-instance-id", "blueprint-instance-alias", "blueprint-inputs", "blueprint-instantiate",
@@ -120,6 +121,7 @@ let resourceValidationTimer;
 
 const sidebarToolLabels = {
   "dashboard-button": "Dashboard",
+  "package-files-button": "Package-Dateien",
   "review-button": "Review",
   "git-page-button": "Git",
   "objects-button": "HA-Objekte",
@@ -140,13 +142,31 @@ const sidebarToolLabels = {
 
 function updateSidebarToolSummary() {
   const activeId = Object.keys(sidebarToolLabels).find((id) => elements[id]?.classList.contains("active"));
-  elements["sidebar-tools-current"].textContent = activeId ? sidebarToolLabels[activeId] : "Dateien";
+  elements["sidebar-tools-current"].textContent = activeId ? sidebarToolLabels[activeId] : "Dateieditor";
   elements["sidebar-tools"].classList.toggle("has-active-tool", Boolean(activeId));
 }
 
 function collapseSidebarTools() {
-  elements["sidebar-tools"].removeAttribute("open");
+  if (window.matchMedia("(max-width: 700px)").matches) {
+    elements["sidebar-tools"].removeAttribute("open");
+    elements.sidebar.classList.remove("open");
+  }
   requestAnimationFrame(updateSidebarToolSummary);
+}
+
+function openFileBrowser() {
+  closePages();
+  renderCategories();
+  renderTags();
+  renderFiles();
+  elements["file-browser-page"].classList.remove("hidden");
+  elements["package-files-button"].classList.add("active");
+  setTimeout(() => elements["file-search"].focus(), 0);
+  updateSidebarToolSummary();
+}
+
+function closeFileBrowser() {
+  openScriptManager();
 }
 
 async function api(path, options = {}) {
@@ -426,7 +446,10 @@ function renderFiles() {
     const tags = file.tags.length ? `<span class="file-tag-line">${escapeHtml(file.tags.map((tag) => `#${tag}`).join(" "))}</span>` : "";
     button.innerHTML = `<span class="file-icon">YML</span><span class="file-label"><strong>${escapeHtml(file.name)}</strong><span>${escapeHtml(file.path)}</span>${tags}</span>`;
     button.title = file.path;
-    button.addEventListener("click", () => openFile(file.path));
+    button.addEventListener("click", async () => {
+      openScriptManager();
+      await openFile(file.path);
+    });
     return button;
   }));
 }
@@ -1443,10 +1466,10 @@ async function openCompatibilityPage() {
 }
 
 function closePages() {
-  ["dashboard-dialog", "review-page", "git-page", "objects-dialog", "blueprints-page", "documentation-page", "security-page", "entity-health-page", "database-page", "backups-page", "graph-page", "lint-page", "compatibility-page", "refactor-page", "secrets-page", "preflight-page", "traces-page"].forEach((id) => {
+  ["dashboard-dialog", "file-browser-page", "review-page", "git-page", "objects-dialog", "blueprints-page", "documentation-page", "security-page", "entity-health-page", "database-page", "backups-page", "graph-page", "lint-page", "compatibility-page", "refactor-page", "secrets-page", "preflight-page", "traces-page"].forEach((id) => {
     elements[id].classList.add("hidden");
   });
-  ["dashboard-button", "review-button", "git-page-button", "objects-button", "blueprints-button", "documentation-button", "security-button", "entity-health-button", "database-button", "backups-button", "graph-button", "lint-button", "compatibility-button", "refactor-button", "secrets-button", "preflight-button", "traces-button"].forEach((id) => {
+  ["dashboard-button", "package-files-button", "review-button", "git-page-button", "objects-button", "blueprints-button", "documentation-button", "security-button", "entity-health-button", "database-button", "backups-button", "graph-button", "lint-button", "compatibility-button", "refactor-button", "secrets-button", "preflight-button", "traces-button"].forEach((id) => {
     elements[id].classList.remove("active");
   });
   requestAnimationFrame(updateSidebarToolSummary);
@@ -3837,6 +3860,7 @@ async function createFile(event) {
     });
     elements["new-dialog"].close();
     await refreshFiles();
+    openScriptManager();
     await openFile(file.path, true);
     renderFileHomeAssistantCheck(file.configurationCheck);
     toast("Skriptdatei angelegt", "success");
@@ -3946,15 +3970,22 @@ elements["category-select"].addEventListener("change", () => {
 });
 elements["tag-input"].addEventListener("input", setDirty);
 elements["file-search"].addEventListener("input", renderFiles);
+elements["open-files-button"].addEventListener("click", openFileBrowser);
+elements["empty-open-files-button"].addEventListener("click", openFileBrowser);
+elements["file-browser-close"].addEventListener("click", closeFileBrowser);
+elements["file-browser-new"].addEventListener("click", () => {
+  openNewDialog();
+});
+elements["package-files-button"].addEventListener("click", openFileBrowser);
 elements["dashboard-button"].addEventListener("click", openDashboard);
-elements["dashboard-close"].addEventListener("click", openScriptManager);
+elements["dashboard-close"].addEventListener("click", openFileBrowser);
 elements["dashboard-refresh"].addEventListener("click", loadDashboard);
 elements["dashboard-show-suppressed"].addEventListener("change", () => {
   state.dashboardShowSuppressed = elements["dashboard-show-suppressed"].checked;
   renderDashboard(state.dashboard);
 });
 elements["review-button"].addEventListener("click", openReviewPage);
-elements["review-close"].addEventListener("click", openScriptManager);
+elements["review-close"].addEventListener("click", openFileBrowser);
 elements["review-add-current"].addEventListener("click", addCurrentToReview);
 elements["review-clear"].addEventListener("click", () => {
   state.reviewChanges = [];
@@ -3963,19 +3994,19 @@ elements["review-clear"].addEventListener("click", () => {
 elements["review-preview"].addEventListener("click", previewReview);
 elements["review-apply"].addEventListener("click", applyReview);
 elements["lint-button"].addEventListener("click", openLintPage);
-elements["lint-close"].addEventListener("click", openScriptManager);
+elements["lint-close"].addEventListener("click", openFileBrowser);
 elements["lint-refresh"].addEventListener("click", () => loadLint().catch((error) => toast(error.message, "error")));
 elements["lint-save"].addEventListener("click", saveLintRules);
 elements["graph-button"].addEventListener("click", openGraphPage);
-elements["graph-close"].addEventListener("click", openScriptManager);
+elements["graph-close"].addEventListener("click", openFileBrowser);
 elements["graph-refresh"].addEventListener("click", () => loadGraph().catch((error) => toast(error.message, "error")));
 elements["graph-search"].addEventListener("input", () => state.graph && renderGraph(state.graph));
 elements["graph-type"].addEventListener("change", () => state.graph && renderGraph(state.graph));
 elements["compatibility-button"].addEventListener("click", openCompatibilityPage);
-elements["compatibility-close"].addEventListener("click", openScriptManager);
+elements["compatibility-close"].addEventListener("click", openFileBrowser);
 elements["compatibility-refresh"].addEventListener("click", () => loadCompatibility().catch((error) => toast(error.message, "error")));
 elements["git-page-button"].addEventListener("click", openGitPage);
-elements["git-page-close"].addEventListener("click", openScriptManager);
+elements["git-page-close"].addEventListener("click", openFileBrowser);
 elements["branch-create"].addEventListener("click", createBranch);
 elements["branch-switch"].addEventListener("click", switchBranch);
 elements["branch-compare"].addEventListener("click", compareBranch);
@@ -4008,12 +4039,12 @@ elements["transfer-button"].addEventListener("click", openTransferDialog);
 elements["transfer-close"].addEventListener("click", () => elements["transfer-dialog"].close());
 elements["transfer-dialog"].addEventListener("cancel", () => elements["transfer-dialog"].close());
 elements["objects-button"].addEventListener("click", openObjectsDialog);
-elements["objects-close"].addEventListener("click", openScriptManager);
+elements["objects-close"].addEventListener("click", openFileBrowser);
 elements["objects-refresh"].addEventListener("click", loadHaObjects);
 elements["object-search"].addEventListener("input", renderHaObjects);
 elements["object-domain"].addEventListener("change", renderHaObjects);
 elements["blueprints-button"].addEventListener("click", openBlueprintsPage);
-elements["blueprints-close"].addEventListener("click", openScriptManager);
+elements["blueprints-close"].addEventListener("click", openFileBrowser);
 elements["blueprints-refresh"].addEventListener("click", () => loadBlueprints().catch((error) => toast(error.message, "error")));
 elements["blueprint-search"].addEventListener("input", renderBlueprints);
 elements["blueprint-domain"].addEventListener("change", renderBlueprints);
@@ -4021,7 +4052,7 @@ elements["blueprint-instantiate"].addEventListener("click", instantiateSelectedB
 elements["blueprint-import"].addEventListener("click", importBlueprint);
 elements["blueprint-from-create"].addEventListener("click", createBlueprintFromYaml);
 elements["documentation-button"].addEventListener("click", openDocumentationPage);
-elements["documentation-close"].addEventListener("click", openScriptManager);
+elements["documentation-close"].addEventListener("click", openFileBrowser);
 elements["documentation-refresh"].addEventListener("click", loadDocumentation);
 elements["documentation-save"].addEventListener("click", saveDocumentation);
 elements["documentation-search"].addEventListener("input", renderDocumentationHtml);
@@ -4030,10 +4061,10 @@ document.querySelectorAll(".documentation-tab").forEach((tab) => tab.addEventLis
   renderDocumentationHtml();
 }));
 elements["security-button"].addEventListener("click", openSecurityPage);
-elements["security-close"].addEventListener("click", openScriptManager);
+elements["security-close"].addEventListener("click", openFileBrowser);
 elements["security-refresh"].addEventListener("click", () => loadSecurity().catch((error) => toast(error.message, "error")));
 elements["refactor-button"].addEventListener("click", openRefactorPage);
-elements["refactor-close"].addEventListener("click", openScriptManager);
+elements["refactor-close"].addEventListener("click", openFileBrowser);
 elements["refactor-preview"].addEventListener("click", previewRefactor);
 elements["refactor-apply"].addEventListener("click", applyRefactor);
 elements["refactor-kind"].addEventListener("change", () => {
@@ -4053,33 +4084,33 @@ elements["refactor-kind"].addEventListener("change", () => {
   elements["refactor-apply"].disabled = true;
 });
 elements["secrets-button"].addEventListener("click", openSecretsPage);
-elements["secrets-close"].addEventListener("click", openScriptManager);
+elements["secrets-close"].addEventListener("click", openFileBrowser);
 elements["secrets-refresh"].addEventListener("click", () => loadSecrets().catch((error) => toast(error.message, "error")));
 elements["secret-save"].addEventListener("click", saveSecret);
 elements["secret-convert"].addEventListener("click", convertSecret);
 elements["preflight-button"].addEventListener("click", openPreflightPage);
-elements["preflight-close"].addEventListener("click", openScriptManager);
+elements["preflight-close"].addEventListener("click", openFileBrowser);
 elements["preflight-run"].addEventListener("click", () => loadPreflight().catch((error) => toast(error.message, "error")));
 elements["entity-health-button"].addEventListener("click", openEntityHealthPage);
-elements["entity-health-close"].addEventListener("click", openScriptManager);
+elements["entity-health-close"].addEventListener("click", openFileBrowser);
 elements["entity-health-refresh"].addEventListener("click", () => loadEntityHealth().catch((error) => toast(error.message, "error")));
 elements["entity-health-filter"].addEventListener("change", () => renderEntityHealth(state.entityHealth));
 elements["database-button"].addEventListener("click", openDatabasePage);
-elements["database-close"].addEventListener("click", openScriptManager);
+elements["database-close"].addEventListener("click", openFileBrowser);
 elements["database-refresh"].addEventListener("click", () => loadDatabase().catch((error) => toast(error.message, "error")));
 elements["database-entity-filter"].addEventListener("change", () => state.database && renderDatabaseEntities(state.database));
 elements["database-compare-filter"].addEventListener("change", () => state.database && renderDatabaseCompare(state.database));
 elements["database-statistics-filter"].addEventListener("change", () => state.database && renderDatabaseStatistics(state.database));
 elements["database-query-run"].addEventListener("click", runDatabaseQuery);
 elements["backups-button"].addEventListener("click", openBackupsPage);
-elements["backups-close"].addEventListener("click", openScriptManager);
+elements["backups-close"].addEventListener("click", openFileBrowser);
 elements["backups-refresh"].addEventListener("click", () => loadBackups().catch((error) => toast(error.message, "error")));
 elements["backup-filter"].addEventListener("change", () => state.backups && renderBackupList(state.backups));
 elements["backup-snapshot-create"].addEventListener("click", createSnapshotBackup);
 elements["backup-database-create"].addEventListener("click", createRecorderBackup);
 elements["backup-restore-apply"].addEventListener("click", restoreSnapshotBackup);
 elements["traces-button"].addEventListener("click", openTracesPage);
-elements["traces-close"].addEventListener("click", openScriptManager);
+elements["traces-close"].addEventListener("click", openFileBrowser);
 elements["traces-refresh"].addEventListener("click", () => loadTraces().catch((error) => toast(error.message, "error")));
 elements["trace-search"].addEventListener("input", () => renderTraces(state.traces));
 elements["trace-domain"].addEventListener("change", () => renderTraces(state.traces));

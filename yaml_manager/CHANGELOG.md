@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.7.0 - 2026-06-27
+
+- Zentrales, gruppiertes Navigationsmenü in der linken Sidebar ergänzt; Werkzeuge sind jetzt nach Übersicht, Dateien bearbeiten, Prüfen und Debuggen, Struktur und Daten sowie Verwaltung sortiert
+- Globale Topbar verschlankt: Datei öffnen, Neue Datei und Speichern bleiben sichtbar, die verstreute Werkzeugauswahl wurde aus der Kopfzeile entfernt
+- Package-Dateien aus der dauerhaft sichtbaren Sidebar-Liste herausgelöst und als eigene Seite mit Suche, Kategorie-/Tag-Filter, Kennzahlen und scrollbarer Dateiliste umgesetzt
+- Neuer Navigationseintrag **Package-Dateien** öffnet die Dateiansicht als echte Inhaltsseite statt als Dialog
+- Öffnen, Erstellen und Wechseln von Package-Dateien führt zurück in den Editor, ohne bestehende Funktionen zu entfernen
+- Responsive Sidebar- und Seitenzustände für die neue Navigation angepasst
+
 ## 1.6.0 - 2026-06-27
 
 - Backup-Center mit Übersicht für Datei-Backups, Snapshots, Recorder-Datenbank-Backups und Integritätsprüfung ergänzt
