@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.5.0 - 2026-06-27
+
+- Datenbankanalyse-Seite für Home-Assistant-Recorder ergänzt
+- Recorder-Health mit Datenbankgröße, WAL-Größe, Tabellen, Zeilenanzahl, State-Zeitraum und `PRAGMA quick_check`
+- Analyse lauter Entities nach State-Änderungen, Attributvolumen und dauerhaft `unknown`/`unavailable` wirkenden Zuständen
+- Abgleich zwischen verwalteten YAML-Entity-Referenzen und tatsächlich in der Recorder-Datenbank gesehenen Entities
+- Statistikprüfung für Langzeit- und Kurzzeitstatistiken mit Lücken, Sprung-Kandidaten, Einheitswechseln und State-Class-Hinweisen
+- Sicherer SQL-Explorer mit ausschließlich lesenden `SELECT`-/`WITH`-Abfragen, Query-only-Modus, SQLite-Authorizer, Timeout und Ergebnislimits
+- Neue Backend-Module und API-Endpunkte für Datenbank-Health, Entity-Analyse, Statistikprüfung, YAML-/DB-Abgleich und SQL-Abfragen
+- Tests für Recorder-Analyse, YAML-Abgleich und SQL-Schutz ergänzt
+
 ## 1.4.1 - 2026-06-26
 
 - Sidebar-Navigation überarbeitet: Werkzeugseiten sind jetzt in einem einklappbaren Bereich gebündelt, damit Suche, Filter und Dateiliste dauerhaft sichtbar bleiben

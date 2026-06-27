@@ -1,67 +1,59 @@
-# Release Notes 1.4.1
+# Release Notes 1.5.0
 
-Veröffentlicht am 26. Juni 2026.
+Veröffentlicht am 27. Juni 2026.
 
-## Sidebar
+## Datenbankanalyse
 
-Die Sidebar priorisiert wieder Suche, Filter und Dateiliste. Die vielen
-Werkzeugseiten sind in einem einklappbaren Bereich gebündelt. Nach der Auswahl
-eines Werkzeugs klappt dieser Bereich automatisch wieder ein und zeigt das
-aktive Werkzeug in der Zusammenfassung an.
+Die neue Seite **Datenbank** analysiert die Home-Assistant-Recorder-Datenbank
+`home-assistant_v2.db` direkt aus dem Konfigurationsverzeichnis. Die Analyse ist
+rein lesend und funktioniert auch dann sauber, wenn lokal keine Recorder-
+Datenbank vorhanden ist.
 
-## Entity-Refactoring
+Die Recorder-Übersicht zeigt:
 
-Die neue Seite **Refactor** ändert Entity-IDs über alle verwalteten YAML-Dateien
-hinweg. Die Vorschau zeigt Treffer, Dateien und Zeilen. Die Anwendung ist
-entity-exakt, damit `light.alt` nicht versehentlich `light.alt_extra` verändert.
+- Datenbank- und WAL-Größe,
+- Tabellen und Zeilenanzahlen,
+- größte Tabellen, sofern `dbstat` verfügbar ist,
+- ältesten und neuesten State-Zeitpunkt,
+- Ergebnis von `PRAGMA quick_check`.
 
-Beim Anwenden laufen die bestehenden Schutzmechanismen: Zustandshash,
-YAML-Prüfung, Package-Konfliktprüfung, Backups, atomarer Austausch, Git-Commit,
-Auto-Push-Schutz und Home-Assistant-Konfigurationsprüfung.
+## Entity- und YAML-Abgleich
 
-## Secrets-Manager
+Die Entity-Analyse findet laute Entities nach State-Änderungen, Entities mit
+großem Attributvolumen sowie Entities, deren letzter oder kompletter Verlauf auf
+`unknown` beziehungsweise `unavailable` hindeutet.
 
-Die neue Seite **Secrets** verwaltet `/config/secrets.yaml` maskiert. Secret-
-Werte werden nie in API-Antworten zurückgegeben. Unterstützt werden:
+Zusätzlich gleicht die App verwaltete YAML-Entity-Referenzen mit der
+Recorder-Historie ab. Dadurch werden Entities sichtbar, die zwar in YAML
+referenziert werden, aber nie in der Datenbank auftauchen, sowie Datenbank-
+Entities ohne verwaltete YAML-Referenz.
 
-- Secret anlegen oder aktualisieren,
-- Secret löschen,
-- Referenzanzahl anzeigen,
-- Klartext-Zeile in `!secret <name>` umwandeln und den Wert gleichzeitig in
-  `secrets.yaml` schreiben.
+## Statistikprüfung
 
-Auch diese Änderungen erzeugen Backups und Git-Commits. Die bestehende
-Security-Prüfung bleibt die Quelle für fehlende und ungenutzte Secret-Hinweise.
+Langzeit- und Kurzzeitstatistiken werden auf typische Auffälligkeiten geprüft:
 
-## Preflight
+- Lücken in `statistics` und `statistics_short_term`,
+- große Sprung-Kandidaten,
+- geänderte Einheiten in `statistics_meta`,
+- Statistik-Metadaten ohne `has_mean` und ohne `has_sum`.
 
-Die neue Seite **Preflight** bündelt alle Prüfungen vor dem Push:
+## Sicherer SQL-Explorer
 
-- YAML-Syntax,
-- Package-Konflikte,
-- Security und Secrets,
-- Entity-Health,
-- Home-Assistant-Konfigurationscheck,
-- Dokumentationsstatus,
-- Git-Remote-Status.
-
-Die Antwort unterscheidet Blocker und Warnungen. Damit gibt es einen klaren
-„bereit zum Push“-Status, ohne die einzelnen Detailseiten öffnen zu müssen.
+Der SQL-Explorer erlaubt nur einzelne `SELECT`- oder `WITH`-Abfragen. Serverseitig
+werden `PRAGMA query_only=ON`, ein SQLite-Authorizer, ein kurzer Timeout sowie
+Limits für Zeilen und Spalten verwendet. Schreibende Statements und mehrere
+Statements werden abgelehnt.
 
 ## Technische Änderungen
 
-- Neue Backend-Module `entity_refactor.py`, `secrets_manager.py` und `preflight.py`
-- Neue API-Endpunkte für Entity-Refactor, Secrets und Preflight
-- Neue Sidebar-Seiten **Refactor**, **Secrets** und **Preflight**
-- Secret-Werte werden serverseitig maskiert und nicht serialisiert
-- Tests für Entity-Refactor, Secrets-Umwandlung und Preflight ergänzt
-
-## Neue API-Endpunkte
-
-- `POST /api/entity-refactor/preview`
-- `POST /api/entity-refactor/apply`
-- `GET /api/secrets`
-- `POST /api/secrets`
-- `DELETE /api/secrets`
-- `POST /api/secrets/convert`
-- `GET /api/preflight`
+- Neues Backend-Modul `database.py`
+- Neue API-Endpunkte:
+  - `GET /api/database`
+  - `GET /api/database/health`
+  - `GET /api/database/entities`
+  - `GET /api/database/statistics`
+  - `GET /api/database/yaml-compare`
+  - `POST /api/database/query`
+- Neue Sidebar-Seite **Datenbank**
+- Projekt- und Add-on-Version auf `1.5.0` angehoben
+- Tests für Recorder-Health, Entity-Analyse, Statistikhinweise, YAML-Abgleich und SQL-Schutz ergänzt

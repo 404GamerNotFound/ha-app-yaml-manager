@@ -20,7 +20,7 @@ def create_handler(backend: Any) -> type[BaseHTTPRequestHandler]:
     """Bind the transport layer to a backend module with the service functions."""
 
     class Handler(BaseHTTPRequestHandler):
-        server_version = "YamlScriptManager/1.4.1"
+        server_version = "YamlScriptManager/1.5.0"
 
         def log_message(self, format_string: str, *args: Any) -> None:
             print(f"{self.address_string()} - {format_string % args}", flush=True)
