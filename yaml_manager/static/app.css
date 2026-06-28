@@ -106,7 +106,7 @@ button { color: inherit; }
 
 .workspace { height: calc(100vh - 64px); min-height: 0; display: grid; grid-template-columns: 300px minmax(360px, 1fr) 300px; overflow: hidden; }
 .sidebar, .helpers { min-width: 0; min-height: 0; background: var(--surface); position: relative; z-index: 10; }
-.sidebar { height: 100%; display: flex; flex-direction: column; overflow: hidden; border-right: 1px solid var(--border); }
+.sidebar { height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; border-right: 1px solid var(--border); }
 .helpers { border-left: 1px solid var(--border); overflow-y: auto; }
 
 .sidebar-header { padding: 12px 12px 9px; display: flex; gap: 8px; }
@@ -120,12 +120,12 @@ button { color: inherit; }
 .search-field span { color: var(--muted); font-size: 18px; }
 .search-field input { min-width: 0; width: 100%; border: 0; outline: 0; color: var(--text); background: transparent; }
 
-.sidebar-tools { flex: none; border-top: 1px solid var(--border); }
+.sidebar-tools { min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
 .sidebar-tools > summary { min-height: 38px; }
 .sidebar-tools.has-active-tool > summary { color: var(--primary-dark); }
 .sidebar-tools .section-summary { max-width: 165px; }
 .sidebar-tool-groups {
-  max-height: min(560px, 52vh); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain;
+  min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain;
   padding: 8px 10px 12px; scrollbar-gutter: stable;
 }
 .sidebar-tool-groups::-webkit-scrollbar { width: 9px; }
@@ -153,7 +153,10 @@ button { color: inherit; }
 .sidebar-nav-item strong { color: var(--text); font-size: 12px; }
 .sidebar-nav-item small { display: none; font-size: 9px; }
 
-.sidebar-section { flex: none; border-bottom: 1px solid var(--border); }
+.sidebar-section { min-height: 0; border-bottom: 1px solid var(--border); }
+.system-section { align-self: end; background: var(--surface); border-top: 1px solid var(--border); border-bottom: 0; }
+.system-section[open] { max-height: min(230px, 34vh); display: grid; grid-template-rows: auto minmax(0, 1fr); }
+.system-section[open] .sidebar-section-content { min-height: 0; overflow-y: auto; }
 .sidebar-section > summary {
   min-height: 36px; padding: 0 15px; display: flex; align-items: center; gap: 8px; list-style: none;
   color: var(--muted); cursor: pointer; font-size: 10px; font-weight: 750; text-transform: uppercase; letter-spacing: .06em;
@@ -755,12 +758,12 @@ dialog.transfer-dialog { width: min(1040px, calc(100vw - 28px)); height: min(820
 }
 
 @media (max-height: 820px) {
-  .sidebar-tool-groups { max-height: min(420px, 44vh); }
+  .sidebar-tool-groups { padding-block: 7px 10px; }
 }
 
 @media (max-height: 700px) {
   .sidebar-header { padding: 9px 10px 7px; }
-  .sidebar-tool-groups { max-height: min(300px, 34vh); }
+  .sidebar-tool-groups { padding-block: 6px 8px; }
   .file-list { min-height: 96px; }
   .root-path { padding-block: 7px; }
 }
