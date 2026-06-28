@@ -34,8 +34,8 @@
           <span>Menü</span>
           <button class="icon-button mobile-only" id="sidebar-close" aria-label="Menü schließen">×</button>
         </div>
-        <details class="sidebar-section sidebar-tools" id="sidebar-tools" open>
-          <summary><span>Navigation</span><span class="section-summary" id="sidebar-tools-current">Dashboard</span></summary>
+        <section class="sidebar-section sidebar-tools" id="sidebar-tools">
+          <div class="sidebar-tools-summary"><span>Navigation</span><span class="section-summary" id="sidebar-tools-current">Dashboard</span></div>
           <div class="sidebar-tool-groups">
             <section class="tool-group" aria-labelledby="tool-group-overview">
               <h2 class="tool-group-title" id="tool-group-overview">Übersicht</h2>
@@ -167,7 +167,7 @@
               </nav>
             </section>
           </div>
-        </details>
+        </section>
         <details class="sidebar-section system-section">
           <summary>
             <span>Systemstatus</span>
@@ -586,6 +586,7 @@
               <div><h3>Hinweise</h3><p>Globale Package-Prüfung und möglicherweise ungenutzte Scripts.</p></div>
               <div class="dashboard-heading-actions">
                 <label class="compact-toggle"><input id="dashboard-show-suppressed" type="checkbox"><span>Ausgeblendete anzeigen</span></label>
+                <span class="remote-badge cache-badge" id="dashboard-cache-status">Noch nicht geladen</span>
                 <button class="button secondary" id="dashboard-refresh" type="button">Aktualisieren</button>
               </div>
             </div>
@@ -680,7 +681,10 @@
           <section class="admin-section">
             <div class="admin-section-heading">
               <div><h3>Filter</h3><p id="graph-summary">Graph wurde noch nicht geladen.</p></div>
-              <button class="button secondary" id="graph-refresh" type="button">Aktualisieren</button>
+              <div class="documentation-actions">
+                <span class="remote-badge cache-badge" id="graph-cache-status">Noch nicht geladen</span>
+                <button class="button secondary" id="graph-refresh" type="button">Aktualisieren</button>
+              </div>
             </div>
             <div class="object-toolbar">
               <label class="search-field"><span aria-hidden="true">⌕</span><input id="graph-search" type="search" placeholder="Knoten oder Pfad suchen"></label>
@@ -1035,7 +1039,10 @@
           <section class="admin-section">
             <div class="admin-section-heading">
               <div><h3>Status</h3><p id="entity-health-summary">Entity-Health wurde noch nicht geladen.</p></div>
-              <button class="button secondary" id="entity-health-refresh" type="button">Aktualisieren</button>
+              <div class="documentation-actions">
+                <span class="remote-badge cache-badge" id="entity-health-cache-status">Noch nicht geladen</span>
+                <button class="button secondary" id="entity-health-refresh" type="button">Aktualisieren</button>
+              </div>
             </div>
             <div class="security-stats" id="entity-health-stats"></div>
           </section>
@@ -1065,20 +1072,46 @@
           <button class="button primary" id="database-close" type="button">Editor öffnen</button>
         </div>
         <div class="database-body">
-          <section class="admin-section">
+          <section class="admin-section database-overview-section">
             <div class="admin-section-heading">
               <div><h3>Recorder</h3><p id="database-summary">Datenbankanalyse wurde noch nicht geladen.</p></div>
-              <button class="button secondary" id="database-refresh" type="button">Aktualisieren</button>
+              <div class="documentation-actions">
+                <span class="remote-badge cache-badge" id="database-cache-status">Noch nicht geladen</span>
+                <button class="button secondary" id="database-check" type="button">DB Check</button>
+                <button class="button secondary" id="database-export" type="button">Export</button>
+                <button class="button secondary" id="database-refresh" type="button">Aktualisieren</button>
+              </div>
             </div>
             <div class="security-stats" id="database-stats"></div>
+            <div class="database-tabs" role="tablist" aria-label="Datenbankansicht">
+              <button class="database-tab active" data-database-view="analysis" type="button" role="tab" aria-selected="true">Analyse</button>
+              <button class="database-tab" data-database-view="tables" type="button" role="tab" aria-selected="false">Tabellen</button>
+              <button class="database-tab" data-database-view="issues" type="button" role="tab" aria-selected="false">Problemstellen</button>
+              <button class="database-tab" data-database-view="recommendations" type="button" role="tab" aria-selected="false">Empfehlungen</button>
+              <button class="database-tab" data-database-view="sql" type="button" role="tab" aria-selected="false">SQL</button>
+            </div>
           </section>
-          <section class="admin-section database-table-section">
+          <section class="admin-section database-view-panel database-analysis-section" data-database-view="analysis">
+            <div class="admin-section-heading">
+              <div><h3>Analyse</h3><p id="database-check-summary">DB Check wurde noch nicht ausgeführt.</p></div>
+            </div>
+            <div class="import-preview-list" id="database-check-list"></div>
+          </section>
+          <section class="admin-section database-table-section database-view-panel hidden" data-database-view="tables">
             <div class="admin-section-heading">
               <div><h3>Tabellen</h3><p id="database-tables-summary">Tabellen werden nach Zeilenanzahl sortiert.</p></div>
+              <div class="database-table-toolbar">
+                <label class="search-field"><span aria-hidden="true">⌕</span><input id="database-table-search" type="search" placeholder="Tabelle suchen"></label>
+                <select id="database-table-sort">
+                  <option value="rows">Zeilen</option>
+                  <option value="size">Größe</option>
+                  <option value="name">Name</option>
+                </select>
+              </div>
             </div>
             <div class="database-table-list" id="database-table-list"></div>
           </section>
-          <section class="admin-section database-table-section">
+          <section class="admin-section database-table-section database-view-panel hidden" data-database-view="issues">
             <div class="admin-section-heading">
               <div><h3>Entities</h3><p id="database-entities-summary">State-Änderungen und Attributvolumen.</p></div>
               <select id="database-entity-filter">
@@ -1089,7 +1122,7 @@
             </div>
             <div class="security-list" id="database-entity-list"></div>
           </section>
-          <section class="admin-section database-table-section">
+          <section class="admin-section database-table-section database-view-panel hidden" data-database-view="issues">
             <div class="admin-section-heading">
               <div><h3>YAML vs. Datenbank</h3><p id="database-compare-summary">Referenzen werden mit Recorder-Entities abgeglichen.</p></div>
               <select id="database-compare-filter">
@@ -1100,7 +1133,7 @@
             </div>
             <div class="security-list" id="database-compare-list"></div>
           </section>
-          <section class="admin-section database-table-section">
+          <section class="admin-section database-table-section database-view-panel hidden" data-database-view="issues">
             <div class="admin-section-heading">
               <div><h3>Statistiken</h3><p id="database-statistics-summary">Langzeit- und Kurzzeitstatistiken.</p></div>
               <select id="database-statistics-filter">
@@ -1112,7 +1145,13 @@
             </div>
             <div class="security-list" id="database-statistics-list"></div>
           </section>
-          <section class="admin-section database-sql-section">
+          <section class="admin-section database-view-panel database-recommendations-section hidden" data-database-view="recommendations">
+            <div class="admin-section-heading">
+              <div><h3>Empfehlungen</h3><p id="database-recommendations-summary">Empfehlungen werden aus Analyse, Tabellen und Problemstellen abgeleitet.</p></div>
+            </div>
+            <div class="security-list" id="database-recommendations-list"></div>
+          </section>
+          <section class="admin-section database-sql-section database-view-panel hidden" data-database-view="sql">
             <div class="admin-section-heading">
               <div><h3>SQL</h3><p id="database-query-summary">Nur SELECT, read-only.</p></div>
               <div class="database-query-actions">

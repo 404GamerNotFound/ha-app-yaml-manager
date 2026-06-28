@@ -1,65 +1,46 @@
-# Release Notes 1.8.0
+# Release Notes 1.9.0
 
-Veröffentlicht am 27. Juni 2026.
+Veröffentlicht am 28. Juni 2026.
 
-## Navigation und Verlauf
+## Datenbankanalyse
 
-Der Editor ist jetzt ein eigener Navigationseintrag in der linken Sidebar. Damit
-ist der Rückweg aus Werkzeugseiten eindeutig: Seitenaktionen führen zurück zum
-Editor, während **Package-Dateien** gezielt die Dateiansicht öffnet.
+Die Datenbankseite ist jetzt in klare Arbeitsbereiche aufgeteilt:
 
-Die App unterstützt außerdem URL-Hashes für Hauptseiten. Beispiele:
+- **Analyse** mit schnellem DB Check
+- **Tabellen** mit Suche, Sortierung und Tabellenaktionen
+- **Problemstellen** für Entities, YAML-/DB-Abgleich und Statistiken
+- **Empfehlungen** aus den Analyseergebnissen
+- **SQL** für bestehende read-only Abfragen
 
-- `#dashboard`
-- `#editor`
-- `#files`
-- `#backups`
-- `#search-replace`
-- `#configuration`
+Der neue DB Check nutzt den vorhandenen Health-Endpunkt separat und zeigt
+`quick_check`, Dateipfad, Recorder-Zeitraum, WAL-Größe und größte Tabellen als
+kompakte Checkliste.
 
-Browser-Zurück und Browser-Vorwärts wechseln damit zwischen App-Seiten, ohne
-Funktionen oder Daten zu verlieren.
+## Cache und Aktualisieren
 
-## Package-Dateien
+Dashboard, Graph und Entity-Health werden im Browser gecacht. Beim Wechseln
+zwischen Seiten werden frische Ergebnisse wiederverwendet, statt jedes Mal neu
+geladen zu werden.
 
-Die Package-Dateiansicht wurde für größere Dateibestände erweitert:
+Wenn sich Package-Dateien oder die Package-Einbindung ändern, markiert die App
+diese Bereiche als veraltet. Die Status-Badges neben **Aktualisieren** zeigen,
+ob die Ansicht frisch, veraltet oder noch nicht geladen ist.
 
-- Favoriten lokal im Browser markieren,
-- zuletzt geöffnete Dateien anzeigen,
-- nach Name, Pfad, Änderung oder Kategorie sortieren,
-- nach Ordnern gruppieren,
-- aktuelle Filter speichern und wieder anwenden,
-- große Trefferlisten gestaffelt rendern.
+## Sidebar
 
-Die Datei-Metadaten bleiben unverändert; Favoriten, zuletzt geöffnete Dateien
-und gespeicherte Filter werden nur lokal im Browser gespeichert.
-
-## Seiten statt Dialoge
-
-Weitere größere Arbeitsbereiche sind jetzt echte Inhaltsseiten:
-
-- Versionsverlauf
-- Git-Historie
-- Ressourcen-Editor
-- Package-Konfliktübersicht
-
-Kurze Aktionen wie **Neue Datei** und die Impact-Bestätigung bleiben bewusst als
-Dialoge bestehen.
-
-## Responsive Feinschliff
-
-Für kleinere Displays wurden Page-Header, Navigationszeilen, Seitenabstände und
-Diff-Ansichten verdichtet. Tabellen, Karten und Werkzeugbereiche stapeln sich
-stabiler und lassen mehr Platz für den eigentlichen Inhalt.
+Der Navigationsbereich in der linken Sidebar scrollt wieder intern. Der
+Systemstatus bleibt dabei unten angedockt und kann im geöffneten Zustand selbst
+scrollen.
 
 ## Technische Änderungen
 
-- `Editor` als eigener Sidebar-Navigationszustand ergänzt
-- Hash-Router in `app.js` eingeführt
-- Package-Dateiliste um lokale Favoriten, Recents, gespeicherte Filter,
-  Sortierung, Ordnergruppen und gestaffeltes Rendering erweitert
-- History-, Git-History-, Resource- und Conflict-Flächen in den gemeinsamen
-  Page-Stack aufgenommen
-- Responsive CSS-Regeln für Page-Header, Dateiliste, Diffs und Sidebar
-  nachgezogen
-- Projekt- und Add-on-Version auf `1.8.0` angehoben
+- Datenbankseite in View-Panels mit `data-database-view` und Tab-State umgebaut
+- Tabellenliste um Client-Filter, Sortierung und SELECT-/COUNT-Aktionsbuttons
+  erweitert
+- JSON-Export für die aktuelle Datenbankanalyse ergänzt
+- Cache-State mit `loadedAt`, `stale` und Stale-Grund für Dashboard, Graph und
+  Entity-Health eingeführt
+- Dateisignatur aus Package-Pfad, Größe, Änderungszeit, Kategorie, Tags und
+  Package-Konfigurationsstatus ergänzt
+- Sidebar-Layout auf Flex-Column mit scrollendem Mittelbereich umgestellt
+- Projekt- und Add-on-Version auf `1.9.0` angehoben

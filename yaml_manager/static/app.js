@@ -32,8 +32,12 @@ function readStoredJson(key, fallback) {
   }
 }
 
+const VIEW_CACHE_TTL_MS = 2 * 60 * 1000;
+const FILE_DERIVED_CACHE_KEYS = ["dashboard", "graph", "entityHealth"];
+
 const state = {
   files: [], categories: [], tags: [], selectedCategory: "Alle", selectedTag: "", selected: null,
+  fileSignature: "", fileRevision: 0,
   fileSort: localStorage.getItem("ha-maintenance:file-sort") || "name",
   fileQuickFilter: localStorage.getItem("ha-maintenance:file-quick-filter") || "all",
   fileGroupFolders: localStorage.getItem("ha-maintenance:file-group-folders") === "true",
@@ -66,6 +70,10 @@ const state = {
   preflight: null,
   entityHealth: null,
   database: null,
+  databaseLoadedAt: 0,
+  databaseView: localStorage.getItem("ha-maintenance:database-view") || "analysis",
+  databaseTableSearch: "",
+  databaseTableSort: localStorage.getItem("ha-maintenance:database-table-sort") || "rows",
   backups: null,
   snapshotPreview: null,
   flow: null,
@@ -79,6 +87,11 @@ const state = {
   importArchive: "",
   importPreview: null,
   impactResolver: null,
+  cache: {
+    dashboard: { data: null, loadedAt: 0, stale: true, reason: "Noch nicht geladen" },
+    graph: { data: null, loadedAt: 0, stale: true, reason: "Noch nicht geladen" },
+    entityHealth: { data: null, loadedAt: 0, stale: true, reason: "Noch nicht geladen" },
+  },
 };
 
 const elements = Object.fromEntries([
@@ -96,12 +109,12 @@ const elements = Object.fromEntries([
   "history-dialog", "history-close", "history-path", "history-list", "diff-placeholder", "diff-view", "diff-changed-only", "history-summary", "history-restore",
   "git-dialog", "git-history-close", "git-history-path", "git-history-list", "git-diff-placeholder", "git-diff-view", "git-diff-changed-only", "git-history-summary", "git-history-restore",
   "package-conflicts-button", "conflict-dialog", "conflict-close", "conflict-summary", "conflict-list",
-  "dashboard-button", "dashboard-dialog", "dashboard-close", "dashboard-refresh", "dashboard-show-suppressed", "quality-score", "quality-stats", "dashboard-findings",
+  "dashboard-button", "dashboard-dialog", "dashboard-close", "dashboard-refresh", "dashboard-cache-status", "dashboard-show-suppressed", "quality-score", "quality-stats", "dashboard-findings",
   "health-badge", "health-grid",
   "review-button", "review-page", "review-close", "review-add-current", "review-clear", "review-preview", "review-apply", "review-summary", "review-list", "review-diff",
   "lint-button", "lint-page", "lint-close", "lint-refresh", "lint-save", "lint-summary", "lint-stats", "lint-list",
   "lint-require-alias", "lint-require-script-mode", "lint-require-automation-id", "lint-script-pattern", "lint-entity-pattern", "lint-allowed-domains", "lint-forbidden-plaintext", "lint-required-tags",
-  "graph-button", "graph-page", "graph-close", "graph-refresh", "graph-search", "graph-type", "graph-summary", "graph-nodes", "graph-edges",
+  "graph-button", "graph-page", "graph-close", "graph-refresh", "graph-cache-status", "graph-search", "graph-type", "graph-summary", "graph-nodes", "graph-edges",
   "compatibility-button", "compatibility-page", "compatibility-close", "compatibility-refresh", "compatibility-summary", "compatibility-stats", "compatibility-list",
   "git-page-button", "git-page", "git-page-close",
   "remote-status", "remote-badge", "remote-url", "remote-branch", "remote-username", "remote-token", "remote-auto-push", "remote-clear-token", "remote-save", "remote-fetch", "remote-pull", "remote-push", "remote-sync", "remote-remove", "remote-resolution", "remote-merge", "remote-force-push",
@@ -118,9 +131,9 @@ const elements = Object.fromEntries([
   "refactor-button", "refactor-page", "refactor-close", "refactor-kind", "refactor-old", "refactor-new", "refactor-preview", "refactor-apply", "refactor-summary", "refactor-list",
   "secrets-button", "secrets-page", "secrets-close", "secrets-refresh", "secrets-summary", "secret-name", "secret-value", "secret-save", "secret-convert-path", "secret-convert-line", "secret-convert-key", "secret-convert-name", "secret-convert-value", "secret-convert", "secrets-list",
   "preflight-button", "preflight-page", "preflight-close", "preflight-run", "preflight-summary", "preflight-stats", "preflight-list",
-  "entity-health-button", "entity-health-page", "entity-health-close", "entity-health-refresh", "entity-health-summary", "entity-health-stats", "entity-health-filter", "entity-health-list",
-  "database-button", "database-page", "database-close", "database-refresh", "database-summary", "database-stats", "database-tables-summary", "database-table-list", "database-entities-summary", "database-entity-filter", "database-entity-list",
-  "database-compare-summary", "database-compare-filter", "database-compare-list", "database-statistics-summary", "database-statistics-filter", "database-statistics-list", "database-query-summary", "database-query-limit", "database-query-run", "database-query", "database-query-result",
+  "entity-health-button", "entity-health-page", "entity-health-close", "entity-health-refresh", "entity-health-cache-status", "entity-health-summary", "entity-health-stats", "entity-health-filter", "entity-health-list",
+  "database-button", "database-page", "database-close", "database-refresh", "database-check", "database-export", "database-cache-status", "database-summary", "database-stats", "database-check-summary", "database-check-list", "database-tables-summary", "database-table-search", "database-table-sort", "database-table-list", "database-entities-summary", "database-entity-filter", "database-entity-list",
+  "database-compare-summary", "database-compare-filter", "database-compare-list", "database-statistics-summary", "database-statistics-filter", "database-statistics-list", "database-recommendations-summary", "database-recommendations-list", "database-query-summary", "database-query-limit", "database-query-run", "database-query", "database-query-result",
   "backups-button", "backups-page", "backups-close", "backups-refresh", "backups-summary", "backups-stats", "backup-snapshot-create", "backup-database-create", "backup-list-summary", "backup-filter", "backup-list", "backup-database-summary", "backup-database-list", "backup-integrity-summary", "backup-integrity-list", "backup-restore-summary", "backup-restore-apply", "backup-restore-list",
   "traces-button", "traces-page", "traces-close", "traces-refresh", "traces-summary", "trace-search", "trace-domain", "trace-clear-detail", "trace-run-list", "trace-list", "trace-detail-summary", "trace-detail",
   "resource-dialog", "resource-close", "resource-title", "resource-path", "resource-save", "resource-editor", "resource-highlighting", "resource-line-numbers", "resource-validation", "resource-cursor",
@@ -171,7 +184,6 @@ function updateSidebarToolSummary() {
 
 function collapseSidebarTools() {
   if (window.matchMedia("(max-width: 700px)").matches) {
-    elements["sidebar-tools"].removeAttribute("open");
     elements.sidebar.classList.remove("open");
   }
   requestAnimationFrame(updateSidebarToolSummary);
@@ -370,6 +382,104 @@ function bytesLabel(value) {
   if (size >= 1024 * 1024) return `${(size / 1024 / 1024).toFixed(1)} MiB`;
   if (size >= 1024) return `${(size / 1024).toFixed(1)} KiB`;
   return `${size} B`;
+}
+
+function timeLabel(timestamp) {
+  if (!timestamp) return "Noch nicht geladen";
+  return new Date(timestamp).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+}
+
+function cacheUiIds(key) {
+  return {
+    dashboard: ["dashboard-cache-status", "dashboard-refresh"],
+    graph: ["graph-cache-status", "graph-refresh"],
+    entityHealth: ["entity-health-cache-status", "entity-health-refresh"],
+  }[key] || [];
+}
+
+function updateCacheIndicator(key) {
+  const entry = state.cache[key];
+  const [badgeId, buttonId] = cacheUiIds(key);
+  const badge = elements[badgeId];
+  const button = elements[buttonId];
+  if (!entry || !badge || !button) return;
+  const expired = entry.loadedAt && Date.now() - entry.loadedAt > VIEW_CACHE_TTL_MS;
+  if (expired && !entry.stale) {
+    entry.stale = true;
+    entry.reason = "Cache abgelaufen";
+  }
+  const stale = entry.stale || expired;
+  badge.classList.toggle("stale", Boolean(stale));
+  badge.classList.toggle("fresh", Boolean(entry.loadedAt && !stale));
+  button.classList.toggle("stale", Boolean(stale && entry.loadedAt));
+  badge.textContent = entry.loadedAt
+    ? `${stale ? "Veraltet" : "Frisch"} · ${timeLabel(entry.loadedAt)}`
+    : "Noch nicht geladen";
+  const detail = entry.reason ? ` · ${entry.reason}` : "";
+  badge.title = `${badge.textContent}${detail}`;
+  button.title = stale && entry.loadedAt ? `Aktualisieren empfohlen${detail}` : "Aktualisieren";
+}
+
+function updateCacheIndicators() {
+  FILE_DERIVED_CACHE_KEYS.forEach(updateCacheIndicator);
+}
+
+function setCachedResult(key, data) {
+  state.cache[key] = { data, loadedAt: Date.now(), stale: false, reason: "" };
+  updateCacheIndicator(key);
+}
+
+function usableCachedResult(key) {
+  const entry = state.cache[key];
+  if (!entry?.data) return null;
+  if (!entry.stale && Date.now() - entry.loadedAt <= VIEW_CACHE_TTL_MS) return entry.data;
+  return entry.data;
+}
+
+function markFileDerivedViewsStale(reason = "Package-Dateien geändert") {
+  FILE_DERIVED_CACHE_KEYS.forEach((key) => {
+    const entry = state.cache[key];
+    if (!entry) return;
+    entry.stale = true;
+    entry.reason = reason;
+  });
+  updateCacheIndicators();
+}
+
+function fileDataSignature(data) {
+  const files = (data.files || []).map((file) => [
+    file.path,
+    file.size,
+    file.modified,
+    file.category,
+    ...(file.tags || []),
+  ]);
+  return JSON.stringify({ files, configuration: data.configuration || null });
+}
+
+function updateFileDerivedCacheState(data) {
+  const nextSignature = fileDataSignature(data);
+  if (state.fileSignature && nextSignature !== state.fileSignature) {
+    state.fileRevision += 1;
+    markFileDerivedViewsStale("Dateien oder Package-Einbindung geändert");
+  }
+  state.fileSignature = nextSignature;
+}
+
+function downloadJson(filename, payload) {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function sqliteIdentifier(name) {
+  return `"${String(name).replace(/"/g, '""')}"`;
 }
 
 function renderHealth(health) {
@@ -1317,7 +1427,7 @@ async function setDashboardFindingStatus(finding, status) {
     body: JSON.stringify({ key: finding.key, status, finding }),
   });
   toast(status === "irrelevant" ? "Hinweis als gegenstandslos markiert." : "Hinweis ausgeblendet.", "success");
-  await loadDashboard();
+  await loadDashboard({ force: true });
 }
 
 async function restoreDashboardFinding(finding) {
@@ -1326,7 +1436,7 @@ async function restoreDashboardFinding(finding) {
     body: JSON.stringify({ key: finding.key }),
   });
   toast("Hinweis wird wieder angezeigt.", "success");
-  await loadDashboard();
+  await loadDashboard({ force: true });
 }
 
 function dashboardFindingElement(finding, suppressedView) {
@@ -1388,10 +1498,17 @@ function renderDashboard(result) {
   renderHealth(result.health);
 }
 
-async function loadDashboard() {
+async function loadDashboard({ force = false } = {}) {
+  const cached = usableCachedResult("dashboard");
+  if (!force && cached) {
+    renderDashboard(cached);
+    updateCacheIndicator("dashboard");
+    return cached;
+  }
   elements["dashboard-refresh"].disabled = true;
   try {
     const result = await api("api/dashboard");
+    setCachedResult("dashboard", result);
     renderDashboard(result);
     return result;
   } catch (error) {
@@ -1649,8 +1766,15 @@ function renderGraph(result) {
   }) : [emptyBlock("Keine Beziehungen für den Filter gefunden.")]));
 }
 
-async function loadGraph() {
+async function loadGraph({ force = false } = {}) {
+  const cached = usableCachedResult("graph");
+  if (!force && cached) {
+    renderGraph(cached);
+    updateCacheIndicator("graph");
+    return cached;
+  }
   const result = await api("api/graph");
+  setCachedResult("graph", result);
   renderGraph(result);
   return result;
 }
@@ -1660,6 +1784,7 @@ async function openGraphPage() {
   closePages();
   elements["graph-page"].classList.remove("hidden");
   elements["graph-button"].classList.add("active");
+  updateCacheIndicator("graph");
   try { await loadGraph(); } catch (error) { toast(error.message, "error"); }
 }
 
@@ -1706,6 +1831,7 @@ async function openDashboard() {
   closePages();
   elements["dashboard-dialog"].classList.remove("hidden");
   elements["dashboard-button"].classList.add("active");
+  updateCacheIndicator("dashboard");
   await loadDashboard();
 }
 
@@ -1976,7 +2102,7 @@ async function saveSettings() {
     });
     applySettings(settings);
     fillSettings(settings);
-    await loadDashboard();
+    await loadDashboard({ force: true });
     toast("Einstellungen gespeichert", "success");
   } catch (error) { toast(error.message, "error"); }
   finally { elements["settings-save"].disabled = false; }
@@ -2215,7 +2341,7 @@ async function purgeAllTrash() {
   try {
     const result = await api("api/trash", { method: "DELETE", body: "{}" });
     renderTrash(result);
-    await loadDashboard();
+    await loadDashboard({ force: true });
     toast("Papierkorb geleert", "success");
   } catch (error) { toast(error.message, "error"); }
 }
@@ -2806,9 +2932,16 @@ function renderEntityHealth(result) {
   }));
 }
 
-async function loadEntityHealth() {
+async function loadEntityHealth({ force = false } = {}) {
+  const cached = usableCachedResult("entityHealth");
+  if (!force && cached) {
+    renderEntityHealth(cached);
+    updateCacheIndicator("entityHealth");
+    return cached;
+  }
   elements["entity-health-summary"].textContent = "Entity-Health wird geladen …";
   const result = await api("api/entity-health");
+  setCachedResult("entityHealth", result);
   renderEntityHealth(result);
   return result;
 }
@@ -2818,6 +2951,7 @@ async function openEntityHealthPage() {
   closePages();
   elements["entity-health-page"].classList.remove("hidden");
   elements["entity-health-button"].classList.add("active");
+  updateCacheIndicator("entityHealth");
   try { await loadEntityHealth(); } catch (error) { toast(error.message, "error"); }
 }
 
@@ -2829,6 +2963,100 @@ function databaseEntityMessage(entity, filter) {
     return `${entity.lastState || "unknown"} · ${entity.badStates || 0}/${entity.changes || 0} kritische Zustände`;
   }
   return `${entity.changes || 0} Änderungen · ${bytesLabel(entity.attributeBytes)} Attribute`;
+}
+
+function databaseFinding(title, message, severity = "tip", action = null) {
+  const item = document.createElement("div");
+  item.className = `dashboard-finding ${severity}`;
+  item.innerHTML = `<span class="finding-dot"></span><div><strong>${escapeHtml(String(title))}</strong><small>${escapeHtml(String(message || ""))}</small></div>`;
+  if (action) item.append(action);
+  return item;
+}
+
+function renderDatabaseCheck(health = {}) {
+  const summary = health.summary || {};
+  const database = health.database || {};
+  if (!health.available) {
+    elements["database-check-summary"].textContent = health.message || "Recorder-Datenbank nicht verfügbar.";
+    elements["database-check-list"].replaceChildren(databaseFinding("Recorder nicht erreichbar", health.message || "Keine lokale SQLite-Datenbank gefunden.", "warning"));
+    return;
+  }
+  const quickOk = summary.quickCheckOk;
+  elements["database-check-summary"].textContent = `${summary.tables || 0} Tabellen · ${summary.rows || 0} Zeilen · quick_check: ${health.quickCheck || "n/a"}`;
+  const period = summary.oldestState || summary.newestState
+    ? `${summary.oldestState || "?"} bis ${summary.newestState || "?"}`
+    : "Kein Zeitraum erkannt";
+  const walRatio = summary.dbSize ? Math.round(((summary.walSize || 0) / summary.dbSize) * 100) : 0;
+  const largest = (health.largestTables || []).slice(0, 3).map((table) => `${table.name} ${bytesLabel(table.bytes)}`).join(" · ");
+  elements["database-check-list"].replaceChildren(
+    databaseFinding("SQLite quick_check", health.quickCheck || "n/a", quickOk ? "tip" : "warning"),
+    databaseFinding("Datenbankdatei", `${database.path || "unknown"} · geändert ${database.modified || "?"}`, "tip"),
+    databaseFinding("Recorder-Zeitraum", period, "tip"),
+    databaseFinding("WAL-Größe", `${bytesLabel(summary.walSize)} · ${walRatio}% der DB-Größe`, walRatio > 50 ? "warning" : "tip"),
+    databaseFinding("Größte Tabellen", largest || "Keine Größeninformationen verfügbar", "tip"),
+  );
+}
+
+function databaseRecommendations(result) {
+  if (!result?.available) {
+    return [{ title: "Recorder-Pfad prüfen", message: result?.message || "Die Datenbank ist lokal nicht erreichbar.", severity: "warning" }];
+  }
+  const health = result.health || {};
+  const healthSummary = health.summary || {};
+  const entitySummary = result.entities?.summary || {};
+  const compareSummary = result.compare?.summary || {};
+  const statisticsSummary = result.statistics?.summary || {};
+  const noisy = result.entities?.noisy?.[0];
+  const heavy = result.entities?.attributeHeavy?.[0];
+  const recommendations = [];
+  if (!healthSummary.quickCheckOk) {
+    recommendations.push({ title: "SQLite-Integrität prüfen", message: `quick_check meldet: ${health.quickCheck || "unbekannt"}`, severity: "warning" });
+  }
+  if ((healthSummary.walSize || 0) > Math.max(5 * 1024 * 1024, (healthSummary.dbSize || 0) * 0.5)) {
+    recommendations.push({ title: "WAL-Datei im Blick behalten", message: `${bytesLabel(healthSummary.walSize)} WAL bei ${bytesLabel(healthSummary.dbSize)} Datenbankgröße. Backup/Checkpoint prüfen.`, severity: "warning" });
+  }
+  if (noisy && (noisy.changes || 0) >= 1000) {
+    recommendations.push({ title: "Noisy Entity begrenzen", message: `${noisy.entityId} erzeugt ${noisy.changes} State-Änderungen. recorder.exclude oder Update-Frequenz prüfen.`, severity: "warning" });
+  }
+  if (heavy && (heavy.attributeBytes || 0) >= 200 * 1024) {
+    recommendations.push({ title: "Attributvolumen reduzieren", message: `${heavy.entityId} nutzt ${bytesLabel(heavy.attributeBytes)} Attribute. Große JSON-/Listen-Attribute prüfen.`, severity: "warning" });
+  }
+  if ((entitySummary.badStateEntities || 0) > 0) {
+    recommendations.push({ title: "Unknown/Unavailable bereinigen", message: `${entitySummary.badStateEntities} Entities sind auffällig. YAML vs. Datenbank und Entity-Health abgleichen.`, severity: "warning" });
+  }
+  if ((compareSummary.yamlMissingInDatabase || 0) > 0) {
+    recommendations.push({ title: "YAML ohne Recorder-Historie prüfen", message: `${compareSummary.yamlMissingInDatabase} referenzierte Entities fehlen in der DB-Historie. Tippfehler oder neue Entities möglich.`, severity: "warning" });
+  }
+  if ((statisticsSummary.gaps || 0) > 0 || (statisticsSummary.jumps || 0) > 0) {
+    recommendations.push({ title: "Statistikqualität prüfen", message: `${statisticsSummary.gaps || 0} Lücken · ${statisticsSummary.jumps || 0} Sprung-Kandidaten. Sensorverfügbarkeit und Einheiten prüfen.`, severity: "warning" });
+  }
+  if (!recommendations.length) {
+    recommendations.push({ title: "Keine dringenden Empfehlungen", message: "DB Check, Tabellen, Entities und Statistiken sehen aktuell unauffällig aus.", severity: "tip" });
+  }
+  return recommendations;
+}
+
+function renderDatabaseRecommendations(result) {
+  const recommendations = databaseRecommendations(result);
+  const warnings = recommendations.filter((item) => item.severity === "warning").length;
+  elements["database-recommendations-summary"].textContent = warnings
+    ? `${warnings} Empfehlungen mit Handlungsbedarf`
+    : "Keine dringenden Empfehlungen.";
+  elements["database-recommendations-list"].replaceChildren(...recommendations.map((item) => databaseFinding(item.title, item.message, item.severity)));
+}
+
+function setDatabaseView(view) {
+  const allowed = new Set(["analysis", "tables", "issues", "recommendations", "sql"]);
+  state.databaseView = allowed.has(view) ? view : "analysis";
+  localStorage.setItem("ha-maintenance:database-view", state.databaseView);
+  document.querySelectorAll(".database-tab").forEach((tab) => {
+    const active = tab.dataset.databaseView === state.databaseView;
+    tab.classList.toggle("active", active);
+    tab.setAttribute("aria-selected", String(active));
+  });
+  document.querySelectorAll(".database-view-panel").forEach((panel) => {
+    panel.classList.toggle("hidden", panel.dataset.databaseView !== state.databaseView);
+  });
 }
 
 function renderDatabaseEntities(result) {
@@ -2921,20 +3149,55 @@ function renderDatabaseStatistics(result) {
 
 function renderDatabaseTables(result) {
   const health = result.health || {};
-  const tables = health.tables || [];
+  const tableSizes = Object.fromEntries((health.largestTables || []).map((table) => [table.name, table.bytes || 0]));
+  const term = elements["database-table-search"].value.trim().toLocaleLowerCase("de");
+  const sort = elements["database-table-sort"].value || "rows";
+  const tables = [...(health.tables || [])]
+    .filter((table) => !term || String(table.name || "").toLocaleLowerCase("de").includes(term))
+    .sort((left, right) => {
+      if (sort === "name") return String(left.name || "").localeCompare(String(right.name || ""), "de");
+      if (sort === "size") return (tableSizes[right.name] || 0) - (tableSizes[left.name] || 0) || (right.rows || 0) - (left.rows || 0);
+      return (right.rows || 0) - (left.rows || 0) || String(left.name || "").localeCompare(String(right.name || ""), "de");
+    });
   const sizes = Object.fromEntries((health.largestTables || []).map((table) => [table.name, table.bytes]));
   elements["database-tables-summary"].textContent = `${tables.length} Tabellen · quick_check: ${health.quickCheck || "n/a"}`;
   if (!result.available) {
     elements["database-table-list"].replaceChildren(emptyBlock(result.message || "Recorder-Datenbank nicht verfügbar."));
     return;
   }
+  if (!tables.length) {
+    elements["database-table-list"].replaceChildren(emptyBlock("Keine Tabellen für den Filter gefunden."));
+    return;
+  }
   elements["database-table-list"].replaceChildren(...tables.slice(0, 24).map((table) => {
     const item = document.createElement("div");
-    item.className = "import-preview-item";
+    item.className = "import-preview-item database-table-item";
     const size = sizes[table.name] ? ` · ${bytesLabel(sizes[table.name])}` : "";
-    item.innerHTML = `<strong>${escapeHtml(table.name)}</strong><span>${escapeHtml(String(table.rows || 0))} Zeilen${escapeHtml(size)}</span>`;
+    item.innerHTML = `<div><strong>${escapeHtml(table.name)}</strong><span>${escapeHtml(String(table.rows || 0))} Zeilen${escapeHtml(size)}</span></div><div class="dashboard-finding-actions"></div>`;
+    const actions = item.querySelector(".dashboard-finding-actions");
+    const selectButton = dashboardFindingActionButton("SELECT", () => {
+      elements["database-query"].value = `SELECT * FROM ${sqliteIdentifier(table.name)} LIMIT ${elements["database-query-limit"].value || 50}`;
+      setDatabaseView("sql");
+      elements["database-query"].focus();
+    });
+    const countButton = dashboardFindingActionButton("COUNT", () => {
+      elements["database-query"].value = `SELECT COUNT(*) AS rows FROM ${sqliteIdentifier(table.name)}`;
+      setDatabaseView("sql");
+      runDatabaseQuery().catch((error) => toast(error.message, "error"));
+    });
+    actions.append(selectButton, countButton);
     return item;
   }));
+}
+
+function updateDatabaseCacheStatus() {
+  const badge = elements["database-cache-status"];
+  if (!badge) return;
+  const loaded = state.databaseLoadedAt;
+  badge.classList.toggle("fresh", Boolean(loaded));
+  badge.classList.remove("stale");
+  badge.textContent = loaded ? `Analyse · ${timeLabel(loaded)}` : "Noch nicht geladen";
+  badge.title = loaded ? "Aktuelle Datenbankanalyse im Browsercache" : "Datenbankanalyse wurde noch nicht geladen";
 }
 
 function renderDatabase(result) {
@@ -2952,17 +3215,68 @@ function renderDatabase(result) {
     [health.quickCheck || "n/a", "quick_check"],
   ];
   elements["database-stats"].innerHTML = stats.map(([value, label]) => `<div class="quality-stat"><strong>${escapeHtml(String(value))}</strong><span>${escapeHtml(label)}</span></div>`).join("");
+  renderDatabaseCheck(health);
   renderDatabaseTables(result);
   renderDatabaseEntities(result);
   renderDatabaseCompare(result);
   renderDatabaseStatistics(result);
+  renderDatabaseRecommendations(result);
+  updateDatabaseCacheStatus();
 }
 
-async function loadDatabase() {
+async function loadDatabase({ force = false } = {}) {
+  if (!force && state.database) {
+    renderDatabase(state.database);
+    return state.database;
+  }
+  elements["database-refresh"].disabled = true;
   elements["database-summary"].textContent = "Datenbankanalyse wird geladen …";
-  const result = await api("api/database");
-  renderDatabase(result);
-  return result;
+  try {
+    const result = await api("api/database");
+    state.databaseLoadedAt = Date.now();
+    renderDatabase(result);
+    return result;
+  } finally {
+    elements["database-refresh"].disabled = false;
+  }
+}
+
+async function runDatabaseCheck() {
+  elements["database-check"].disabled = true;
+  elements["database-check-summary"].textContent = "DB Check läuft …";
+  try {
+    const health = await api("api/database/health");
+    const current = state.database || {};
+    const merged = {
+      ...current,
+      available: health.available,
+      message: health.message || "",
+      entities: current.entities || {},
+      compare: current.compare || {},
+      statistics: current.statistics || {},
+      health,
+    };
+    state.databaseLoadedAt = Date.now();
+    renderDatabase(merged);
+    setDatabaseView("analysis");
+    toast("DB Check abgeschlossen.", health.summary?.quickCheckOk ? "success" : "warning");
+    return health;
+  } finally {
+    elements["database-check"].disabled = false;
+  }
+}
+
+function exportDatabaseAnalysis() {
+  if (!state.database) {
+    toast("Bitte zuerst die Datenbankanalyse laden.", "error");
+    return;
+  }
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  downloadJson(`ha-recorder-analyse-${stamp}.json`, {
+    exportedAt: new Date().toISOString(),
+    database: state.database,
+  });
+  toast("Datenbankanalyse exportiert.", "success");
 }
 
 async function openDatabasePage() {
@@ -2970,6 +3284,9 @@ async function openDatabasePage() {
   closePages();
   elements["database-page"].classList.remove("hidden");
   elements["database-button"].classList.add("active");
+  elements["database-table-search"].value = state.databaseTableSearch;
+  elements["database-table-sort"].value = state.databaseTableSort;
+  setDatabaseView(state.databaseView);
   try { await loadDatabase(); } catch (error) { toast(error.message, "error"); }
 }
 
@@ -3518,6 +3835,7 @@ async function applySearchReplace() {
 
 async function refreshFiles() {
   const data = await api("api/files");
+  updateFileDerivedCacheState(data);
   state.files = data.files;
   state.categories = data.categories;
   state.tags = data.tags || [];
@@ -4261,7 +4579,7 @@ elements["editor-button"].addEventListener("click", openScriptManager);
 elements["package-files-button"].addEventListener("click", openFileBrowser);
 elements["dashboard-button"].addEventListener("click", openDashboard);
 elements["dashboard-close"].addEventListener("click", openScriptManager);
-elements["dashboard-refresh"].addEventListener("click", loadDashboard);
+elements["dashboard-refresh"].addEventListener("click", () => loadDashboard({ force: true }));
 elements["dashboard-show-suppressed"].addEventListener("change", () => {
   state.dashboardShowSuppressed = elements["dashboard-show-suppressed"].checked;
   renderDashboard(state.dashboard);
@@ -4281,7 +4599,7 @@ elements["lint-refresh"].addEventListener("click", () => loadLint().catch((error
 elements["lint-save"].addEventListener("click", saveLintRules);
 elements["graph-button"].addEventListener("click", openGraphPage);
 elements["graph-close"].addEventListener("click", openScriptManager);
-elements["graph-refresh"].addEventListener("click", () => loadGraph().catch((error) => toast(error.message, "error")));
+elements["graph-refresh"].addEventListener("click", () => loadGraph({ force: true }).catch((error) => toast(error.message, "error")));
 elements["graph-search"].addEventListener("input", () => state.graph && renderGraph(state.graph));
 elements["graph-type"].addEventListener("change", () => state.graph && renderGraph(state.graph));
 elements["compatibility-button"].addEventListener("click", openCompatibilityPage);
@@ -4372,11 +4690,28 @@ elements["preflight-close"].addEventListener("click", openScriptManager);
 elements["preflight-run"].addEventListener("click", () => loadPreflight().catch((error) => toast(error.message, "error")));
 elements["entity-health-button"].addEventListener("click", openEntityHealthPage);
 elements["entity-health-close"].addEventListener("click", openScriptManager);
-elements["entity-health-refresh"].addEventListener("click", () => loadEntityHealth().catch((error) => toast(error.message, "error")));
+elements["entity-health-refresh"].addEventListener("click", () => loadEntityHealth({ force: true }).catch((error) => toast(error.message, "error")));
 elements["entity-health-filter"].addEventListener("change", () => renderEntityHealth(state.entityHealth));
 elements["database-button"].addEventListener("click", openDatabasePage);
 elements["database-close"].addEventListener("click", openScriptManager);
-elements["database-refresh"].addEventListener("click", () => loadDatabase().catch((error) => toast(error.message, "error")));
+elements["database-refresh"].addEventListener("click", () => loadDatabase({ force: true }).catch((error) => toast(error.message, "error")));
+elements["database-check"].addEventListener("click", () => runDatabaseCheck().catch((error) => {
+  toast(error.message, "error");
+  elements["database-check"].disabled = false;
+}));
+elements["database-export"].addEventListener("click", exportDatabaseAnalysis);
+document.querySelectorAll(".database-tab").forEach((tab) => {
+  tab.addEventListener("click", () => setDatabaseView(tab.dataset.databaseView));
+});
+elements["database-table-search"].addEventListener("input", () => {
+  state.databaseTableSearch = elements["database-table-search"].value;
+  if (state.database) renderDatabaseTables(state.database);
+});
+elements["database-table-sort"].addEventListener("change", () => {
+  state.databaseTableSort = elements["database-table-sort"].value;
+  localStorage.setItem("ha-maintenance:database-table-sort", state.databaseTableSort);
+  if (state.database) renderDatabaseTables(state.database);
+});
 elements["database-entity-filter"].addEventListener("change", () => state.database && renderDatabaseEntities(state.database));
 elements["database-compare-filter"].addEventListener("change", () => state.database && renderDatabaseCompare(state.database));
 elements["database-statistics-filter"].addEventListener("change", () => state.database && renderDatabaseStatistics(state.database));

@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.9.0 - 2026-06-28
+
+- Datenbankanalyse neu gegliedert: Tabs für Analyse, Tabellen, Problemstellen, Empfehlungen und SQL ersetzen die lange gemischte Ansicht
+- Schneller **DB Check** ergänzt, der `/api/database/health` separat ausführt und quick_check, Dateipfad, Recorder-Zeitraum, WAL-Größe und größte Tabellen als Checkliste anzeigt
+- Tabellenbereich um Suche, Sortierung nach Zeilen/Größe/Name und Tabellenaktionen für SELECT- und COUNT-Abfragen erweitert
+- Datenbankanalyse kann direkt als JSON exportiert werden; Empfehlungen werden clientseitig aus Health, Entity-Rauschen, YAML-/DB-Abgleich und Statistikproblemen abgeleitet
+- Dashboard, Graph und Entity-Health nutzen einen Browsercache mit Stale-Markierung; Package-Dateiänderungen markieren betroffene Bereiche als veraltet, ohne das Dashboard bei jeder Navigation neu zu laden
+- Sidebar-Scroll im Navigationsbereich wiederhergestellt, während der Systemstatus unten angedockt bleibt
+- Projekt- und Add-on-Version auf `1.9.0` angehoben
+
 ## 1.8.0 - 2026-06-27
 
 - Eigenen Sidebar-Eintrag **Editor** ergänzt; Seitenaktionen führen jetzt zurück zum Editor statt in die Dateiansicht

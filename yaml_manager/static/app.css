@@ -106,7 +106,7 @@ button { color: inherit; }
 
 .workspace { height: calc(100vh - 64px); min-height: 0; display: grid; grid-template-columns: 300px minmax(360px, 1fr) 300px; overflow: hidden; }
 .sidebar, .helpers { min-width: 0; min-height: 0; background: var(--surface); position: relative; z-index: 10; }
-.sidebar { height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; border-right: 1px solid var(--border); }
+.sidebar { height: 100%; display: flex; flex-direction: column; overflow: hidden; border-right: 1px solid var(--border); }
 .helpers { border-left: 1px solid var(--border); overflow-y: auto; }
 
 .sidebar-header { padding: 12px 12px 9px; display: flex; gap: 8px; }
@@ -120,12 +120,15 @@ button { color: inherit; }
 .search-field span { color: var(--muted); font-size: 18px; }
 .search-field input { min-width: 0; width: 100%; border: 0; outline: 0; color: var(--text); background: transparent; }
 
-.sidebar-tools { min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
-.sidebar-tools > summary { min-height: 38px; }
-.sidebar-tools.has-active-tool > summary { color: var(--primary-dark); }
+.sidebar-tools { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.sidebar-tools-summary {
+  min-height: 38px; padding: 0 15px; flex: none; display: flex; align-items: center; gap: 8px;
+  color: var(--muted); font-size: 10px; font-weight: 750; text-transform: uppercase; letter-spacing: .06em;
+}
+.sidebar-tools.has-active-tool .sidebar-tools-summary { color: var(--primary-dark); }
 .sidebar-tools .section-summary { max-width: 165px; }
 .sidebar-tool-groups {
-  min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain;
+  flex: 1 1 auto; min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain;
   padding: 8px 10px 12px; scrollbar-gutter: stable;
 }
 .sidebar-tool-groups::-webkit-scrollbar { width: 9px; }
@@ -154,9 +157,10 @@ button { color: inherit; }
 .sidebar-nav-item small { display: none; font-size: 9px; }
 
 .sidebar-section { min-height: 0; border-bottom: 1px solid var(--border); }
-.system-section { align-self: end; background: var(--surface); border-top: 1px solid var(--border); border-bottom: 0; }
-.system-section[open] { max-height: min(230px, 34vh); display: grid; grid-template-rows: auto minmax(0, 1fr); }
-.system-section[open] .sidebar-section-content { min-height: 0; overflow-y: auto; }
+.system-section { flex: none; margin-top: auto; background: var(--surface); border-top: 1px solid var(--border); border-bottom: 0; }
+.system-section:not([open]) .sidebar-section-content { display: none; }
+.system-section[open] { max-height: min(230px, 34vh); display: flex; flex-direction: column; }
+.system-section[open] .sidebar-section-content { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 .sidebar-section > summary {
   min-height: 36px; padding: 0 15px; display: flex; align-items: center; gap: 8px; list-style: none;
   color: var(--muted); cursor: pointer; font-size: 10px; font-weight: 750; text-transform: uppercase; letter-spacing: .06em;
@@ -634,7 +638,19 @@ dialog.transfer-dialog { width: min(1040px, calc(100vw - 28px)); height: min(820
 .graph-item:hover { border-color: var(--primary); background: var(--primary-soft); }
 .entity-health-body select, .database-body select, .backups-body select { min-width: 170px; height: 34px; padding: 0 8px; color: var(--text); background: var(--surface-soft); border: 1px solid var(--border); border-radius: 7px; }
 .database-body { grid-template-columns: repeat(2, minmax(340px, 1fr)); }
-.database-body > .admin-section:first-child, .database-sql-section { grid-column: 1 / -1; }
+.database-overview-section, .database-analysis-section, .database-recommendations-section, .database-sql-section { grid-column: 1 / -1; }
+.database-tabs { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px; }
+.database-tab {
+  min-height: 32px; padding: 0 12px; color: var(--muted); background: var(--surface-soft);
+  border: 1px solid var(--border); border-radius: 8px; cursor: pointer; font-weight: 750;
+}
+.database-tab:hover { color: var(--text); border-color: var(--primary); }
+.database-tab.active { color: var(--primary-dark); background: var(--primary-soft); border-color: rgba(3, 169, 244, .45); }
+.cache-badge.stale { color: var(--warning); border-color: rgba(210, 138, 25, .45); background: rgba(210, 138, 25, .08); }
+.cache-badge.fresh { color: var(--success); border-color: rgba(46, 155, 97, .35); background: rgba(46, 155, 97, .08); }
+.button.secondary.stale { color: var(--warning); border-color: rgba(210, 138, 25, .55); }
+.database-table-toolbar { min-width: min(420px, 100%); display: grid; grid-template-columns: minmax(180px, 1fr) 130px; gap: 8px; }
+.database-table-toolbar .search-field { height: 34px; background: var(--surface-soft); }
 .backups-body { grid-template-columns: repeat(2, minmax(340px, 1fr)); }
 .backups-body > .admin-section:first-child, .backup-preview-section { grid-column: 1 / -1; }
 .backup-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
@@ -642,6 +658,7 @@ dialog.transfer-dialog { width: min(1040px, calc(100vw - 28px)); height: min(820
 .backup-preview-section .import-preview-list { max-height: 260px; }
 .database-table-section { min-height: 0; }
 .database-table-list { max-height: 260px; margin-top: 12px; overflow-y: auto; display: grid; gap: 5px; }
+.database-table-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
 .database-query-actions { display: flex; align-items: end; gap: 8px; }
 .database-query-actions label { display: grid; gap: 4px; color: var(--muted); font-size: 10px; }
 .database-query-actions input { width: 82px; height: 34px; padding: 0 8px; color: var(--text); background: var(--surface-soft); border: 1px solid var(--border); border-radius: 7px; }
@@ -837,6 +854,9 @@ dialog.transfer-dialog { width: min(1040px, calc(100vw - 28px)); height: min(820
   .security-stats, .documentation-html { grid-template-columns: 1fr; }
   .graph-layout { grid-template-columns: 1fr; }
   .database-body { grid-template-columns: 1fr; }
+  .database-table-toolbar { grid-template-columns: 1fr; }
+  .database-table-item { grid-template-columns: 1fr; }
+  .database-table-item .dashboard-finding-actions { grid-column: 1; justify-content: flex-start; }
   .backups-body { grid-template-columns: 1fr; }
   .impact-grid { grid-template-columns: repeat(2, minmax(100px, 1fr)); }
   .documentation-toolbar { grid-template-columns: 1fr; }
