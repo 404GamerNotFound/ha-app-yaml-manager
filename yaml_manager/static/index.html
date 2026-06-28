@@ -44,6 +44,10 @@
                   <span class="sidebar-nav-icon" aria-hidden="true">Q</span>
                   <span><strong>Dashboard</strong><small>Qualität, Status, Hinweise</small></span>
                 </button>
+                <button class="sidebar-nav-item maintenance-nav" id="maintenance-button" type="button" aria-label="Wartung">
+                  <span class="sidebar-nav-icon" aria-hidden="true">MT</span>
+                  <span><strong>Wartung</strong><small>Plan, Historie, Trends</small></span>
+                </button>
                 <button class="sidebar-nav-item review-nav" id="review-button" type="button" aria-label="Review-Modus">
                   <span class="sidebar-nav-icon" aria-hidden="true">RV</span>
                   <span><strong>Review</strong><small>Änderungspaket prüfen</small></span>
@@ -596,6 +600,56 @@
       </div>
     </section>
 
+    <section class="maintenance-page hidden" id="maintenance-page">
+      <div class="maintenance-page-content">
+        <div class="dialog-header admin-dialog-header">
+          <div>
+            <h2>Wartung</h2>
+            <p>Geplante Health-Läufe mit Preflight, Recorder-Prüfung, Historie und Trendvergleich.</p>
+          </div>
+          <button class="button primary" id="maintenance-close" type="button">Editor öffnen</button>
+        </div>
+        <div class="maintenance-body">
+          <section class="admin-section">
+            <div class="admin-section-heading">
+              <div><h3>Status</h3><p id="maintenance-summary">Wartung wurde noch nicht geladen.</p></div>
+              <div class="maintenance-actions">
+                <span class="remote-badge cache-badge" id="maintenance-badge">–</span>
+                <button class="button secondary" id="maintenance-refresh" type="button">Aktualisieren</button>
+                <button class="button primary" id="maintenance-run" type="button">Jetzt prüfen</button>
+              </div>
+            </div>
+            <div class="security-stats" id="maintenance-stats"></div>
+          </section>
+          <section class="admin-section">
+            <div class="admin-section-heading">
+              <div><h3>Planung</h3><p id="maintenance-settings-summary">Wartungsplan wird geladen.</p></div>
+              <button class="button secondary" id="maintenance-open-settings" type="button">Einstellungen</button>
+            </div>
+            <div class="import-summary" id="maintenance-next">Nächster Lauf unbekannt.</div>
+          </section>
+          <section class="admin-section maintenance-list-section">
+            <div class="admin-section-heading">
+              <div><h3>Checks</h3><p>Letzter gespeicherter Wartungslauf.</p></div>
+            </div>
+            <div class="security-list" id="maintenance-checks"></div>
+          </section>
+          <section class="admin-section maintenance-list-section">
+            <div class="admin-section-heading">
+              <div><h3>Hinweise</h3><p>Neue oder weiterhin aktive Wartungsthemen.</p></div>
+            </div>
+            <div class="security-list" id="maintenance-findings"></div>
+          </section>
+          <section class="admin-section maintenance-history-section">
+            <div class="admin-section-heading">
+              <div><h3>Historie</h3><p>Statusänderungen und Delta zum vorherigen Lauf.</p></div>
+            </div>
+            <div class="security-list" id="maintenance-history-list"></div>
+          </section>
+        </div>
+      </div>
+    </section>
+
     <section class="review-page hidden" id="review-page">
       <div class="review-page-content">
         <div class="dialog-header admin-dialog-header">
@@ -859,6 +913,16 @@
               <label><span>Nach dem Speichern</span><select id="settings-after-save"><option value="stay">Im Editor bleiben</option><option value="dashboard">Dashboard öffnen</option></select></label>
               <label><span>Branch-Präfix</span><input id="settings-branch-prefix" placeholder="feature/"></label>
               <label class="settings-check"><input id="settings-unused-scripts" type="checkbox"> Möglicherweise ungenutzte Scripts anzeigen</label>
+            </div>
+          </section>
+          <section class="admin-section settings-section">
+            <h3>Wartung</h3>
+            <div class="settings-grid">
+              <label class="settings-check"><input id="settings-maintenance-enabled" type="checkbox"> Automatische Wartung aktivieren</label>
+              <label><span>Intervall Stunden</span><input id="settings-maintenance-interval" type="number" min="1" max="720" step="1"></label>
+              <label><span>Historie Läufe</span><input id="settings-maintenance-history" type="number" min="1" max="365" step="1"></label>
+              <label class="settings-check"><input id="settings-maintenance-database" type="checkbox"> Recorder-Datenbank prüfen</label>
+              <label class="settings-check"><input id="settings-maintenance-notify" type="checkbox"> HA-Hinweis bei Problemen</label>
             </div>
           </section>
           <div class="dialog-actions settings-actions">

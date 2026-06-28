@@ -65,6 +65,8 @@ const state = {
   lint: null,
   graph: null,
   compatibility: null,
+  maintenance: null,
+  maintenanceHistory: null,
   secrets: null,
   refactorPreview: null,
   preflight: null,
@@ -111,6 +113,7 @@ const elements = Object.fromEntries([
   "package-conflicts-button", "conflict-dialog", "conflict-close", "conflict-summary", "conflict-list",
   "dashboard-button", "dashboard-dialog", "dashboard-close", "dashboard-refresh", "dashboard-cache-status", "dashboard-show-suppressed", "quality-score", "quality-stats", "dashboard-findings",
   "health-badge", "health-grid",
+  "maintenance-button", "maintenance-page", "maintenance-close", "maintenance-run", "maintenance-refresh", "maintenance-open-settings", "maintenance-summary", "maintenance-badge", "maintenance-stats", "maintenance-settings-summary", "maintenance-next", "maintenance-checks", "maintenance-findings", "maintenance-history-list",
   "review-button", "review-page", "review-close", "review-add-current", "review-clear", "review-preview", "review-apply", "review-summary", "review-list", "review-diff",
   "lint-button", "lint-page", "lint-close", "lint-refresh", "lint-save", "lint-summary", "lint-stats", "lint-list",
   "lint-require-alias", "lint-require-script-mode", "lint-require-automation-id", "lint-script-pattern", "lint-entity-pattern", "lint-allowed-domains", "lint-forbidden-plaintext", "lint-required-tags",
@@ -119,7 +122,7 @@ const elements = Object.fromEntries([
   "git-page-button", "git-page", "git-page-close",
   "remote-status", "remote-badge", "remote-url", "remote-branch", "remote-username", "remote-token", "remote-auto-push", "remote-clear-token", "remote-save", "remote-fetch", "remote-pull", "remote-push", "remote-sync", "remote-remove", "remote-resolution", "remote-merge", "remote-force-push",
   "transfer-button", "transfer-dialog", "transfer-close", "export-scope", "export-category", "export-start", "import-file", "import-strategy", "import-preview", "import-apply", "import-summary", "import-preview-list",
-  "settings-button", "settings-dialog", "settings-close", "settings-save", "settings-reload", "settings-backup-retention", "settings-backup-days", "settings-backup-size", "settings-trash-days", "settings-trash-size", "settings-import-size", "settings-expanded-size", "settings-import-files", "settings-theme", "settings-after-save", "settings-branch-prefix", "settings-unused-scripts",
+  "settings-button", "settings-dialog", "settings-close", "settings-save", "settings-reload", "settings-backup-retention", "settings-backup-days", "settings-backup-size", "settings-trash-days", "settings-trash-size", "settings-import-size", "settings-expanded-size", "settings-import-files", "settings-theme", "settings-after-save", "settings-branch-prefix", "settings-unused-scripts", "settings-maintenance-enabled", "settings-maintenance-interval", "settings-maintenance-history", "settings-maintenance-database", "settings-maintenance-notify",
   "trash-button", "trash-dialog", "trash-close", "trash-refresh", "trash-purge-all", "trash-summary", "trash-list",
   "editor-button", "package-files-button",
   "objects-button", "objects-dialog", "objects-close", "objects-refresh", "object-search", "object-domain", "objects-summary", "object-list",
@@ -151,6 +154,7 @@ let suppressRouteUpdate = false;
 
 const sidebarToolLabels = {
   "dashboard-button": "Dashboard",
+  "maintenance-button": "Wartung",
   "editor-button": "Editor",
   "package-files-button": "Package-Dateien",
   "review-button": "Review",
@@ -389,6 +393,19 @@ function timeLabel(timestamp) {
   return new Date(timestamp).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
 }
 
+function dateTimeLabel(value) {
+  if (!value) return "Noch nicht vorhanden";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleString("de-DE", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function cacheUiIds(key) {
   return {
     dashboard: ["dashboard-cache-status", "dashboard-refresh"],
@@ -506,6 +523,13 @@ function renderHealth(health) {
       title: "Importlimits",
       detail: `${health.settings.maxImportFiles} Dateien · ZIP ${health.settings.maxImportSizeMiB} MiB`,
       status: "ok",
+    },
+    {
+      title: "Wartung",
+      detail: health.maintenance?.latest
+        ? `${maintenanceStatusLabel(health.maintenance.latest.status)} · ${health.maintenance.latest.blockers || 0} Blocker · ${dateTimeLabel(health.maintenance.latest.createdAt)}`
+        : health.maintenance?.enabled ? "Automatik aktiv · noch kein Lauf" : "Manuell · noch kein Lauf",
+      status: health.maintenance?.latest?.status === "error" ? "error" : health.maintenance?.latest?.status === "warning" ? "warn" : "ok",
     },
     {
       title: "Packages",
@@ -1817,10 +1841,10 @@ async function openCompatibilityPage() {
 }
 
 function closePages() {
-  ["dashboard-dialog", "file-browser-page", "configuration-dialog", "history-dialog", "git-dialog", "resource-dialog", "conflict-dialog", "search-replace-dialog", "transfer-dialog", "settings-dialog", "trash-dialog", "review-page", "git-page", "objects-dialog", "blueprints-page", "documentation-page", "security-page", "entity-health-page", "database-page", "backups-page", "graph-page", "lint-page", "compatibility-page", "refactor-page", "secrets-page", "preflight-page", "traces-page"].forEach((id) => {
+  ["dashboard-dialog", "maintenance-page", "file-browser-page", "configuration-dialog", "history-dialog", "git-dialog", "resource-dialog", "conflict-dialog", "search-replace-dialog", "transfer-dialog", "settings-dialog", "trash-dialog", "review-page", "git-page", "objects-dialog", "blueprints-page", "documentation-page", "security-page", "entity-health-page", "database-page", "backups-page", "graph-page", "lint-page", "compatibility-page", "refactor-page", "secrets-page", "preflight-page", "traces-page"].forEach((id) => {
     elements[id].classList.add("hidden");
   });
-  ["dashboard-button", "editor-button", "package-files-button", "configuration-button", "search-replace-button", "transfer-button", "settings-button", "trash-button", "review-button", "git-page-button", "objects-button", "blueprints-button", "documentation-button", "security-button", "entity-health-button", "database-button", "backups-button", "graph-button", "lint-button", "compatibility-button", "refactor-button", "secrets-button", "preflight-button", "traces-button"].forEach((id) => {
+  ["dashboard-button", "maintenance-button", "editor-button", "package-files-button", "configuration-button", "search-replace-button", "transfer-button", "settings-button", "trash-button", "review-button", "git-page-button", "objects-button", "blueprints-button", "documentation-button", "security-button", "entity-health-button", "database-button", "backups-button", "graph-button", "lint-button", "compatibility-button", "refactor-button", "secrets-button", "preflight-button", "traces-button"].forEach((id) => {
     elements[id].classList.remove("active");
   });
   requestAnimationFrame(updateSidebarToolSummary);
@@ -2066,6 +2090,11 @@ function fillSettings(settings = state.settings) {
   elements["settings-after-save"].value = settings.afterSave;
   elements["settings-branch-prefix"].value = settings.defaultBranchPrefix;
   elements["settings-unused-scripts"].checked = settings.showUnusedScripts;
+  elements["settings-maintenance-enabled"].checked = settings.maintenanceEnabled;
+  elements["settings-maintenance-interval"].value = settings.maintenanceIntervalHours;
+  elements["settings-maintenance-history"].value = settings.maintenanceHistoryRetention;
+  elements["settings-maintenance-database"].checked = settings.maintenanceIncludeDatabase;
+  elements["settings-maintenance-notify"].checked = settings.maintenanceNotify;
 }
 
 async function openSettingsPage() {
@@ -2098,6 +2127,11 @@ async function saveSettings() {
         afterSave: elements["settings-after-save"].value,
         defaultBranchPrefix: elements["settings-branch-prefix"].value,
         showUnusedScripts: elements["settings-unused-scripts"].checked,
+        maintenanceEnabled: elements["settings-maintenance-enabled"].checked,
+        maintenanceIntervalHours: elements["settings-maintenance-interval"].value,
+        maintenanceHistoryRetention: elements["settings-maintenance-history"].value,
+        maintenanceIncludeDatabase: elements["settings-maintenance-database"].checked,
+        maintenanceNotify: elements["settings-maintenance-notify"].checked,
       }),
     });
     applySettings(settings);
@@ -2884,6 +2918,105 @@ async function loadPreflight() {
   const result = await api("api/preflight");
   renderPreflight(result);
   return result;
+}
+
+function maintenanceSeverityClass(status) {
+  if (status === "error") return "error";
+  if (status === "warning") return "warning";
+  return "tip";
+}
+
+function maintenanceStatusLabel(status) {
+  return { ok: "OK", warning: "Warnung", error: "Fehler" }[status] || "Unbekannt";
+}
+
+function renderMaintenance(status, history = state.maintenanceHistory) {
+  if (!status) return;
+  state.maintenance = status;
+  if (history) state.maintenanceHistory = history;
+  const latest = status.latest || null;
+  const settings = status.settings || {};
+  elements["maintenance-summary"].textContent = status.message || "Noch kein Wartungslauf gespeichert.";
+  elements["maintenance-badge"].textContent = settings.enabled ? (status.due ? "Fällig" : "Aktiv") : "Manuell";
+  elements["maintenance-badge"].classList.toggle("stale", Boolean(status.due));
+  elements["maintenance-badge"].classList.toggle("fresh", Boolean(settings.enabled && !status.due));
+  const stats = [
+    [latest ? maintenanceStatusLabel(latest.status) : "–", "Status"],
+    [latest?.blockers ?? 0, "Blocker"],
+    [latest?.warnings ?? 0, "Warnungen"],
+    [status.historyCount || 0, "Läufe"],
+    [latest?.durationMs ? `${Math.round(latest.durationMs / 1000)} s` : "–", "Dauer"],
+  ];
+  elements["maintenance-stats"].innerHTML = stats.map(([value, label]) => `<div class="quality-stat"><strong>${escapeHtml(String(value))}</strong><span>${escapeHtml(label)}</span></div>`).join("");
+  elements["maintenance-settings-summary"].textContent = `${settings.enabled ? "Automatik aktiv" : "Manuell"} · alle ${settings.intervalHours || 24} h · ${settings.includeDatabase ? "mit Datenbank" : "ohne Datenbank"}${settings.notify ? " · HA-Hinweis aktiv" : ""}`;
+  elements["maintenance-next"].textContent = status.nextRunAt
+    ? `Nächster Lauf: ${dateTimeLabel(status.nextRunAt)}`
+    : "Nächster Lauf nach dem ersten gespeicherten Wartungslauf.";
+  const checks = latest?.checks || [];
+  elements["maintenance-checks"].replaceChildren(...(checks.length ? checks.map((check) => {
+    const item = document.createElement("div");
+    item.className = `dashboard-finding ${maintenanceSeverityClass(check.status)}`;
+    item.innerHTML = `<span class="finding-dot"></span><div><strong>${escapeHtml(check.title || check.id || "Check")}</strong><small>${escapeHtml(check.message || "")}</small></div>`;
+    return item;
+  }) : [emptyBlock("Noch keine Checks gespeichert.")]));
+  const findings = latest?.findings || [];
+  elements["maintenance-findings"].replaceChildren(...(findings.length ? findings.map((finding) => {
+    const item = document.createElement("div");
+    item.className = `dashboard-finding ${finding.severity === "error" ? "error" : "warning"}`;
+    item.innerHTML = `<span class="finding-dot"></span><div><strong>${escapeHtml(finding.title || finding.code || "Hinweis")}</strong><small>${escapeHtml(finding.message || "")}</small><small>${escapeHtml(finding.source || "")}</small></div>`;
+    return item;
+  }) : [emptyBlock("Keine aktiven Wartungshinweise.")]));
+  const entries = state.maintenanceHistory?.entries || [];
+  elements["maintenance-history-list"].replaceChildren(...(entries.length ? entries.map((entry) => {
+    const item = document.createElement("div");
+    item.className = `dashboard-finding ${maintenanceSeverityClass(entry.status)}`;
+    const delta = entry.delta || {};
+    const changed = delta.statusChanged ? " · Status geändert" : "";
+    const blockerDelta = Number(delta.blockers || 0);
+    const warningDelta = Number(delta.warnings || 0);
+    const trend = delta.previousRunId
+      ? `Δ Blocker ${blockerDelta >= 0 ? "+" : ""}${blockerDelta} · Δ Warnungen ${warningDelta >= 0 ? "+" : ""}${warningDelta}${changed}`
+      : "Erster gespeicherter Lauf";
+    item.innerHTML = `<span class="finding-dot"></span><div><strong>${escapeHtml(dateTimeLabel(entry.createdAt))} · ${escapeHtml(maintenanceStatusLabel(entry.status))}</strong><small>${escapeHtml(entry.triggeredBy || "manual")} · ${entry.blockers || 0} Blocker · ${entry.warnings || 0} Warnungen</small><small>${escapeHtml(trend)}</small></div>`;
+    return item;
+  }) : [emptyBlock("Noch keine Wartungshistorie.")]));
+}
+
+async function loadMaintenance({ forceHistory = false } = {}) {
+  elements["maintenance-summary"].textContent = "Wartungsstatus wird geladen …";
+  const status = await api("api/maintenance/status");
+  let history = state.maintenanceHistory;
+  if (forceHistory || !history) {
+    history = await api("api/maintenance/history");
+  }
+  renderMaintenance(status, history);
+  return status;
+}
+
+async function runMaintenance() {
+  elements["maintenance-run"].disabled = true;
+  elements["maintenance-summary"].textContent = "Wartung läuft …";
+  try {
+    await api("api/maintenance/run", {
+      method: "POST",
+      body: JSON.stringify({ triggeredBy: "manual" }),
+    });
+    await loadMaintenance({ forceHistory: true });
+    toast("Wartungslauf gespeichert", "success");
+  } catch (error) {
+    toast(error.message, "error");
+  } finally {
+    elements["maintenance-run"].disabled = false;
+  }
+}
+
+async function openMaintenancePage() {
+  setAppRoute("maintenance");
+  closePages();
+  elements["maintenance-page"].classList.remove("hidden");
+  elements["maintenance-button"].classList.add("active");
+  updateSidebarToolSummary();
+  try { await loadMaintenance({ forceHistory: true }); } catch (error) { toast(error.message, "error"); }
 }
 
 async function openPreflightPage() {
@@ -4584,6 +4717,11 @@ elements["dashboard-show-suppressed"].addEventListener("change", () => {
   state.dashboardShowSuppressed = elements["dashboard-show-suppressed"].checked;
   renderDashboard(state.dashboard);
 });
+elements["maintenance-button"].addEventListener("click", openMaintenancePage);
+elements["maintenance-close"].addEventListener("click", openScriptManager);
+elements["maintenance-refresh"].addEventListener("click", () => loadMaintenance({ forceHistory: true }).catch((error) => toast(error.message, "error")));
+elements["maintenance-run"].addEventListener("click", runMaintenance);
+elements["maintenance-open-settings"].addEventListener("click", openSettingsPage);
 elements["review-button"].addEventListener("click", openReviewPage);
 elements["review-close"].addEventListener("click", openScriptManager);
 elements["review-add-current"].addEventListener("click", addCurrentToReview);
@@ -4893,6 +5031,7 @@ window.addEventListener("beforeunload", (event) => {
 
 const routeHandlers = {
   dashboard: openDashboard,
+  maintenance: openMaintenancePage,
   editor: openScriptManager,
   files: openFileBrowser,
   review: openReviewPage,

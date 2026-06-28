@@ -30,6 +30,7 @@ von YAML-Skripten, Automationen, Szenen und zugehörigen YAML-Ressourcen.
 - Entity-Refactoring mit exakter Vorschau und geschützter Multi-Datei-Anwendung
 - Maskierter Secrets-Manager inklusive Klartext-zu-`!secret`-Umwandlung
 - Preflight-Seite für den kompletten „bereit zum Push“-Check
+- Wartungszentrale mit manuellen und geplanten Health-Läufen, Historie, Delta-Vergleich und optionalem HA-Hinweis
 - Jinja-Template-Tester mit Home-Assistant-Rendering und Entity-Erkennung
 - Trace-/Debug-Ansicht mit Testläufen für Automationen und Scripts
 - Geschützter Editor für `automations.yaml`, `scripts.yaml`, `scenes.yaml` und Include-Verzeichnisse
@@ -122,6 +123,12 @@ erkennt konservative HA-Migrationshinweise und fragt optional die laufende
 Home-Assistant-Version ab. `graph.py` baut aus Objektindex, Referenzen, Secrets
 und Blueprints einen globalen Beziehungsgraphen. `secrets_manager.py` verwaltet `secrets.yaml`, ohne Werte
 in API-Antworten preiszugeben. `preflight.py` bündelt alle Push-Vorprüfungen.
+`maintenance.py` orchestriert daraus manuelle und geplante Wartungsläufe. Ein
+Lauf speichert Preflight-Ergebnis, Recorder-Health, Systemstatus, abgeleitete
+Findings, Laufdauer, Status, Blocker-/Warnungszahlen und den Delta-Vergleich zum
+vorherigen Lauf unter `/data/maintenance-history.json`. Die Wartungseinstellungen
+liegen in `settings.json` und steuern Automatik, Intervall, Historienlänge,
+Recorder-Prüfung und optionale Home-Assistant-Benachrichtigung.
 `backup.py` verwaltet lokale Datei-Backups weiterhin rückwärtskompatibel als
 Timestamp-Verzeichnisse, schreibt für neue Sicherungen aber zusätzlich ein
 `manifest.json` mit Quelle, Erstellzeitpunkt, SHA-256, Größe, Git-Commit,

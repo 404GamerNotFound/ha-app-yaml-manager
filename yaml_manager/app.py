@@ -41,6 +41,7 @@ try:
     from . import graph as graph_service
     from . import impact as impact_service
     from . import lint as lint_service
+    from . import maintenance as maintenance_service
     from . import metadata as metadata_service
     from . import preflight as preflight_service
     from . import refactor as refactor_service
@@ -76,6 +77,7 @@ except ImportError:  # pragma: no cover - direct execution in the app container
     import graph as graph_service
     import impact as impact_service
     import lint as lint_service
+    import maintenance as maintenance_service
     import metadata as metadata_service
     import preflight as preflight_service
     import refactor as refactor_service
@@ -147,6 +149,7 @@ def update_settings(body: dict[str, Any]) -> dict[str, Any]:
     settings = settings_service.update_settings(sys.modules[__name__], body)
     backup_cleanup()
     cleanup_trash(settings)
+    maintenance_service.cleanup_history(sys.modules[__name__])
     return settings
 
 
@@ -1509,6 +1512,18 @@ def preflight() -> dict[str, Any]:
     return preflight_service.preflight(sys.modules[__name__])
 
 
+def maintenance_status() -> dict[str, Any]:
+    return maintenance_service.maintenance_status(sys.modules[__name__])
+
+
+def maintenance_history() -> dict[str, Any]:
+    return maintenance_service.maintenance_history(sys.modules[__name__])
+
+
+def run_maintenance(triggered_by: Any = "manual") -> dict[str, Any]:
+    return maintenance_service.run_maintenance(sys.modules[__name__], triggered_by)
+
+
 def run_home_assistant_object(body: dict[str, Any]) -> dict[str, Any]:
     domain = body.get("domain")
     entity_id = body.get("entityId")
@@ -2298,12 +2313,25 @@ def system_health(remote: dict[str, Any] | None = None, include_git: bool = True
     backups_root = DATA_ROOT / "backups"
     db_backups_root = DATA_ROOT / "db-backups"
     trash_root = DATA_ROOT / "trash"
+    settings = load_settings()
+    maintenance_history = maintenance_service.load_history(sys.modules[__name__])
+    latest_maintenance = maintenance_history[0] if maintenance_history else None
     result: dict[str, Any] = {
-        "settings": load_settings(),
+        "settings": settings,
         "paths": {
             "packages": str(PACKAGES_ROOT),
             "data": str(DATA_ROOT),
             "configuration": str(configuration_file()),
+        },
+        "maintenance": {
+            "enabled": bool(settings.get("maintenanceEnabled")),
+            "historyCount": len(maintenance_history),
+            "latest": {
+                "createdAt": latest_maintenance.get("createdAt"),
+                "status": latest_maintenance.get("status"),
+                "blockers": latest_maintenance.get("blockers", 0),
+                "warnings": latest_maintenance.get("warnings", 0),
+            } if latest_maintenance else None,
         },
         "homeAssistant": {
             "tokenConfigured": bool(os.environ.get("SUPERVISOR_TOKEN")),
@@ -2791,6 +2819,7 @@ def main() -> None:
         GIT_REMOTE_FILE = DATA_ROOT / "git_remote.json"
         SETTINGS_FILE = DATA_ROOT / "settings.json"
     ensure_directories()
+    maintenance_service.start_scheduler(sys.modules[__name__])
     server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
     print(f"HA Maintenance Hub listening on port {PORT}; packages={PACKAGES_ROOT}", flush=True)
     server.serve_forever()

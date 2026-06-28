@@ -29,6 +29,11 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "defaultBranchPrefix": "feature/",
     "theme": "system",
     "afterSave": "stay",
+    "maintenanceEnabled": False,
+    "maintenanceIntervalHours": 24,
+    "maintenanceHistoryRetention": 30,
+    "maintenanceIncludeDatabase": True,
+    "maintenanceNotify": False,
     "lintRules": DEFAULT_LINT_RULES,
 }
 
@@ -113,6 +118,21 @@ def sanitize_settings(raw: Any) -> dict[str, Any]:
         "defaultBranchPrefix": prefix,
         "theme": theme,
         "afterSave": after_save,
+        "maintenanceEnabled": bool(source.get("maintenanceEnabled", DEFAULT_SETTINGS["maintenanceEnabled"])),
+        "maintenanceIntervalHours": _bounded_int(
+            source.get("maintenanceIntervalHours"),
+            DEFAULT_SETTINGS["maintenanceIntervalHours"],
+            1,
+            720,
+        ),
+        "maintenanceHistoryRetention": _bounded_int(
+            source.get("maintenanceHistoryRetention"),
+            DEFAULT_SETTINGS["maintenanceHistoryRetention"],
+            1,
+            365,
+        ),
+        "maintenanceIncludeDatabase": bool(source.get("maintenanceIncludeDatabase", DEFAULT_SETTINGS["maintenanceIncludeDatabase"])),
+        "maintenanceNotify": bool(source.get("maintenanceNotify", DEFAULT_SETTINGS["maintenanceNotify"])),
         "lintRules": sanitize_lint_rules(source.get("lintRules", DEFAULT_SETTINGS["lintRules"])),
     }
 

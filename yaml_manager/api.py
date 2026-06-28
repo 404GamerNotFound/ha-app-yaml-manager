@@ -155,6 +155,10 @@ def create_handler(backend: Any) -> type[BaseHTTPRequestHandler]:
                     self.send_json(HTTPStatus.OK, backend.secrets_overview())
                 elif path == "/api/preflight":
                     self.send_json(HTTPStatus.OK, backend.preflight())
+                elif path == "/api/maintenance/status":
+                    self.send_json(HTTPStatus.OK, backend.maintenance_status())
+                elif path == "/api/maintenance/history":
+                    self.send_json(HTTPStatus.OK, backend.maintenance_history())
                 elif path == "/api/entity-health":
                     self.send_json(HTTPStatus.OK, backend.entity_health())
                 elif path == "/api/database":
@@ -337,6 +341,8 @@ def create_handler(backend: Any) -> type[BaseHTTPRequestHandler]:
                     )
                 elif path == "/api/template/render":
                     self.send_json(HTTPStatus.OK, backend.render_template(body))
+                elif path == "/api/maintenance/run":
+                    self.send_json(HTTPStatus.CREATED, backend.run_maintenance(body.get("triggeredBy", "manual")))
                 elif path == "/api/database/query":
                     self.send_json(HTTPStatus.OK, backend.database_query(body))
                 elif path == "/api/secrets":

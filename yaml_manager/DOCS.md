@@ -96,6 +96,7 @@ Die Backend-Verantwortlichkeiten sind getrennt aufgebaut:
 - `entity_refactor.py`: entity-exakte Multi-Datei-Umbenennungen
 - `secrets_manager.py`: maskierte `secrets.yaml`-Verwaltung
 - `preflight.py`: gebündelte Push-Bereitschaftsprüfung
+- `maintenance.py`: manuelle und geplante Wartungsläufe mit Historie
 - `errors.py`: gemeinsamer erwarteter API-Fehlertyp
 
 ## Home-Assistant-Objektbrowser
@@ -697,6 +698,26 @@ Security-Fehler oder ein fehlgeschlagener Home-Assistant-Check.
 API-Endpunkt:
 
 - `GET /api/preflight`
+
+## Wartung
+
+**Wartung** erweitert den Preflight zu einem wiederholbaren Betriebscheck. Ein
+Wartungslauf kombiniert Preflight, Recorder-Health und Systemstatus, leitet eine
+kompakte Checkliste sowie aktive Findings ab und speichert das Ergebnis unter
+`/data/maintenance-history.json`. Jeder Eintrag enthält Status, Blocker,
+Warnungen, Laufdauer, Detaildaten und ein Delta zum vorherigen Lauf.
+
+Die Einstellungen liegen in `/data/settings.json` und steuern automatische
+Ausführung, Intervall, Historienlänge, Recorder-Prüfung und optionale
+Home-Assistant-Benachrichtigung über `persistent_notification.create`. Der
+Hintergrundplaner wird nur beim normalen App-Start aktiviert; Tests und reine
+Imports starten keinen Wartungsthread.
+
+API-Endpunkte:
+
+- `GET /api/maintenance/status`
+- `GET /api/maintenance/history`
+- `POST /api/maintenance/run`
 
 ## Package-Import und -Export
 

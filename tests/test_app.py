@@ -178,6 +178,51 @@ class FileApiTests(unittest.TestCase):
         self.assertEqual(app.load_settings()["afterSave"], "dashboard")
         self.assertFalse(any(item["code"] == "possibly-unused-script" for item in dashboard["findings"]))
 
+    def test_maintenance_run_records_history_delta_and_retention(self):
+        settings = app.update_settings(
+            {
+                "maintenanceEnabled": True,
+                "maintenanceIntervalHours": 2,
+                "maintenanceHistoryRetention": 2,
+                "maintenanceIncludeDatabase": False,
+            }
+        )
+        app.write_file(
+            "maintenance.yaml",
+            "script:\n  maintenance_test:\n    sequence: []\n",
+            None,
+            "Tests",
+            create=True,
+        )
+
+        first = app.run_maintenance("test")
+        status = app.maintenance_status()
+
+        self.assertEqual(settings["maintenanceIntervalHours"], 2)
+        self.assertEqual(status["latest"]["id"], first["id"])
+        self.assertFalse(status["due"])
+        self.assertEqual(app.maintenance_history()["count"], 1)
+        self.assertFalse(first["summary"]["databaseAvailable"])
+
+        app.write_file(
+            "maintenance_warning.yaml",
+            "automation:\n"
+            "  - alias: Wartungswarnung\n"
+            "    trigger: []\n"
+            "    action: []\n",
+            None,
+            "Tests",
+            create=True,
+        )
+        second = app.run_maintenance("test")
+        third = app.run_maintenance("test")
+        history = app.maintenance_history()
+
+        self.assertEqual(second["delta"]["previousRunId"], first["id"])
+        self.assertTrue(any(item["code"] == "preflight-lint" for item in second["findings"]))
+        self.assertEqual(history["count"], 2)
+        self.assertEqual(history["entries"][0]["id"], third["id"])
+
     def test_trash_history_restore_and_purge_preserve_metadata(self):
         created = app.write_file(
             "trash/test.yaml",
