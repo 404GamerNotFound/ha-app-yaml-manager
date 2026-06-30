@@ -614,16 +614,6 @@ def analyze_yaml(content: str, current_path: str = "") -> dict[str, Any]:
     for document in documents:
         scripts.update(script_definitions(document))
 
-    if not scripts:
-        findings.append(
-            {
-                "severity": "tip",
-                "code": "no-script-section",
-                "title": "Keine script-Sektion gefunden",
-                "message": "Für ein Package mit Skripten wird normalerweise ein oberster Schlüssel script: verwendet.",
-            }
-        )
-
     external = other_script_locations(current_path) if scripts else {}
     for script_id, definition in scripts.items():
         script_name = str(script_id)

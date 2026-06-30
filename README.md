@@ -8,7 +8,7 @@ von YAML-Skripten, Automationen, Szenen und zugehörigen YAML-Ressourcen.
 - Scrollbare Dateiliste mit Suche, Kategorien und Tags
 - YAML-Editor mit Syntaxhervorhebung, Zeilennummern und Live-Validierung
 - YAML-Strukturansicht, Editor-Autocomplete und Shortcuts für häufige Aktionen
-- Kontextbezogene Script-Prüfung für doppelte Schlüssel, Script-IDs und Entitäten
+- Kontextbezogene Package-Prüfung für doppelte Schlüssel, Script-IDs und Entitäten
 - Live-HA-Semantikprüfung für Dienste, Ziel-Entitäten, Geräte, Bereiche und Pflichtfelder
 - Script-Abhängigkeitsansicht mit Sprung zu Verwendung und Definition
 - Vorschau-basierte Script-ID-Umbenennung einschließlich erkannter Referenzen
@@ -323,7 +323,7 @@ unter `/data` gespeichert, nie an das Frontend zurückgesendet und nicht in
 
 Die Live-HA-Semantikprüfung verwendet gecachte Daten aus `states`, `services`,
 `config/device_registry/list` und `config/area_registry/list`. Während die
-normale YAML- und Script-Prüfung unverändert lokal funktioniert, ergänzt die App
+normale YAML- und Package-Prüfung unverändert lokal funktioniert, ergänzt die App
 innerhalb von Home Assistant Hinweise zu unbekannten Diensten, fehlenden
 Pflichtfeldern, nicht gefundenen Entitäten, Geräten und Bereichen sowie
 offensichtlichen Service-/Entity-Domain-Konflikten. In der lokalen Entwicklung

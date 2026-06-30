@@ -49,7 +49,7 @@ Die zugehörigen HTTP-Endpunkte sind:
 
 ## Live-HA-Semantikprüfung
 
-Die normale YAML- und Script-Prüfung läuft weiterhin lokal während der Eingabe.
+Die normale YAML- und Package-Prüfung läuft weiterhin lokal während der Eingabe.
 Wenn die App innerhalb von Home Assistant einen Supervisor-Token erhält, ergänzt
 sie diese Prüfung um semantische Hinweise aus den aktuellen HA-Helferdaten. Dafür
 werden `states`, `services`, `config/device_registry/list` und
@@ -789,7 +789,7 @@ Spalte können Dateien anschließend nach einem Tag gefiltert werden. Die Suche
 berücksichtigt Dateipfad, Kategorie und Tags. Pro Datei werden bis zu zwölf Tags
 gespeichert.
 
-## Script-Prüfung
+## Package-Prüfung
 
 Der Tab **Prüfung** wird während der Eingabe aktualisiert und zeigt einen
 Qualitätswert sowie priorisierte Hinweise. Geprüft werden unter anderem:
@@ -801,6 +801,10 @@ Qualitätswert sowie priorisierte Hinweise. Geprüft werden unter anderem:
 - fehlende oder leere `sequence:`-Blöcke,
 - fehlende Aliase und Script-Modi,
 - Script-IDs mit ungeeigneten Zeichen.
+
+Package-Dateien müssen keine `script:`-Sektion enthalten. Reine ausgelagerte
+Konfigurationen aus `configuration.yaml`, etwa `template:`, `sensor:` oder
+andere Home-Assistant-Domains, werden ohne Script-spezifischen Hinweis bewertet.
 
 Mehrfach verwendete Entitäten können beabsichtigt sein und werden deshalb als
 Warnung statt als Fehler angezeigt. Hinweise mit einer Zeilennummer springen

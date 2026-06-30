@@ -4139,12 +4139,12 @@ function renderAnalysis(result) {
   const summaryClass = counts.error ? "error" : counts.warning ? "warning" : "clean";
   const details = `${counts.error} Fehler · ${counts.warning} Warnungen · ${counts.tip} Tipps`;
   elements["analysis-summary"].className = `analysis-summary ${summaryClass}`;
-  elements["analysis-summary"].innerHTML = `<strong>Script-Prüfung: ${result.score}/100</strong><span>${details}</span>`;
+  elements["analysis-summary"].innerHTML = `<strong>Package-Prüfung: ${result.score}/100</strong><span>${details}</span>`;
 
   if (!result.findings?.length) {
     const clean = document.createElement("div");
     clean.className = "analysis-finding tip";
-    clean.innerHTML = '<span class="finding-dot"></span><div><strong>Keine Auffälligkeiten</strong><small>Syntax und geprüfte Script-Struktur sehen gut aus.</small></div>';
+    clean.innerHTML = '<span class="finding-dot"></span><div><strong>Keine Auffälligkeiten</strong><small>Syntax und geprüfte Package-Struktur sehen gut aus.</small></div>';
     elements["analysis-list"].replaceChildren(clean);
     return;
   }
@@ -4362,7 +4362,7 @@ function scheduleValidation() {
   elements["validation-status"].className = "validation-status neutral";
   elements["validation-status"].textContent = "Prüfe …";
   elements["analysis-summary"].className = "analysis-summary checking";
-  elements["analysis-summary"].innerHTML = "<strong>Script-Prüfung</strong><span>Analyse läuft …</span>";
+  elements["analysis-summary"].innerHTML = "<strong>Package-Prüfung</strong><span>Analyse läuft …</span>";
   validationTimer = setTimeout(async () => {
     try {
       const result = await api("api/analyze", {
@@ -4629,7 +4629,7 @@ async function deleteCurrent() {
     elements["editor-content"].classList.add("hidden");
     elements["empty-state"].classList.remove("hidden");
     elements["analysis-summary"].className = "analysis-summary checking";
-    elements["analysis-summary"].innerHTML = "<strong>Script-Prüfung</strong><span>Öffne eine Datei, um Hinweise zu sehen.</span>";
+    elements["analysis-summary"].innerHTML = "<strong>Package-Prüfung</strong><span>Öffne eine Datei, um Hinweise zu sehen.</span>";
     elements["analysis-list"].replaceChildren();
     await refreshFiles();
     toast("Datei in den Papierkorb verschoben", "success");

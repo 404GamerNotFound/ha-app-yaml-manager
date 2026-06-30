@@ -406,6 +406,22 @@ class FileApiTests(unittest.TestCase):
         self.assertEqual(result["findings"][0]["code"], "duplicate-key")
         self.assertEqual(result["findings"][0]["line"], 3)
 
+    def test_analysis_accepts_configuration_packages_without_scripts(self):
+        result = app.analyze_yaml(
+            "template:\n"
+            "  - sensor:\n"
+            "      - name: Gesamtleistung\n"
+            "        unique_id: gesamtleistung\n"
+            "        state: \"1\"\n",
+            "gesamtleistung_template.yaml",
+        )
+        codes = {finding["code"] for finding in result["findings"]}
+
+        self.assertTrue(result["validation"]["valid"])
+        self.assertNotIn("no-script-section", codes)
+        self.assertEqual(result["counts"], {"error": 0, "warning": 0, "tip": 0})
+        self.assertEqual(result["score"], 100)
+
     def test_analysis_provides_script_and_entity_tips(self):
         result = app.analyze_yaml(
             "script:\n"
