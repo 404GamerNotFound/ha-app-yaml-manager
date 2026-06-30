@@ -20,7 +20,7 @@ def create_handler(backend: Any) -> type[BaseHTTPRequestHandler]:
     """Bind the transport layer to a backend module with the service functions."""
 
     class Handler(BaseHTTPRequestHandler):
-        server_version = "HaMaintenanceHub/1.9.0"
+        server_version = "HaMaintenanceHub/1.10.0"
 
         def log_message(self, format_string: str, *args: Any) -> None:
             print(f"{self.address_string()} - {format_string % args}", flush=True)
@@ -83,6 +83,8 @@ def create_handler(backend: Any) -> type[BaseHTTPRequestHandler]:
                     self.send_json(HTTPStatus.OK, backend.read_file(query.get("path", [""])[0]))
                 elif path == "/api/configuration":
                     self.send_json(HTTPStatus.OK, backend.read_configuration())
+                elif path == "/api/configuration/fundamentals":
+                    self.send_json(HTTPStatus.OK, backend.fundamental_configuration_status())
                 elif path == "/api/backups":
                     self.send_json(
                         HTTPStatus.OK,

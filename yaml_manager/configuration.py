@@ -43,6 +43,80 @@ def bind(backend: Any) -> None:
     globals().update({name: getattr(backend, name) for name in names})
 
 
+FUNDAMENTAL_CONFIGURATION_ITEMS = [
+    {
+        "key": "homeassistant.packages",
+        "title": "Packages-Einbindung",
+        "severity": "warning",
+        "reason": "Ohne homeassistant.packages werden die verwalteten Dateien unter /config/packages nicht von Home Assistant geladen.",
+        "recommendation": "Binde /config/packages ueber homeassistant.packages ein, normalerweise mit !include_dir_named packages.",
+    },
+    {
+        "key": "default_config",
+        "title": "Default Config",
+        "severity": "tip",
+        "reason": "default_config aktiviert Home Assistants Standard-Integrationen und vermeidet, dass Basisdienste versehentlich fehlen.",
+        "recommendation": "Nutze default_config: oder dokumentiere bewusst, welche Standard-Integrationen einzeln geladen werden.",
+    },
+    {
+        "key": "recorder",
+        "title": "Recorder",
+        "severity": "warning",
+        "reason": "Recorder speichert Zustandsverlauf, Logbook- und Statistikdaten. Eine explizite Definition macht Aufbewahrung, Excludes und Datenbankpflege nachvollziehbar.",
+        "recommendation": "Definiere recorder: mit passender Aufbewahrung und optionalen include-/exclude-Regeln fuer stark schreibende Entities.",
+    },
+    {
+        "key": "logger",
+        "title": "Logger",
+        "severity": "tip",
+        "reason": "Eine Logger-Konfiguration haelt Logs lesbar und erlaubt gezieltes Debugging einzelner Integrationen.",
+        "recommendation": "Setze logger: mit einem ruhigen default-Level und spezifischen Debug-Leveln nur dort, wo du sie brauchst.",
+    },
+    {
+        "key": "automation",
+        "title": "Automationen",
+        "severity": "warning",
+        "reason": "YAML-Automationen werden nur geladen, wenn automation: in configuration.yaml oder in einem geladenen Package definiert ist.",
+        "recommendation": "Definiere automation: als Include oder lege Automationen in Packages ab.",
+    },
+    {
+        "key": "script",
+        "title": "Scripts",
+        "severity": "warning",
+        "reason": "Scripts kapseln wiederverwendbare Ablaufe und muessen ueber script: geladen werden, wenn du sie in YAML pflegst.",
+        "recommendation": "Definiere script: als Include oder verwalte Scripts in Packages.",
+    },
+    {
+        "key": "scene",
+        "title": "Szenen",
+        "severity": "tip",
+        "reason": "Szenen sind ein haeufiger Baustein fuer Automationen und sollten explizit geladen werden, wenn sie in YAML gepflegt werden.",
+        "recommendation": "Definiere scene: als Include oder verwalte Szenen in Packages.",
+    },
+    {
+        "key": "history",
+        "title": "History",
+        "severity": "tip",
+        "reason": "History macht Recorder-Daten in der UI nachvollziehbar und hilft bei der Analyse von Zustandsverlaeufen.",
+        "recommendation": "Definiere history:, wenn du die Verlaufsansicht bewusst aktiv halten moechtest.",
+    },
+    {
+        "key": "logbook",
+        "title": "Logbook",
+        "severity": "tip",
+        "reason": "Logbook liefert eine menschenlesbare Ereignis-Timeline fuer Automationen, Szenen und Geraete.",
+        "recommendation": "Definiere logbook:, wenn Ereignisse gezielt nachvollziehbar bleiben sollen.",
+    },
+    {
+        "key": "system_health",
+        "title": "System Health",
+        "severity": "tip",
+        "reason": "System Health erleichtert Diagnose und Support, weil wichtige Laufzeitinformationen gesammelt verfuegbar sind.",
+        "recommendation": "Definiere system_health:, wenn Diagnosedaten in Home Assistant verfuegbar sein sollen.",
+    },
+]
+
+
 def configuration_file() -> Path:
     override = os.environ.get("CONFIGURATION_PATH")
     if override:
@@ -150,6 +224,263 @@ def package_configuration_status() -> dict[str, Any]:
         result["status"] = "invalid"
         result["message"] = f"configuration.yaml konnte nicht geprüft werden: {exc}"
     return result
+
+
+def _display_config_path(path: Path) -> str:
+    resolved = path.resolve()
+    packages_root = PACKAGES_ROOT.resolve()
+    config_root = configuration_file().parent.resolve()
+    try:
+        return f"packages/{resolved.relative_to(packages_root).as_posix()}"
+    except ValueError:
+        pass
+    try:
+        return resolved.relative_to(config_root).as_posix()
+    except ValueError:
+        return str(resolved)
+
+
+def _record_fundamental_location(
+    locations: dict[str, list[dict[str, Any]]],
+    key: str,
+    source: Path,
+    line: int,
+    kind: str,
+    context: str | None = None,
+) -> None:
+    entry: dict[str, Any] = {
+        "path": _display_config_path(source),
+        "line": line,
+        "source": kind,
+    }
+    if context:
+        entry["context"] = context
+    locations.setdefault(key, []).append(entry)
+
+
+def _scan_top_level_keys(
+    node: yaml.Node | None,
+    source: Path,
+    kind: str,
+    locations: dict[str, list[dict[str, Any]]],
+    context: str | None = None,
+) -> None:
+    if not isinstance(node, yaml.MappingNode):
+        return
+    for key_node, _value_node in node.value:
+        if isinstance(key_node, yaml.ScalarNode):
+            _record_fundamental_location(
+                locations,
+                key_node.value,
+                source,
+                key_node.start_mark.line + 1,
+                kind,
+                context,
+            )
+
+
+def _scan_configuration_file(
+    source: Path,
+    locations: dict[str, list[dict[str, Any]]],
+    parse_errors: list[dict[str, str]],
+    visited: set[Path],
+) -> tuple[yaml.Node | None, Path]:
+    resolved = source.resolve()
+    if resolved in visited:
+        return None, resolved
+    visited.add(resolved)
+    try:
+        root = compose_yaml(resolved)
+    except (OSError, UnicodeDecodeError, yaml.YAMLError, ApiError) as exc:
+        parse_errors.append({"path": _display_config_path(resolved), "message": str(exc).split("\n", 1)[0]})
+        return None, resolved
+    if isinstance(root, yaml.ScalarNode) and root.tag == "!include":
+        target = resolve_include(root.value, resolved.parent)
+        return _scan_configuration_file(target, locations, parse_errors, visited)
+    _scan_top_level_keys(root, resolved, "configuration", locations)
+    return root, resolved
+
+
+def _scan_package_fundamentals(
+    locations: dict[str, list[dict[str, Any]]],
+    parse_errors: list[dict[str, str]],
+    mode: str,
+) -> None:
+    packages_root = PACKAGES_ROOT.resolve()
+    if not packages_root.exists():
+        return
+    for path in sorted(packages_root.rglob("*")):
+        if not path.is_file() or path.suffix.lower() not in VALID_SUFFIXES:
+            continue
+        try:
+            path.resolve().relative_to(packages_root)
+        except ValueError:
+            continue
+        if any(part.startswith(".") for part in path.relative_to(packages_root).parts):
+            continue
+        try:
+            if path.stat().st_size > MAX_FILE_SIZE:
+                continue
+            documents = list(yaml.compose_all(read_yaml_text(path), Loader=HomeAssistantLoader))
+        except (OSError, UnicodeDecodeError, yaml.YAMLError) as exc:
+            parse_errors.append({"path": _display_config_path(path), "message": str(exc).split("\n", 1)[0]})
+            continue
+        for document in documents:
+            if mode == "merge_named" and isinstance(document, yaml.MappingNode):
+                for package_key, package_node in document.value:
+                    if not isinstance(package_key, yaml.ScalarNode):
+                        continue
+                    _scan_top_level_keys(
+                        package_node,
+                        path,
+                        "package",
+                        locations,
+                        package_key.value,
+                    )
+            else:
+                _scan_top_level_keys(document, path, "package", locations)
+
+
+def _scan_homeassistant_packages_location(
+    node: yaml.Node | None,
+    source: Path,
+    base_directory: Path,
+    locations: dict[str, list[dict[str, Any]]],
+    visited: set[Path],
+) -> None:
+    existing = mapping_pair(node, "packages")
+    if existing:
+        key_node, value_node = existing
+        if package_node_uses_directory(value_node, base_directory, PACKAGES_ROOT.resolve(), set(visited)):
+            _record_fundamental_location(
+                locations,
+                "homeassistant.packages",
+                source,
+                key_node.start_mark.line + 1,
+                "configuration",
+            )
+        return
+    if not isinstance(node, yaml.ScalarNode):
+        return
+    target = resolve_include(node.value, base_directory)
+    if node.tag == "!include" and target not in visited and target.is_file():
+        visited.add(target)
+        try:
+            included = compose_yaml(target)
+        except (OSError, UnicodeDecodeError, yaml.YAMLError, ApiError):
+            return
+        _scan_homeassistant_packages_location(included, target, target.parent, locations, visited)
+    elif node.tag in DIRECTORY_INCLUDE_TAGS and target.is_dir():
+        for candidate in sorted(target.iterdir()):
+            if candidate.suffix.lower() not in VALID_SUFFIXES or not candidate.is_file():
+                continue
+            resolved = candidate.resolve()
+            if resolved in visited:
+                continue
+            visited.add(resolved)
+            try:
+                included = compose_yaml(resolved)
+            except (OSError, UnicodeDecodeError, yaml.YAMLError, ApiError):
+                continue
+            _scan_homeassistant_packages_location(included, resolved, resolved.parent, locations, visited)
+
+
+def fundamental_configuration_status() -> dict[str, Any]:
+    path = configuration_file()
+    locations: dict[str, list[dict[str, Any]]] = {}
+    parse_errors: list[dict[str, str]] = []
+    package_status = package_configuration_status()
+    mode = "named"
+    root: yaml.Node | None = None
+    root_source = path
+
+    if path.is_file():
+        root, root_source = _scan_configuration_file(path, locations, parse_errors, set())
+        try:
+            content = read_yaml_text(path)
+            mode = configuration_package_mode(content) or "named"
+        except (OSError, UnicodeDecodeError, yaml.YAMLError, ApiError):
+            mode = "named"
+        if isinstance(root, yaml.MappingNode):
+            homeassistant = mapping_value(root, "homeassistant")
+            _scan_homeassistant_packages_location(
+                homeassistant,
+                root_source,
+                root_source.parent,
+                locations,
+                {path, root_source},
+            )
+    elif package_status.get("status") == "unavailable":
+        parse_errors.append({"path": _display_config_path(path), "message": "configuration.yaml wurde nicht gefunden."})
+
+    _scan_package_fundamentals(locations, parse_errors, mode)
+    if package_status.get("configured") and not locations.get("homeassistant.packages"):
+        locations["homeassistant.packages"] = []
+
+    items: list[dict[str, Any]] = []
+    findings: list[dict[str, Any]] = []
+    config_exists = path.is_file()
+    for definition in FUNDAMENTAL_CONFIGURATION_ITEMS:
+        key = definition["key"]
+        found = locations.get(key, [])
+        defined = key == "homeassistant.packages" and bool(package_status.get("configured")) or bool(found)
+        status = "defined" if defined else "missing"
+        message = (
+            f"{definition['title']} ist definiert."
+            if defined
+            else f"{definition['title']} ist nicht explizit definiert."
+        )
+        item = {
+            **definition,
+            "defined": defined,
+            "status": status,
+            "message": message,
+            "locations": found,
+        }
+        items.append(item)
+        if not defined:
+            action = (
+                {"type": "open-managed", "label": "configuration.yaml öffnen", "path": "configuration.yaml"}
+                if config_exists
+                else None
+            )
+            finding = {
+                "severity": definition["severity"],
+                "code": f"fundamental-missing-{key.replace('.', '-')}",
+                "title": f"{definition['title']} nicht explizit definiert",
+                "message": f"{definition['reason']} Empfehlung: {definition['recommendation']}",
+                "files": ["configuration.yaml"] if config_exists else [],
+            }
+            if action:
+                finding["action"] = action
+            findings.append(finding)
+
+    counts = {
+        "defined": sum(item["defined"] for item in items),
+        "missing": sum(not item["defined"] for item in items),
+        "warning": sum(item["severity"] == "warning" for item in items if not item["defined"]),
+        "tip": sum(item["severity"] == "tip" for item in items if not item["defined"]),
+        "errors": len(parse_errors),
+    }
+    if parse_errors:
+        status = "warning"
+    elif counts["warning"]:
+        status = "warning"
+    else:
+        status = "ok"
+    return {
+        "status": status,
+        "mode": mode,
+        "configuration": str(path),
+        "packageStatus": package_status,
+        "summary": {
+            "items": len(items),
+            **counts,
+        },
+        "items": items,
+        "findings": findings,
+        "parseErrors": parse_errors,
+    }
 
 
 def read_configuration() -> dict[str, Any]:

@@ -345,6 +345,80 @@ class FileApiTests(unittest.TestCase):
         self.assertFalse(status["configured"])
         self.assertEqual(status["status"], "invalid")
 
+    def test_fundamental_configuration_detects_recorder_in_configuration(self):
+        configuration = app.PACKAGES_ROOT.parent / "configuration.yaml"
+        configuration.write_text(
+            "homeassistant:\n"
+            "  packages: !include_dir_named packages\n"
+            "recorder:\n"
+            "  purge_keep_days: 14\n",
+            encoding="utf-8",
+        )
+
+        status = app.fundamental_configuration_status()
+        items = {item["key"]: item for item in status["items"]}
+
+        self.assertTrue(items["homeassistant.packages"]["defined"])
+        self.assertTrue(items["recorder"]["defined"])
+        self.assertEqual(items["recorder"]["locations"][0]["path"], "configuration.yaml")
+        self.assertFalse(any(finding["code"] == "fundamental-missing-recorder" for finding in status["findings"]))
+
+    def test_fundamental_configuration_detects_recorder_in_package(self):
+        configuration = app.PACKAGES_ROOT.parent / "configuration.yaml"
+        configuration.write_text(
+            "homeassistant:\n  packages: !include_dir_named packages\n",
+            encoding="utf-8",
+        )
+        (app.PACKAGES_ROOT / "recorder.yaml").write_text(
+            "recorder:\n  purge_keep_days: 10\n",
+            encoding="utf-8",
+        )
+
+        status = app.fundamental_configuration_status()
+        recorder = next(item for item in status["items"] if item["key"] == "recorder")
+
+        self.assertTrue(recorder["defined"])
+        self.assertEqual(recorder["locations"][0]["path"], "packages/recorder.yaml")
+        self.assertEqual(recorder["locations"][0]["source"], "package")
+
+    def test_fundamental_configuration_supports_merge_named_packages(self):
+        configuration = app.PACKAGES_ROOT.parent / "configuration.yaml"
+        configuration.write_text(
+            "homeassistant:\n  packages: !include_dir_merge_named packages\n",
+            encoding="utf-8",
+        )
+        (app.PACKAGES_ROOT / "core.yaml").write_text(
+            "core:\n"
+            "  recorder:\n"
+            "    purge_keep_days: 7\n",
+            encoding="utf-8",
+        )
+
+        status = app.fundamental_configuration_status()
+        recorder = next(item for item in status["items"] if item["key"] == "recorder")
+
+        self.assertEqual(status["mode"], "merge_named")
+        self.assertTrue(recorder["defined"])
+        self.assertEqual(recorder["locations"][0]["context"], "core")
+
+    def test_fundamental_configuration_reports_missing_recorder_to_dashboard_and_preflight(self):
+        configuration = app.PACKAGES_ROOT.parent / "configuration.yaml"
+        configuration.write_text(
+            "homeassistant:\n  packages: !include_dir_named packages\n",
+            encoding="utf-8",
+        )
+
+        status = app.fundamental_configuration_status()
+        dashboard = app.configuration_quality_dashboard()
+        preflight = app.preflight()
+        recorder = next(item for item in status["items"] if item["key"] == "recorder")
+
+        self.assertFalse(recorder["defined"])
+        self.assertIn("Recorder speichert Zustandsverlauf", recorder["reason"])
+        self.assertTrue(any(finding["code"] == "fundamental-missing-recorder" for finding in status["findings"]))
+        self.assertTrue(any(finding["code"] == "fundamental-missing-recorder" for finding in dashboard["findings"]))
+        self.assertIn("fundamentals", {check["id"] for check in preflight["checks"]})
+
     def test_tags_are_saved_normalized_and_listed(self):
         created = app.write_file(
             "licht.yaml",

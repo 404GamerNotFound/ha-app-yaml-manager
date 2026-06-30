@@ -1500,6 +1500,7 @@ function renderDashboard(result) {
     [result.summary.security || 0, "Security-Hinweise"],
     [result.summary.lint || 0, "Lint-Hinweise"],
     [result.summary.compatibility || 0, "Kompatibilität"],
+    [result.summary.fundamentals || 0, "Grundlagen"],
     [result.summary.entityHealth || 0, "Entity-Health"],
     [result.summary.traces || 0, "Traces"],
     [result.summary.unusedScripts, "Möglicherweise ungenutzt"],

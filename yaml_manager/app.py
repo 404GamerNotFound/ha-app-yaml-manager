@@ -248,6 +248,10 @@ def package_configuration_status() -> dict[str, Any]:
     return _configuration_call("package_configuration_status")
 
 
+def fundamental_configuration_status() -> dict[str, Any]:
+    return _configuration_call("fundamental_configuration_status")
+
+
 def read_configuration() -> dict[str, Any]:
     return _configuration_call("read_configuration")
 
@@ -2141,6 +2145,7 @@ def configuration_quality_dashboard() -> dict[str, Any]:
     entities = entity_health()
     lint = lint_scan()
     compatibility = compatibility_scan()
+    fundamentals = fundamental_configuration_status()
     semantic_findings = [
         {
             **finding,
@@ -2204,9 +2209,17 @@ def configuration_quality_dashboard() -> dict[str, Any]:
         }
         for finding in compatibility.get("findings", [])
     ]
+    fundamental_findings = [
+        {
+            **finding,
+            "title": f"Grundkonfiguration: {finding['title']}",
+        }
+        for finding in fundamentals.get("findings", [])
+    ]
     findings = [
         *conflicts["findings"],
         *semantic_findings,
+        *fundamental_findings,
         *lint_findings,
         *compatibility_findings,
         *security_findings,
@@ -2263,6 +2276,7 @@ def configuration_quality_dashboard() -> dict[str, Any]:
             "security": security["counts"].get("error", 0) + security["counts"].get("warning", 0),
             "lint": lint["counts"].get("error", 0) + lint["counts"].get("warning", 0),
             "compatibility": compatibility["counts"].get("warning", 0) + compatibility["counts"].get("tip", 0),
+            "fundamentals": fundamentals["summary"].get("warning", 0) + fundamentals["summary"].get("tip", 0),
             "traces": traces.get("summary", {}).get("traces", 0),
             "entityHealth": entities["summary"].get("unknown", 0) + entities["summary"].get("unavailable", 0) + entities["summary"].get("disabled", 0),
             "semanticErrors": semantic.get("counts", {}).get("error", 0),
@@ -2278,6 +2292,7 @@ def configuration_quality_dashboard() -> dict[str, Any]:
         "security": security["summary"],
         "lint": lint["summary"],
         "compatibility": compatibility["summary"],
+        "fundamentals": fundamentals,
         "traces": traces.get("summary", {}),
         "entityHealth": entities["summary"],
         "documentation": docs,

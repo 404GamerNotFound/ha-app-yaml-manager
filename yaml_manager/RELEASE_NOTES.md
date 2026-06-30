@@ -1,46 +1,50 @@
-# Release Notes 1.9.0
+# Release Notes 1.10.0
 
-Veröffentlicht am 28. Juni 2026.
+Veröffentlicht am 30. Juni 2026.
 
-## Datenbankanalyse
+## Grundkonfiguration
 
-Die Datenbankseite ist jetzt in klare Arbeitsbereiche aufgeteilt:
+Die App prüft jetzt, ob zentrale Home-Assistant-Grundlagen bereits in
+`configuration.yaml` oder in geladenen Packages definiert sind.
 
-- **Analyse** mit schnellem DB Check
-- **Tabellen** mit Suche, Sortierung und Tabellenaktionen
-- **Problemstellen** für Entities, YAML-/DB-Abgleich und Statistiken
-- **Empfehlungen** aus den Analyseergebnissen
-- **SQL** für bestehende read-only Abfragen
+Geprüft werden unter anderem:
 
-Der neue DB Check nutzt den vorhandenen Health-Endpunkt separat und zeigt
-`quick_check`, Dateipfad, Recorder-Zeitraum, WAL-Größe und größte Tabellen als
-kompakte Checkliste.
+- `homeassistant.packages`
+- `default_config`
+- `recorder`
+- `logger`
+- `automation`
+- `script`
+- `scene`
+- `history`
+- `logbook`
+- `system_health`
 
-## Cache und Aktualisieren
+Fehlende Einträge werden nicht automatisch geschrieben. Stattdessen zeigt die
+App eine technische Begründung und eine Empfehlung an. Bei `recorder:` wird
+beispielsweise erklärt, dass der Recorder Zustandsverlauf, Logbook- und
+Statistikdaten speichert und eine explizite Konfiguration Aufbewahrung,
+Excludes und Datenbankpflege nachvollziehbar macht.
 
-Dashboard, Graph und Entity-Health werden im Browser gecacht. Beim Wechseln
-zwischen Seiten werden frische Ergebnisse wiederverwendet, statt jedes Mal neu
-geladen zu werden.
+## Dashboard und Preflight
 
-Wenn sich Package-Dateien oder die Package-Einbindung ändern, markiert die App
-diese Bereiche als veraltet. Die Status-Badges neben **Aktualisieren** zeigen,
-ob die Ansicht frisch, veraltet oder noch nicht geladen ist.
+Das Qualitätsdashboard enthält eine neue Kennzahl **Grundlagen**. Fehlende
+Grundlagen erscheinen als normale Dashboard-Hinweise und öffnen bei Bedarf
+direkt `configuration.yaml`.
 
-## Sidebar
-
-Der Navigationsbereich in der linken Sidebar scrollt wieder intern. Der
-Systemstatus bleibt dabei unten angedockt und kann im geöffneten Zustand selbst
-scrollen.
+Preflight enthält zusätzlich den Check **Grundkonfiguration**. Damit sind
+fehlende Basisdefinitionen schon vor Push oder Wartungslauf sichtbar.
 
 ## Technische Änderungen
 
-- Datenbankseite in View-Panels mit `data-database-view` und Tab-State umgebaut
-- Tabellenliste um Client-Filter, Sortierung und SELECT-/COUNT-Aktionsbuttons
-  erweitert
-- JSON-Export für die aktuelle Datenbankanalyse ergänzt
-- Cache-State mit `loadedAt`, `stale` und Stale-Grund für Dashboard, Graph und
-  Entity-Health eingeführt
-- Dateisignatur aus Package-Pfad, Größe, Änderungszeit, Kategorie, Tags und
-  Package-Konfigurationsstatus ergänzt
-- Sidebar-Layout auf Flex-Column mit scrollendem Mittelbereich umgestellt
-- Projekt- und Add-on-Version auf `1.9.0` angehoben
+- Neue read-only Analyse `fundamental_configuration_status()` in
+  `configuration.py` ergänzt
+- Neuer API-Endpunkt `/api/configuration/fundamentals`
+- Erkennung von Fundorten in `configuration.yaml`, Root-`!include`,
+  ausgelagerten `homeassistant: !include`-Dateien und Packages ergänzt
+- Package-Modi `!include_dir_named` und `!include_dir_merge_named`
+  berücksichtigt
+- Dashboard-Findings und Preflight-Details aus derselben Analyse abgeleitet
+- Tests für `recorder:` in `configuration.yaml`, Packages,
+  `merge_named`-Packages, Dashboard und Preflight ergänzt
+- Projekt- und Add-on-Version auf `1.10.0` angehoben

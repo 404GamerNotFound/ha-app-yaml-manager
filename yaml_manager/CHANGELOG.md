@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.10.0 - 2026-06-30
+
+- Grundkonfigurationsanalyse ergänzt, die zentrale Home-Assistant-Bereiche in `configuration.yaml` und Packages erkennt
+- Prüfung auf `homeassistant.packages`, `default_config`, `recorder`, `logger`, `automation`, `script`, `scene`, `history`, `logbook` und `system_health` ergänzt
+- Fehlende Grundlagen werden mit technischer Begründung und Empfehlung gemeldet, zum Beispiel warum `recorder:` explizit gepflegt werden sollte
+- Analyse berücksichtigt ausgelagerte Konfigurationen per `!include`, eingebundene `homeassistant`-Dateien sowie Package-Modi `!include_dir_named` und `!include_dir_merge_named`
+- Neuer API-Endpunkt `/api/configuration/fundamentals` für die Grundlagenanalyse ergänzt
+- Qualitätsdashboard um Kennzahl **Grundlagen** und direkt öffnende Hinweise für fehlende Grundlagen erweitert
+- Preflight um Check **Grundkonfiguration** erweitert
+- Projekt- und Add-on-Version auf `1.10.0` angehoben
+
 ## 1.9.0 - 2026-06-28
 
 - Datenbankanalyse neu gegliedert: Tabs für Analyse, Tabellen, Problemstellen, Empfehlungen und SQL ersetzen die lange gemischte Ansicht
